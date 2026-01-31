@@ -30,7 +30,7 @@ let connectedUsers = new Set();
 let fallbackPlaylistIndex = 0;
 let currentFallbackIndex = -1; // Track which song is currently playing from fallback
 let fallbackMode = false;
-let activePlaylist = 'wedding'; // 'wedding' or 'bride'
+let activePlaylist = 'bride'; // 'wedding' or 'bride'
 
 // Play history tracking
 const PLAY_HISTORY_FILE = 'wedding-play-history.json';
