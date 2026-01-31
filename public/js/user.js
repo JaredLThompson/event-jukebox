@@ -12,6 +12,7 @@ class UserJukebox {
     initializeElements() {
         this.searchQuery = document.getElementById('searchQuery');
         this.searchBtn = document.getElementById('searchBtn');
+        this.clearSearchBtn = document.getElementById('clearSearchBtn');
         this.userName = document.getElementById('userName');
         this.searchResults = document.getElementById('searchResults');
         this.resultsList = document.getElementById('resultsList');
@@ -41,6 +42,7 @@ class UserJukebox {
 
     bindEvents() {
         this.searchBtn.addEventListener('click', () => this.searchYouTubeMusic());
+        this.clearSearchBtn.addEventListener('click', () => this.clearSearch());
         this.searchQuery.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 this.searchYouTubeMusic();
@@ -222,9 +224,9 @@ class UserJukebox {
 
             if (response.ok) {
                 this.showToast(`"${title}" added to queue!`, 'success');
-                // Clear search after successful add
-                this.searchQuery.value = '';
-                this.hideResults();
+                // Keep search results open so users can add more songs from the same search
+                // this.searchQuery.value = '';
+                // this.hideResults();
             } else if (response.status === 409) {
                 // Duplicate song
                 const errorData = await response.json();
@@ -339,6 +341,12 @@ class UserJukebox {
     hideResults() {
         this.searchResults.classList.add('hidden');
         this.noResults.classList.add('hidden');
+    }
+
+    clearSearch() {
+        this.searchQuery.value = '';
+        this.hideResults();
+        this.showToast('Search cleared', 'info');
     }
 
     showNoResults() {

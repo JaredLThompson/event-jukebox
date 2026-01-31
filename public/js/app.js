@@ -35,6 +35,7 @@ class VirtualJukebox {
         this.searchSection = document.getElementById('searchSection');
         this.searchQuery = document.getElementById('searchQuery');
         this.searchBtn = document.getElementById('searchBtn');
+        this.clearSearchBtn = document.getElementById('clearSearchBtn');
         this.searchResults = document.getElementById('searchResults');
         
         // Audio player elements
@@ -100,6 +101,7 @@ class VirtualJukebox {
         
         // YouTube Music search
         this.searchBtn.addEventListener('click', () => this.searchYouTubeMusic());
+        this.clearSearchBtn.addEventListener('click', () => this.clearSearch());
         this.searchQuery.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 this.searchYouTubeMusic();
@@ -729,13 +731,15 @@ class VirtualJukebox {
     }
 
     displaySearchResults(results) {
+        const searchResultsList = document.getElementById('searchResultsList');
+        
         if (results.length === 0) {
-            this.searchResults.innerHTML = '<p class="text-gray-400 text-center py-4">No results found</p>';
+            searchResultsList.innerHTML = '<p class="text-gray-400 text-center py-4">No results found</p>';
             this.searchResults.classList.remove('hidden');
             return;
         }
 
-        this.searchResults.innerHTML = results.map((song, index) => `
+        searchResultsList.innerHTML = results.map((song, index) => `
             <div class="bg-gray-800 bg-opacity-50 rounded-lg p-3 flex items-center space-x-3 hover:bg-opacity-70 transition-all">
                 <img src="${song.thumbnail}" alt="Thumbnail" class="w-12 h-12 rounded shadow">
                 <div class="flex-1">
@@ -755,7 +759,7 @@ class VirtualJukebox {
         `).join('');
         
         // Add event listeners to all add buttons
-        this.searchResults.querySelectorAll('.add-song-btn').forEach(button => {
+        searchResultsList.querySelectorAll('.add-song-btn').forEach(button => {
             button.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -799,8 +803,9 @@ class VirtualJukebox {
 
             if (response.ok) {
                 this.showToast('Song added to queue!', 'success');
-                this.searchQuery.value = '';
-                this.searchResults.classList.add('hidden');
+                // Keep search results open so users can add more songs
+                // this.searchQuery.value = '';
+                // this.searchResults.classList.add('hidden');
             } else if (response.status === 409) {
                 // Duplicate song
                 const errorData = await response.json();
@@ -1115,6 +1120,12 @@ class VirtualJukebox {
         if (this.fullPlaylist.length > 0) {
             this.displayPlaylistBrowser(this.fullPlaylist, this.currentPlaylistIndex);
         }
+    }
+
+    clearSearch() {
+        this.searchQuery.value = '';
+        this.searchResults.classList.add('hidden');
+        this.showToast('Search cleared', 'info');
     }
 
     displayFilteredPlaylist(filteredPlaylist) {
