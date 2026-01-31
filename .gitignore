@@ -8,6 +8,9 @@ oauth.json
 
 # Wedding-specific data
 wedding-play-history.json
+wedding-playlist-*.txt
+wedding-memory-playlist-*.js
+wedding-spotify-list-*.txt
 
 # Logs
 *.log
