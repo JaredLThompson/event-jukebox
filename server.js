@@ -169,9 +169,6 @@ app.post('/api/queue/add', (req, res) => {
 
   currentQueue.push(queueItem);
   
-  // Log the song addition to history
-  logSongPlayed(queueItem, 'added');
-  
   // Broadcast only queue update (no currentlyPlaying to avoid restart)
   io.emit('queueUpdated', {
     queue: currentQueue
