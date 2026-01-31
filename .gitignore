@@ -6,6 +6,9 @@ venv/
 .env
 oauth.json
 
+# Wedding-specific data
+wedding-play-history.json
+
 # Logs
 *.log
 npm-debug.log*

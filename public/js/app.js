@@ -69,6 +69,18 @@ class VirtualJukebox {
         this.clearPlaylistSearchBtn = document.getElementById('clearPlaylistSearchBtn');
         this.playlistNoResults = document.getElementById('playlistNoResults');
         
+        // Play history elements
+        this.viewHistoryBtn = document.getElementById('viewHistoryBtn');
+        this.historyModal = document.getElementById('historyModal');
+        this.closeHistoryBtn = document.getElementById('closeHistoryBtn');
+        this.exportHistoryBtn = document.getElementById('exportHistoryBtn');
+        this.historyCount = document.getElementById('historyCount');
+        this.totalSongsPlayed = document.getElementById('totalSongsPlayed');
+        this.userSubmissions = document.getElementById('userSubmissions');
+        this.uniqueUsers = document.getElementById('uniqueUsers');
+        this.historyItems = document.getElementById('historyItems');
+        this.historyEmpty = document.getElementById('historyEmpty');
+        
         // Store the full playlist for searching
         this.fullPlaylist = [];
         this.currentPlaylistIndex = 0;
@@ -115,6 +127,11 @@ class VirtualJukebox {
                 this.switchPlaylist(playlist);
             }
         });
+        
+        // Play history controls
+        this.viewHistoryBtn.addEventListener('click', () => this.showPlayHistory());
+        this.closeHistoryBtn.addEventListener('click', () => this.hidePlayHistory());
+        this.exportHistoryBtn.addEventListener('click', () => this.exportPlayHistory());
         
         // Playlist search functionality
         this.playlistSearchInput.addEventListener('input', (e) => this.filterPlaylist(e.target.value));
@@ -196,6 +213,13 @@ class VirtualJukebox {
             this.updatePlaylistStatus(); // Update status when playlist switches
         });
 
+        this.socket.on('playHistoryUpdate', (data) => {
+            this.historyCount.textContent = data.totalSongs;
+            if (data.lastSong) {
+                this.showToast(`♪ ${data.lastSong.song.title} logged to history`, 'info');
+            }
+        });
+
         this.socket.on('userCount', (count) => {
             this.userCount.textContent = count;
         });
@@ -222,9 +246,22 @@ class VirtualJukebox {
             
             // Load playlist status
             this.updatePlaylistStatus();
+            
+            // Load history count
+            this.loadHistoryCount();
         } catch (error) {
             console.error('Failed to load initial data:', error);
             this.showToast('Failed to load jukebox data', 'error');
+        }
+    }
+
+    async loadHistoryCount() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            this.historyCount.textContent = data.totalSongs;
+        } catch (error) {
+            console.error('Failed to load history count:', error);
         }
     }
 
@@ -302,6 +339,83 @@ class VirtualJukebox {
         } catch (error) {
             console.error('Error switching playlist:', error);
             this.showToast('Failed to switch playlist', 'error');
+        }
+    }
+
+    async showPlayHistory() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            
+            this.displayPlayHistory(data);
+            this.historyModal.classList.remove('hidden');
+        } catch (error) {
+            console.error('Error loading play history:', error);
+            this.showToast('Failed to load play history', 'error');
+        }
+    }
+
+    hidePlayHistory() {
+        this.historyModal.classList.add('hidden');
+    }
+
+    displayPlayHistory(data) {
+        // Update summary
+        this.totalSongsPlayed.textContent = data.totalSongs;
+        this.userSubmissions.textContent = data.summary.userSubmissions;
+        this.uniqueUsers.textContent = data.summary.uniqueUsers;
+
+        if (data.history.length === 0) {
+            this.historyItems.innerHTML = '';
+            this.historyEmpty.classList.remove('hidden');
+            return;
+        }
+
+        this.historyEmpty.classList.add('hidden');
+        
+        // Display history items (most recent first)
+        this.historyItems.innerHTML = data.history.slice().reverse().map((entry, index) => {
+            const time = new Date(entry.timestamp).toLocaleTimeString();
+            const actionIcon = entry.action === 'played' ? 'fas fa-play text-green-400' : 
+                              entry.action === 'added' ? 'fas fa-plus text-blue-400' : 
+                              'fas fa-forward text-yellow-400';
+            const actionText = entry.action === 'played' ? 'Played' : 
+                              entry.action === 'added' ? 'Added' : 'Skipped';
+            
+            return `
+                <div class="bg-gray-800 bg-opacity-50 rounded p-2 flex items-center space-x-3">
+                    <div class="w-4">
+                        <i class="${actionIcon} text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm font-medium text-green-200">${entry.song.title}</div>
+                        <div class="text-xs text-gray-400">${entry.song.artist} • ${actionText} by ${entry.song.addedBy}</div>
+                    </div>
+                    <div class="text-xs text-gray-500">${time}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async exportPlayHistory() {
+        try {
+            const response = await fetch('/api/history/export');
+            const blob = await response.blob();
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `wedding-playlist-history-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            this.showToast('Play history exported successfully!', 'success');
+        } catch (error) {
+            console.error('Error exporting play history:', error);
+            this.showToast('Failed to export play history', 'error');
         }
     }
 

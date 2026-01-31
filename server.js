@@ -3,6 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
 const BRIDE_PLAYLIST = require('./bride-playlist');
@@ -30,6 +31,62 @@ let fallbackPlaylistIndex = 0;
 let currentFallbackIndex = -1; // Track which song is currently playing from fallback
 let fallbackMode = false;
 let activePlaylist = 'wedding'; // 'wedding' or 'bride'
+
+// Play history tracking
+const PLAY_HISTORY_FILE = 'wedding-play-history.json';
+let playHistory = [];
+
+// Load existing play history if it exists
+function loadPlayHistory() {
+  try {
+    if (fs.existsSync(PLAY_HISTORY_FILE)) {
+      const data = fs.readFileSync(PLAY_HISTORY_FILE, 'utf8');
+      playHistory = JSON.parse(data);
+      console.log(`Loaded ${playHistory.length} songs from play history`);
+    }
+  } catch (error) {
+    console.error('Error loading play history:', error);
+    playHistory = [];
+  }
+}
+
+// Save play history to file
+function savePlayHistory() {
+  try {
+    fs.writeFileSync(PLAY_HISTORY_FILE, JSON.stringify(playHistory, null, 2));
+  } catch (error) {
+    console.error('Error saving play history:', error);
+  }
+}
+
+// Log a song to play history
+function logSongPlayed(song, action = 'played') {
+  const historyEntry = {
+    timestamp: new Date().toISOString(),
+    action: action, // 'played', 'added', 'skipped'
+    song: {
+      title: song.title,
+      artist: song.artist,
+      duration: song.duration,
+      addedBy: song.addedBy,
+      source: song.source || 'user',
+      playlist: song.playlist || activePlaylist,
+      type: song.type
+    }
+  };
+  
+  playHistory.push(historyEntry);
+  savePlayHistory();
+  
+  // Emit to connected clients for real-time updates
+  io.emit('playHistoryUpdate', {
+    totalSongs: playHistory.length,
+    lastSong: historyEntry
+  });
+}
+
+// Initialize play history
+loadPlayHistory();
 
 // Routes
 app.get('/', (req, res) => {
@@ -112,6 +169,9 @@ app.post('/api/queue/add', (req, res) => {
 
   currentQueue.push(queueItem);
   
+  // Log the song addition to history
+  logSongPlayed(queueItem, 'added');
+  
   // Broadcast only queue update (no currentlyPlaying to avoid restart)
   io.emit('queueUpdated', {
     queue: currentQueue
@@ -152,6 +212,11 @@ app.post('/api/queue/clear', (req, res) => {
 });
 
 app.post('/api/queue/next', async (req, res) => {
+  // Log the previous song as played if there was one
+  if (currentlyPlaying) {
+    logSongPlayed(currentlyPlaying, 'played');
+  }
+
   if (currentQueue.length > 0) {
     // Normal queue operation
     currentlyPlaying = currentQueue.shift();
@@ -299,6 +364,50 @@ app.post('/api/playlist/switch', (req, res) => {
     message: `Switched to ${playlistName}`,
     playlist: activePlaylist,
     playlistName: playlistName
+  });
+});
+
+app.get('/api/history', (req, res) => {
+  res.json({
+    totalSongs: playHistory.length,
+    history: playHistory,
+    summary: {
+      userSubmissions: playHistory.filter(entry => entry.song.source === 'youtube' || entry.song.source === 'user').length,
+      fallbackSongs: playHistory.filter(entry => entry.song.source === 'fallback').length,
+      uniqueUsers: [...new Set(playHistory.map(entry => entry.song.addedBy))].length
+    }
+  });
+});
+
+app.get('/api/history/export', (req, res) => {
+  const exportData = {
+    weddingDate: new Date().toISOString().split('T')[0],
+    totalSongs: playHistory.length,
+    summary: {
+      userSubmissions: playHistory.filter(entry => entry.song.source === 'youtube' || entry.song.source === 'user').length,
+      fallbackSongs: playHistory.filter(entry => entry.song.source === 'fallback').length,
+      uniqueUsers: [...new Set(playHistory.map(entry => entry.song.addedBy))].length
+    },
+    playHistory: playHistory
+  };
+  
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="wedding-playlist-history.json"');
+  res.json(exportData);
+});
+
+app.post('/api/history/clear', (req, res) => {
+  playHistory = [];
+  savePlayHistory();
+  
+  io.emit('playHistoryUpdate', {
+    totalSongs: 0,
+    lastSong: null
+  });
+  
+  res.json({ 
+    success: true, 
+    message: 'Play history cleared' 
   });
 });
 
