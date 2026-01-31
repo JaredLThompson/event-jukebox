@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Music - Virtual Jukebox</title>
+    <link href="css/output.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                <i class="fas fa-headphones mr-3"></i>Add Your Music
+            </h1>
+            <p class="text-xl text-gray-300">Search and add songs to the jukebox</p>
+            <div class="mt-4 flex justify-center space-x-4">
+                <span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm">
+                    <i class="fas fa-users mr-1"></i>
+                    <span id="userCount">0</span> users online
+                </span>
+                <span class="bg-purple-500 text-white px-3 py-1 rounded-full text-sm">
+                    <i class="fas fa-list mr-1"></i>
+                    <span id="queueCount">0</span> songs in queue
+                </span>
+            </div>
+        </header>
+
+        <!-- Now Playing Preview -->
+        <div class="bg-black bg-opacity-30 backdrop-blur-sm rounded-xl p-4 mb-8 border border-purple-500">
+            <h2 class="text-lg font-bold mb-3 flex items-center">
+                <i class="fas fa-music mr-2 text-green-400"></i>
+                Currently Playing
+            </h2>
+            <div id="nowPlayingPreview" class="text-center">
+                <p class="text-gray-400">No song currently playing</p>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="bg-black bg-opacity-30 backdrop-blur-sm rounded-xl p-6 border border-purple-500 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fab fa-youtube mr-2 text-red-500"></i>
+                Search YouTube Music
+            </h2>
+            
+            <!-- Search Input -->
+            <div class="flex space-x-3 mb-6">
+                <input type="text" id="searchQuery" class="flex-1 px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none text-lg" placeholder="Search for songs, artists, or albums...">
+                <button id="searchBtn" class="px-8 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors text-lg">
+                    <i class="fas fa-search mr-2"></i>Search
+                </button>
+            </div>
+
+            <!-- Your Name Input -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Your Name (optional)</label>
+                <input type="text" id="userName" class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none" placeholder="Enter your name so others know who added the song">
+            </div>
+            
+            <!-- Search Results -->
+            <div id="searchResults" class="space-y-3 hidden">
+                <h3 class="text-lg font-semibold mb-3">Search Results:</h3>
+                <div id="resultsList" class="max-h-96 overflow-y-auto space-y-3">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+
+            <!-- No Results Message -->
+            <div id="noResults" class="text-center py-8 hidden">
+                <i class="fas fa-search text-4xl text-gray-500 mb-4"></i>
+                <p class="text-gray-400">No results found. Try a different search term.</p>
+            </div>
+        </div>
+
+        <!-- Recent Additions -->
+        <div class="bg-black bg-opacity-30 backdrop-blur-sm rounded-xl p-6 border border-purple-500 mb-8">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-clock mr-2 text-yellow-400"></i>
+                Recently Added
+            </h2>
+            <div id="recentAdditions" class="space-y-2">
+                <p class="text-gray-400 text-center py-4">No recent additions</p>
+            </div>
+        </div>
+
+        <!-- Current Queue -->
+        <div class="bg-black bg-opacity-30 backdrop-blur-sm rounded-xl p-6 border border-purple-500">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-list-ol mr-2 text-blue-400"></i>
+                Up Next (<span id="queueCountDisplay">0</span> songs)
+            </h2>
+            <div id="currentQueue" class="space-y-3">
+                <p class="text-gray-400 text-center py-8">No songs in queue</p>
+            </div>
+            <div id="queueShowMore" class="text-center mt-4 hidden">
+                <button id="showMoreBtn" class="text-purple-400 hover:text-purple-300 text-sm">
+                    <i class="fas fa-chevron-down mr-1"></i>Show more songs
+                </button>
+            </div>
+        </div>
+
+        <!-- DJ Console Link -->
+        <div class="text-center mt-8">
+            <a href="/" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg font-semibold transition-all transform hover:scale-105">
+                <i class="fas fa-sliders-h mr-2"></i>
+                Go to DJ Console
+            </a>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300">
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-gray-800 rounded-lg p-6 text-center">
+            <i class="fas fa-spinner fa-spin text-3xl text-purple-400 mb-4"></i>
+            <p class="text-white">Adding song to queue...</p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/user.js"></script>
+</body>
+</html>

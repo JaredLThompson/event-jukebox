@@ -1,0 +1,30 @@
+{
+  "name": "virtual-jukebox",
+  "version": "1.0.0",
+  "description": "A web-based virtual jukebox application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "npm run build:css",
+    "build:css": "tailwindcss -i ./public/css/input.css -o ./public/css/output.css --watch"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
+    "socket.io": "^4.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "tailwindcss": "^3.3.6"
+  },
+  "keywords": [
+    "jukebox",
+    "music",
+    "web-app"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

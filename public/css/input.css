@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animations and styles */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.8);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.6);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.8);
+}
+
+/* Audio Player Styles */
+#youtubePlayer {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+}
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Progress bar animations */
+.progress-bar-container {
+  cursor: pointer;
+}
+
+.progress-bar-container:hover .progress-bar {
+  background: linear-gradient(90deg, #ec4899, #a855f7);
+}
+
+/* Player control buttons */
+.player-btn {
+  transition: all 0.2s ease;
+}
+
+.player-btn:hover {
+  transform: scale(1.05);
+}
+
+.player-btn:active {
+  transform: scale(0.95);
+}
+/* Drag and Drop Styles */
+.queue-item {
+  transition: all 0.2s ease;
+}
+
+.queue-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sortable-ghost {
+  opacity: 0.4;
+  background: rgba(168, 85, 247, 0.2) !important;
+  border: 2px dashed #a855f7 !important;
+}
+
+.sortable-chosen {
+  transform: rotate(2deg);
+}
+
+.sortable-drag {
+  transform: rotate(5deg);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Mic Break Styles */
+.mic-break-item {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.2), rgba(194, 65, 12, 0.2));
+  border: 1px solid rgba(234, 88, 12, 0.5);
+}
+
+.mic-break-item:hover {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.3), rgba(194, 65, 12, 0.3));
+}
+
+/* DJ Controls */
+.dj-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .dj-controls {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .dj-controls button {
+    width: 100%;
+    text-align: center;
+  }
+}
