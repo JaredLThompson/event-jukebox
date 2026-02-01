@@ -613,6 +613,298 @@ app.get('/api/playlist/suppressed', (req, res) => {
   });
 });
 
+// Playlist management endpoints
+app.get('/api/playlist/get/:playlistName', (req, res) => {
+  const { playlistName } = req.params;
+  
+  try {
+    let playlist;
+    if (playlistName === 'wedding') {
+      playlist = WEDDING_PLAYLIST;
+    } else if (playlistName === 'bride') {
+      playlist = BRIDE_PLAYLIST;
+    } else {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    res.json({
+      success: true,
+      playlist: playlist,
+      playlistName: playlistName
+    });
+  } catch (error) {
+    console.error('Error getting playlist:', error);
+    res.status(500).json({ error: 'Failed to get playlist' });
+  }
+});
+
+app.post('/api/playlist/save/:playlistName', (req, res) => {
+  const { playlistName } = req.params;
+  const { playlist } = req.body;
+  
+  if (!playlist || !Array.isArray(playlist)) {
+    return res.status(400).json({ error: 'Invalid playlist data' });
+  }
+  
+  try {
+    // Validate playlist items
+    for (const item of playlist) {
+      if (!item.search || !item.type) {
+        return res.status(400).json({ error: 'Invalid playlist item format' });
+      }
+    }
+    
+    // Update in-memory playlist
+    if (playlistName === 'wedding') {
+      WEDDING_PLAYLIST.length = 0;
+      WEDDING_PLAYLIST.push(...playlist);
+    } else if (playlistName === 'bride') {
+      BRIDE_PLAYLIST.length = 0;
+      BRIDE_PLAYLIST.push(...playlist);
+    } else {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    // Save to file
+    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
+    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
+    
+    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+
+module.exports = ${constantName};
+`;
+    
+    fs.writeFileSync(filename, fileContent);
+    
+    // Reset playlist index and clear suppressions when playlist changes
+    fallbackPlaylistIndex = 0;
+    currentFallbackIndex = -1;
+    suppressedSongs.clear();
+    
+    // Broadcast playlist update to all clients
+    io.emit('playlistUpdated', {
+      playlistName: playlistName,
+      message: `${getPlaylistName()} updated with ${playlist.length} songs`,
+      totalSongs: playlist.length
+    });
+    
+    res.json({
+      success: true,
+      message: `${playlistName} playlist saved successfully`,
+      totalSongs: playlist.length
+    });
+    
+  } catch (error) {
+    console.error('Error saving playlist:', error);
+    res.status(500).json({ error: 'Failed to save playlist' });
+  }
+});
+
+app.post('/api/playlist/add-song/:playlistName', (req, res) => {
+  const { playlistName } = req.params;
+  const { search, type, position } = req.body;
+  
+  if (!search || !type) {
+    return res.status(400).json({ error: 'Search query and type are required' });
+  }
+  
+  try {
+    const newSong = { search, type };
+    let playlist;
+    
+    if (playlistName === 'wedding') {
+      playlist = WEDDING_PLAYLIST;
+    } else if (playlistName === 'bride') {
+      playlist = BRIDE_PLAYLIST;
+    } else {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    // Add song at specified position or end
+    if (position !== undefined && position >= 0 && position <= playlist.length) {
+      playlist.splice(position, 0, newSong);
+    } else {
+      playlist.push(newSong);
+    }
+    
+    // Save the updated playlist
+    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
+    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
+    
+    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+
+module.exports = ${constantName};
+`;
+    
+    fs.writeFileSync(filename, fileContent);
+    
+    // Broadcast update
+    io.emit('playlistUpdated', {
+      playlistName: playlistName,
+      message: `Song added to ${getPlaylistName()}`,
+      totalSongs: playlist.length
+    });
+    
+    res.json({
+      success: true,
+      message: 'Song added to playlist',
+      totalSongs: playlist.length
+    });
+    
+  } catch (error) {
+    console.error('Error adding song to playlist:', error);
+    res.status(500).json({ error: 'Failed to add song to playlist' });
+  }
+});
+
+app.delete('/api/playlist/remove-song/:playlistName/:index', (req, res) => {
+  const { playlistName, index } = req.params;
+  const songIndex = parseInt(index);
+  
+  try {
+    let playlist;
+    
+    if (playlistName === 'wedding') {
+      playlist = WEDDING_PLAYLIST;
+    } else if (playlistName === 'bride') {
+      playlist = BRIDE_PLAYLIST;
+    } else {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    if (songIndex < 0 || songIndex >= playlist.length) {
+      return res.status(400).json({ error: 'Invalid song index' });
+    }
+    
+    // Remove song
+    const removedSong = playlist.splice(songIndex, 1)[0];
+    
+    // Save the updated playlist
+    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
+    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
+    
+    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+
+module.exports = ${constantName};
+`;
+    
+    fs.writeFileSync(filename, fileContent);
+    
+    // Update suppressed songs indices (shift down indices after removed song)
+    const newSuppressedSongs = new Set();
+    for (const suppressedIndex of suppressedSongs) {
+      if (suppressedIndex < songIndex) {
+        newSuppressedSongs.add(suppressedIndex);
+      } else if (suppressedIndex > songIndex) {
+        newSuppressedSongs.add(suppressedIndex - 1);
+      }
+      // Skip the removed song index
+    }
+    suppressedSongs.clear();
+    newSuppressedSongs.forEach(index => suppressedSongs.add(index));
+    
+    // Broadcast update
+    io.emit('playlistUpdated', {
+      playlistName: playlistName,
+      message: `Song removed from ${getPlaylistName()}`,
+      totalSongs: playlist.length
+    });
+    
+    res.json({
+      success: true,
+      message: 'Song removed from playlist',
+      removedSong: removedSong,
+      totalSongs: playlist.length
+    });
+    
+  } catch (error) {
+    console.error('Error removing song from playlist:', error);
+    res.status(500).json({ error: 'Failed to remove song from playlist' });
+  }
+});
+
+app.post('/api/playlist/reorder/:playlistName', (req, res) => {
+  const { playlistName } = req.params;
+  const { fromIndex, toIndex } = req.body;
+  
+  if (fromIndex === undefined || toIndex === undefined) {
+    return res.status(400).json({ error: 'fromIndex and toIndex are required' });
+  }
+  
+  try {
+    let playlist;
+    
+    if (playlistName === 'wedding') {
+      playlist = WEDDING_PLAYLIST;
+    } else if (playlistName === 'bride') {
+      playlist = BRIDE_PLAYLIST;
+    } else {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    if (fromIndex < 0 || fromIndex >= playlist.length || toIndex < 0 || toIndex >= playlist.length) {
+      return res.status(400).json({ error: 'Invalid indices' });
+    }
+    
+    // Move song from fromIndex to toIndex
+    const [movedSong] = playlist.splice(fromIndex, 1);
+    playlist.splice(toIndex, 0, movedSong);
+    
+    // Save the updated playlist
+    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
+    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
+    
+    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+
+module.exports = ${constantName};
+`;
+    
+    fs.writeFileSync(filename, fileContent);
+    
+    // Update suppressed songs indices
+    const newSuppressedSongs = new Set();
+    for (const suppressedIndex of suppressedSongs) {
+      let newIndex = suppressedIndex;
+      
+      if (suppressedIndex === fromIndex) {
+        // The moved song
+        newIndex = toIndex;
+      } else if (fromIndex < toIndex) {
+        // Moving down: indices between fromIndex and toIndex shift up
+        if (suppressedIndex > fromIndex && suppressedIndex <= toIndex) {
+          newIndex = suppressedIndex - 1;
+        }
+      } else {
+        // Moving up: indices between toIndex and fromIndex shift down
+        if (suppressedIndex >= toIndex && suppressedIndex < fromIndex) {
+          newIndex = suppressedIndex + 1;
+        }
+      }
+      
+      newSuppressedSongs.add(newIndex);
+    }
+    suppressedSongs.clear();
+    newSuppressedSongs.forEach(index => suppressedSongs.add(index));
+    
+    // Broadcast update
+    io.emit('playlistUpdated', {
+      playlistName: playlistName,
+      message: `${getPlaylistName()} reordered`,
+      totalSongs: playlist.length
+    });
+    
+    res.json({
+      success: true,
+      message: 'Playlist reordered successfully',
+      totalSongs: playlist.length
+    });
+    
+  } catch (error) {
+    console.error('Error reordering playlist:', error);
+    res.status(500).json({ error: 'Failed to reorder playlist' });
+  }
+});
+
 app.get('/api/history', (req, res) => {
   res.json({
     totalSongs: playHistory.length,

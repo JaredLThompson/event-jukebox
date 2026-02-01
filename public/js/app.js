@@ -1893,3 +1893,296 @@ Check browser console (F12) for detailed video IDs`);
 
 // Initialize the jukebox when the page loads
 const jukebox = new VirtualJukebox();
+window.jukebox = jukebox; // Make it globally accessible
+
+// Initialize playlist editor
+document.addEventListener('DOMContentLoaded', () => {
+    jukebox.initializePlaylistEditor();
+});
+
+    // Playlist Editor functionality
+    initializePlaylistEditor() {
+        // Playlist editor elements
+        this.editPlaylistBtn = document.getElementById('editPlaylistBtn');
+        this.playlistEditor = document.getElementById('playlistEditor');
+        this.editingPlaylistName = document.getElementById('editingPlaylistName');
+        this.addSongToPlaylistBtn = document.getElementById('addSongToPlaylistBtn');
+        this.addSongForm = document.getElementById('addSongForm');
+        this.newSongSearch = document.getElementById('newSongSearch');
+        this.newSongType = document.getElementById('newSongType');
+        this.confirmAddSongBtn = document.getElementById('confirmAddSongBtn');
+        this.cancelAddSongBtn = document.getElementById('cancelAddSongBtn');
+        this.savePlaylistBtn = document.getElementById('savePlaylistBtn');
+        this.cancelEditBtn = document.getElementById('cancelEditBtn');
+        this.editablePlaylistItems = document.getElementById('editablePlaylistItems');
+        
+        this.currentEditingPlaylist = null;
+        this.editablePlaylist = [];
+        
+        // Bind playlist editor events
+        this.editPlaylistBtn?.addEventListener('click', () => this.openPlaylistEditor());
+        this.addSongToPlaylistBtn?.addEventListener('click', () => this.showAddSongForm());
+        this.confirmAddSongBtn?.addEventListener('click', () => this.addSongToPlaylist());
+        this.cancelAddSongBtn?.addEventListener('click', () => this.hideAddSongForm());
+        this.savePlaylistBtn?.addEventListener('click', () => this.savePlaylist());
+        this.cancelEditBtn?.addEventListener('click', () => this.closePlaylistEditor());
+        
+        // Enable drag and drop for reordering
+        this.setupPlaylistDragAndDrop();
+    }
+    
+    async openPlaylistEditor() {
+        try {
+            // Get current active playlist
+            const playlistName = this.activePlaylist || 'wedding';
+            this.currentEditingPlaylist = playlistName;
+            
+            // Fetch playlist data
+            const response = await fetch(`/api/playlist/get/${playlistName}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                this.editablePlaylist = [...data.playlist];
+                this.editingPlaylistName.textContent = playlistName === 'wedding' ? 'Wedding Party' : 'Bride\'s Elegant';
+                
+                // Hide browser, show editor
+                this.playlistBrowser.classList.add('hidden');
+                this.playlistEditor.classList.remove('hidden');
+                
+                this.renderEditablePlaylist();
+            } else {
+                this.showToast('Failed to load playlist for editing', 'error');
+            }
+        } catch (error) {
+            console.error('Error opening playlist editor:', error);
+            this.showToast('Error opening playlist editor', 'error');
+        }
+    }
+    
+    closePlaylistEditor() {
+        this.playlistEditor.classList.add('hidden');
+        this.hideAddSongForm();
+        this.currentEditingPlaylist = null;
+        this.editablePlaylist = [];
+    }
+    
+    showAddSongForm() {
+        this.addSongForm.classList.remove('hidden');
+        this.newSongSearch.focus();
+    }
+    
+    hideAddSongForm() {
+        this.addSongForm.classList.add('hidden');
+        this.newSongSearch.value = '';
+        this.newSongType.value = 'dance';
+    }
+    
+    async addSongToPlaylist() {
+        const search = this.newSongSearch.value.trim();
+        const type = this.newSongType.value;
+        
+        if (!search) {
+            this.showToast('Please enter a search query', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/playlist/add-song/${this.currentEditingPlaylist}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ search, type })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Add to local editable playlist
+                this.editablePlaylist.push({ search, type });
+                this.renderEditablePlaylist();
+                this.hideAddSongForm();
+                this.showToast('Song added to playlist!', 'success');
+            } else {
+                this.showToast(data.error || 'Failed to add song', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding song:', error);
+            this.showToast('Error adding song to playlist', 'error');
+        }
+    }
+    
+    async removeSongFromPlaylist(index) {
+        if (!confirm('Remove this song from the playlist?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/playlist/remove-song/${this.currentEditingPlaylist}/${index}`, {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Remove from local editable playlist
+                this.editablePlaylist.splice(index, 1);
+                this.renderEditablePlaylist();
+                this.showToast('Song removed from playlist', 'success');
+            } else {
+                this.showToast(data.error || 'Failed to remove song', 'error');
+            }
+        } catch (error) {
+            console.error('Error removing song:', error);
+            this.showToast('Error removing song from playlist', 'error');
+        }
+    }
+    
+    async reorderPlaylist(fromIndex, toIndex) {
+        try {
+            const response = await fetch(`/api/playlist/reorder/${this.currentEditingPlaylist}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fromIndex, toIndex })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Update local editable playlist
+                const [movedSong] = this.editablePlaylist.splice(fromIndex, 1);
+                this.editablePlaylist.splice(toIndex, 0, movedSong);
+                this.renderEditablePlaylist();
+            } else {
+                this.showToast(data.error || 'Failed to reorder playlist', 'error');
+            }
+        } catch (error) {
+            console.error('Error reordering playlist:', error);
+            this.showToast('Error reordering playlist', 'error');
+        }
+    }
+    
+    async savePlaylist() {
+        try {
+            const response = await fetch(`/api/playlist/save/${this.currentEditingPlaylist}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ playlist: this.editablePlaylist })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.showToast(`Playlist saved! ${data.totalSongs} songs`, 'success');
+                this.closePlaylistEditor();
+                // Refresh playlist browser if it was open
+                if (!this.playlistBrowser.classList.contains('hidden')) {
+                    this.loadPlaylistBrowser();
+                }
+            } else {
+                this.showToast(data.error || 'Failed to save playlist', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving playlist:', error);
+            this.showToast('Error saving playlist', 'error');
+        }
+    }
+    
+    renderEditablePlaylist() {
+        if (!this.editablePlaylistItems) return;
+        
+        this.editablePlaylistItems.innerHTML = '';
+        
+        this.editablePlaylist.forEach((song, index) => {
+            const songElement = document.createElement('div');
+            songElement.className = 'editable-playlist-item bg-purple-800 bg-opacity-50 rounded-lg p-3 flex items-center justify-between cursor-move';
+            songElement.draggable = true;
+            songElement.dataset.index = index;
+            
+            const songInfo = document.createElement('div');
+            songInfo.className = 'flex-1';
+            
+            const songTitle = document.createElement('div');
+            songTitle.className = 'font-medium text-purple-100';
+            songTitle.textContent = song.search;
+            
+            const songMeta = document.createElement('div');
+            songMeta.className = 'text-xs text-purple-300 mt-1';
+            songMeta.innerHTML = `
+                <span class="bg-purple-700 px-2 py-1 rounded">${song.type}</span>
+                <span class="ml-2">#${index + 1}</span>
+            `;
+            
+            songInfo.appendChild(songTitle);
+            songInfo.appendChild(songMeta);
+            
+            const controls = document.createElement('div');
+            controls.className = 'flex items-center space-x-2';
+            
+            const dragHandle = document.createElement('div');
+            dragHandle.className = 'text-purple-400 cursor-move';
+            dragHandle.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'text-red-400 hover:text-red-300 transition-colors';
+            removeBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.removeSongFromPlaylist(index);
+            };
+            
+            controls.appendChild(dragHandle);
+            controls.appendChild(removeBtn);
+            
+            songElement.appendChild(songInfo);
+            songElement.appendChild(controls);
+            
+            this.editablePlaylistItems.appendChild(songElement);
+        });
+    }
+    
+    setupPlaylistDragAndDrop() {
+        let draggedElement = null;
+        let draggedIndex = null;
+        
+        // Use event delegation for dynamic elements
+        document.addEventListener('dragstart', (e) => {
+            if (e.target.classList.contains('editable-playlist-item')) {
+                draggedElement = e.target;
+                draggedIndex = parseInt(e.target.dataset.index);
+                e.target.style.opacity = '0.5';
+            }
+        });
+        
+        document.addEventListener('dragend', (e) => {
+            if (e.target.classList.contains('editable-playlist-item')) {
+                e.target.style.opacity = '1';
+                draggedElement = null;
+                draggedIndex = null;
+            }
+        });
+        
+        document.addEventListener('dragover', (e) => {
+            if (e.target.closest('.editable-playlist-item')) {
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const dropTarget = e.target.closest('.editable-playlist-item');
+            
+            if (dropTarget && draggedElement && dropTarget !== draggedElement) {
+                const dropIndex = parseInt(dropTarget.dataset.index);
+                
+                if (draggedIndex !== null && draggedIndex !== dropIndex) {
+                    this.reorderPlaylist(draggedIndex, dropIndex);
+                }
+            }
+        });
+    }
+}

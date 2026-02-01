@@ -6,6 +6,41 @@
     <title>Virtual Jukebox</title>
     <link href="css/output.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .editable-playlist-item {
+            transition: all 0.2s ease;
+        }
+        
+        .editable-playlist-item:hover {
+            background-color: rgba(147, 51, 234, 0.3) !important;
+            transform: translateY(-1px);
+        }
+        
+        .editable-playlist-item.dragging {
+            opacity: 0.5;
+            transform: rotate(2deg);
+        }
+        
+        .drag-over {
+            border: 2px dashed rgba(147, 51, 234, 0.5);
+            background-color: rgba(147, 51, 234, 0.1);
+        }
+        
+        .playlist-editor-form {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
 </head>
 <body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen text-white">
     <div class="container mx-auto px-4 py-8">
@@ -220,6 +255,9 @@
                         <i class="fas fa-heart mr-2"></i>Wedding Playlist Browser
                     </h3>
                     <div class="flex space-x-2">
+                        <button id="editPlaylistBtn" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors">
+                            <i class="fas fa-edit mr-1"></i>Edit
+                        </button>
                         <button id="togglePlaylistViewBtn" class="bg-amber-800 hover:bg-amber-900 px-3 py-1 rounded text-sm transition-colors">
                             <i class="fas fa-expand-alt mr-1"></i>Detailed
                         </button>
@@ -270,6 +308,68 @@
                 <div class="mt-3 text-xs text-amber-200">
                     <i class="fas fa-info-circle mr-1"></i>
                     Click any song to jump to that position • Use search or filter buttons to find songs quickly
+                </div>
+            </div>
+            
+            <!-- Playlist Editor Modal -->
+            <div id="playlistEditor" class="mb-4 bg-gradient-to-r from-purple-700 to-indigo-700 rounded-lg p-4 hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-lg font-semibold text-purple-100">
+                        <i class="fas fa-edit mr-2"></i>Playlist Editor - <span id="editingPlaylistName">Wedding Party</span>
+                    </h3>
+                    <div class="flex space-x-2">
+                        <button id="addSongToPlaylistBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
+                            <i class="fas fa-plus mr-1"></i>Add Song
+                        </button>
+                        <button id="savePlaylistBtn" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors">
+                            <i class="fas fa-save mr-1"></i>Save
+                        </button>
+                        <button id="cancelEditBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded text-sm transition-colors">
+                            <i class="fas fa-times mr-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Add Song Form -->
+                <div id="addSongForm" class="mb-4 p-3 bg-black bg-opacity-30 rounded-lg hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input type="text" id="newSongSearch" 
+                               class="px-3 py-2 bg-gray-100 border border-purple-600 rounded-lg focus:border-purple-400 focus:outline-none focus:bg-white" 
+                               style="color: #1f2937 !important; background-color: #f3f4f6 !important;"
+                               placeholder="Search query (e.g., 'Sweet Caroline Neil Diamond')">
+                        <select id="newSongType" class="px-3 py-2 bg-gray-100 border border-purple-600 rounded-lg focus:border-purple-400 focus:outline-none" style="color: #1f2937 !important; background-color: #f3f4f6 !important;">
+                            <option value="dance">Dance</option>
+                            <option value="line-dance">Line Dance</option>
+                            <option value="romantic">Romantic</option>
+                            <option value="sing-along">Sing-Along</option>
+                            <option value="80s-rock">80s Rock</option>
+                            <option value="classic">Classic</option>
+                            <option value="modern">Modern</option>
+                            <option value="country">Country</option>
+                            <option value="hip-hop">Hip-Hop</option>
+                            <option value="pop">Pop</option>
+                        </select>
+                        <div class="flex space-x-2">
+                            <button id="confirmAddSongBtn" class="flex-1 bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg transition-colors">
+                                <i class="fas fa-plus mr-1"></i>Add
+                            </button>
+                            <button id="cancelAddSongBtn" class="bg-gray-600 hover:bg-gray-700 px-3 py-2 rounded-lg transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Editable Playlist -->
+                <div class="max-h-96 overflow-y-auto bg-black bg-opacity-30 rounded-lg p-2">
+                    <div id="editablePlaylistItems" class="space-y-2">
+                        <!-- Editable playlist items will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="mt-3 text-xs text-purple-200">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Drag songs to reorder • Click <i class="fas fa-trash text-red-400"></i> to remove • Changes are saved automatically
                 </div>
             </div>
             
