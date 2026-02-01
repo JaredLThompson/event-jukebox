@@ -47,6 +47,12 @@ cd wedding-jukebox
 ```
 
 ### Option 2: Raspberry Pi Wedding Setup (Ultimate! 🌟)
+
+**Hardware needed for dual WiFi:**
+- Raspberry Pi 4 (4GB+ recommended)
+- **USB WiFi Adapter** (TP-Link AC600 T2U Plus recommended)
+- MicroSD card (32GB+), power supply, case
+
 ```bash
 # Docker Pi setup (recommended)
 curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
@@ -57,6 +63,10 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 # Or traditional Pi setup
 curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
 ```
+
+**How dual WiFi works:**
+- **Built-in WiFi (wlan0)**: Connects to venue WiFi for internet
+- **USB WiFi (wlan1)**: Creates "Wedding-Jukebox" hotspot for guests
 
 ### Option 3: Local Development
 Run the setup script:
@@ -95,29 +105,61 @@ Open your browser to `http://localhost:3000` and start jamming! 🎶
 - **Audio plays through DJ device** → mixer → speakers
 
 ### **Setup Cost:**
-- **Raspberry Pi Setup**: ~$150 (vs $500+ DJ equipment rental)
-- **Works at any venue** with or without WiFi
+- **Raspberry Pi 4 (4GB)**: $75
+- **USB WiFi Adapter**: $25 (TP-Link AC600 T2U Plus)
+- **MicroSD + Power + Case**: $50
+- **Total**: ~$150 (vs $500+ DJ equipment rental)
 
 ## 🌐 **Deployment Options**
 
-| Method | Best For | Difficulty | Cost |
-|--------|----------|------------|------|
-| **Docker** | Development, Cloud | ⭐ Easy | Free |
-| **Pi Hotspot** | Weddings, Events | ⭐⭐ Medium | ~$150 |
-| **Local** | Testing, Small Groups | ⭐ Easy | Free |
+| Method | Best For | Difficulty | Hardware Needed | Cost |
+|--------|----------|------------|-----------------|------|
+| **Docker** | Development, Cloud | ⭐ Easy | Computer | Free |
+| **Pi Hotspot** | Weddings, Events | ⭐⭐ Medium | Pi 4 + USB WiFi | ~$150 |
+| **Local** | Testing, Small Groups | ⭐ Easy | Computer | Free |
+
+**Pi Hardware Checklist:**
+- ✅ Raspberry Pi 4 (4GB+ RAM)
+- ✅ **USB WiFi Adapter** (essential for dual WiFi)
+- ✅ MicroSD card (32GB+ Class 10)
+- ✅ Power supply + case with cooling
 
 ## 🎵 **How It Works**
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Raspberry Pi  │    │   DJ Device      │    │  Sound System  │
-│  (Hotspot+WiFi) │◄──►│  (Browser+Audio) │───►│   (Speakers)    │
+│ (Dual WiFi Hub) │◄──►│  (Browser+Audio) │───►│   (Speakers)    │
 │                 │    │                  │    │                 │
-│ • Guest WiFi    │    │ • Plays music    │    │ • Amplifies     │
-│ • YouTube API   │    │ • DJ controls    │    │ • Party sound!  │
-│ • Queue logic   │    │ • Real-time UI   │    │                 │
+│ • Built-in WiFi │    │ • Plays music    │    │ • Amplifies     │
+│   → Venue net   │    │ • DJ controls    │    │ • Party sound!  │
+│ • USB WiFi      │    │ • Real-time UI   │    │                 │
+│   → Guest hotspot│    │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
+
+**Why USB WiFi Adapter is Essential:**
+- **Single WiFi Pi**: Can only connect to venue OR create hotspot (not both)
+- **Dual WiFi Pi**: Built-in connects to venue, USB creates guest hotspot
+- **Perfect wedding solution**: Guests get easy access + YouTube Music works
+
+## 🛒 **Pi Hardware Shopping List**
+
+**Essential Components:**
+- **Raspberry Pi 4 (4GB)** - $75 ([Buy on Amazon](https://amazon.com/dp/B07TC2BK1X))
+- **USB WiFi Adapter** - $25 ([TP-Link AC600 T2U Plus](https://amazon.com/dp/B07P5PRK7J))
+- **MicroSD Card (32GB+)** - $15 ([SanDisk Ultra](https://amazon.com/dp/B073K14CVB))
+- **Power Supply** - $15 ([Official Pi Power Supply](https://amazon.com/dp/B07TSDJSQH))
+- **Case with Cooling** - $20 ([Argon ONE V2](https://amazon.com/dp/B08MJ3CSW7))
+
+**Total: ~$150** 💰
+
+**Why These Specific Items:**
+- **Pi 4 (4GB)**: Handles Docker + dual WiFi smoothly
+- **TP-Link AC600**: Proven compatibility with Pi dual WiFi setup
+- **Class 10 SD**: Fast enough for real-time music streaming
+- **Official power**: Prevents random shutdowns during events
+- **Cooling case**: Keeps Pi stable during long wedding receptions
 
 ## 🛠️ **Tech Stack**
 
