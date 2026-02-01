@@ -73,6 +73,14 @@ class UserJukebox {
             this.updateNowPlayingPreview(song);
         });
 
+        this.socket.on('queueParkChanged', (data) => {
+            if (data.parked) {
+                this.showToast('🅿️ Requests are being held - your songs will play later!', 'info');
+            } else {
+                this.showToast('🎵 Requests are now active!', 'success');
+            }
+        });
+
         this.socket.on('fallbackMode', (data) => {
             if (data.active) {
                 this.showToast(`🎵 Auto-playing: ${data.song.title}`, 'info');
@@ -223,7 +231,12 @@ class UserJukebox {
             });
 
             if (response.ok) {
-                this.showToast(`"${title}" added to queue!`, 'success');
+                const data = await response.json();
+                if (data.parked) {
+                    this.showToast(`🅿️ "${title}" parked! ${data.message}`, 'info');
+                } else {
+                    this.showToast(`"${title}" added to queue!`, 'success');
+                }
                 // Keep search results open so users can add more songs from the same search
                 // this.searchQuery.value = '';
                 // this.hideResults();

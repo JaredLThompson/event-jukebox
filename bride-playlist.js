@@ -47,8 +47,8 @@ const BRIDE_SPOTIFY_PLAYLIST = [
   { search: "Helpless One Piano", type: "piano" },
   { search: "Show Yourself One Piano", type: "piano" },
   { search: "Evermore Anthony Pianista", type: "piano" },
-  { search: "Perfect for Me Bradley Marshall", type: "romantic" },
-  { search: "Forever Now Michael Buble", type: "romantic" }
+  { search: "Perfect for Me Bradley Marshall", type: "first-dance" },
+  { search: "Forever Now Michael Buble", type: "parent-dance" }
 ];
 
 module.exports = BRIDE_SPOTIFY_PLAYLIST;

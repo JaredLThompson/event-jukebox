@@ -159,7 +159,7 @@
         <p class="subtitle">Help us create the perfect playlist!</p>
         
         <div class="qr-container pulse">
-            <canvas id="qrcode" class="qr-code"></canvas>
+            <img id="qrcode" class="qr-code" alt="QR Code to add songs" />
         </div>
         
         <div class="instructions">
@@ -191,42 +191,57 @@
         <div class="music-notes floating" style="animation-delay: 1s;">🎼 ♪ ♫</div>
     </div>
     
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
         // Wait for DOM to be ready
         document.addEventListener('DOMContentLoaded', function() {
-            // Get the current URL and create the user interface URL
-            const currentHost = window.location.host;
-            const protocol = window.location.protocol;
-            const userUrl = `${protocol}//${currentHost}/user`;
-            
-            console.log('Generating QR code for:', userUrl);
-            
-            // Generate QR code
-            QRCode.toCanvas(document.getElementById('qrcode'), userUrl, {
-                width: 300,
-                margin: 2,
-                color: {
-                    dark: '#333333',
-                    light: '#FFFFFF'
-                }
-            }, function (error) {
-                if (error) {
-                    console.error('QR Code generation failed:', error);
-                    document.getElementById('qrcode').innerHTML = '<p style="color: red;">QR Code generation failed</p>';
-                } else {
-                    console.log('QR Code generated successfully');
-                }
-            });
-            
-            // Add click handler to QR code for desktop users
-            document.getElementById('qrcode').addEventListener('click', function() {
-                window.open(userUrl, '_blank');
-            });
-            
-            // Add hover effect
-            document.getElementById('qrcode').style.cursor = 'pointer';
-            document.getElementById('qrcode').title = 'Click to open song request page';
+            // Get network info from server
+            fetch('/api/network-info')
+                .then(response => response.json())
+                .then(data => {
+                    const userUrl = `http://${data.networkIP}:${data.port}/user`;
+                    console.log('Generating QR code for:', userUrl);
+                    
+                    // Use QR Server API to generate QR code image
+                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(userUrl)}`;
+                    
+                    const qrImg = document.getElementById('qrcode');
+                    qrImg.src = qrApiUrl;
+                    qrImg.onload = function() {
+                        console.log('QR Code loaded successfully');
+                    };
+                    qrImg.onerror = function() {
+                        console.error('QR Code failed to load');
+                        qrImg.alt = 'QR Code failed to load';
+                        qrImg.style.display = 'none';
+                        const container = qrImg.parentElement;
+                        container.innerHTML = `
+                            <div style="padding: 20px; text-align: center;">
+                                <p style="color: #666; margin-bottom: 10px;">QR Code not available</p>
+                                <p style="font-size: 0.9em; color: #888;">Visit directly:</p>
+                                <p style="font-family: monospace; background: #f0f0f0; padding: 10px; border-radius: 5px; word-break: break-all;">${userUrl}</p>
+                            </div>
+                        `;
+                    };
+                    
+                    // Add click handler to QR code for desktop users
+                    qrImg.addEventListener('click', function() {
+                        window.open(userUrl, '_blank');
+                    });
+                    
+                    // Add hover effect
+                    qrImg.style.cursor = 'pointer';
+                    qrImg.title = 'Click to open song request page';
+                })
+                .catch(error => {
+                    console.error('Failed to get network info:', error);
+                    // Fallback to current host
+                    const currentHost = window.location.host;
+                    const protocol = window.location.protocol;
+                    const userUrl = `${protocol}//${currentHost}/user`;
+                    
+                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(userUrl)}`;
+                    document.getElementById('qrcode').src = qrApiUrl;
+                });
         });
     </script>
 </body>
