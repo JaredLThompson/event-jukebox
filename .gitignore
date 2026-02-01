@@ -12,6 +12,10 @@ wedding-playlist-*.txt
 wedding-memory-playlist-*.js
 wedding-spotify-list-*.txt
 
+# Generated QR codes
+qr-*.png
+qr-codes.html
+
 # Logs
 *.log
 npm-debug.log*
