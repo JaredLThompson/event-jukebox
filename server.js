@@ -125,6 +125,10 @@ app.get('/user', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
+app.get('/settings', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+});
+
 app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
@@ -1180,10 +1184,12 @@ async function searchYouTubeMusic(query, limit = 10) {
         }
       });
     } else {
-      // Local development - use bash with venv activation
-      python = spawn('bash', [
-        '-c',
-        `source venv/bin/activate && python youtube_music_service.py search --query "${query}" --limit ${limit}`
+      // Local development - use direct python3 path
+      python = spawn('venv/bin/python3', [
+        'youtube_music_service.py', 
+        'search', 
+        '--query', query, 
+        '--limit', limit.toString()
       ], {
         cwd: __dirname
       });

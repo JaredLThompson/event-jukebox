@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Virtual Jukebox</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+    
     <link href="css/output.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -40,6 +48,41 @@
                 transform: translateY(0);
             }
         }
+        
+        /* Audio Visualizer Styles */
+        #visualizerCanvas {
+            border-radius: 8px;
+            background: linear-gradient(135deg, #000000 0%, #1a1a2e 50%, #16213e 100%);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        #visualizerContainer {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Compact Queue Styles */
+        .compact-queue .queue-item {
+            padding: 8px 12px !important;
+        }
+        
+        .compact-queue .queue-item h4 {
+            font-size: 14px !important;
+        }
+        
+        .compact-queue .queue-item p {
+            font-size: 12px !important;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen text-white">
@@ -55,9 +98,13 @@
                     <i class="fas fa-users mr-1"></i>
                     <span id="userCount">0</span> users online
                 </span>
-                <a href="/user" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
+                <a href="#" onclick="confirmNavigation('/user')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
                     <i class="fas fa-headphones mr-1"></i>
                     User Page
+                </a>
+                <a href="#" onclick="confirmNavigation('/settings')" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
+                    <i class="fas fa-cog mr-1"></i>
+                    Settings
                 </a>
                 <a href="/qr" target="_blank" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-2 rounded-full text-sm transition-all transform hover:scale-105 shadow-lg">
                     <i class="fas fa-qrcode mr-1"></i>
@@ -85,6 +132,29 @@
                     <div id="youtubePlayer"></div>
                 </div>
                 
+                <!-- Audio Visualizer -->
+                <div id="visualizerContainer" class="hidden mt-4">
+                    <div class="bg-gray-900 rounded-lg p-4 border border-purple-400">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-semibold text-purple-300">
+                                Audio Visualizer
+                                <span id="visualizerMode" class="text-xs text-gray-400 ml-2">(Simulated)</span>
+                            </h3>
+                            <div class="flex space-x-2">
+                                <button id="visualizerToggle" class="text-xs bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded transition-colors">
+                                    <i class="fas fa-pause mr-1"></i>Stop
+                                </button>
+                                <select id="visualizerType" class="text-xs bg-gray-700 text-white rounded px-2 py-1">
+                                    <option value="bars">Frequency Bars</option>
+                                    <option value="waveform">Waveform</option>
+                                    <option value="circular">Circular</option>
+                                </select>
+                            </div>
+                        </div>
+                        <canvas id="visualizerCanvas" width="400" height="120" class="w-full rounded bg-black"></canvas>
+                    </div>
+                </div>
+                
                 <!-- Player Controls -->
                 <div class="flex justify-center space-x-4 mt-4">
                     <button id="playPauseBtn" class="player-btn bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition-colors hidden">
@@ -95,6 +165,9 @@
                     </button>
                     <button id="fadeNextBtn" class="player-btn bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 px-6 py-2 rounded-lg transition-all transform hover:scale-105 font-semibold shadow-lg">
                         <i class="fas fa-volume-down mr-2"></i>Fade to Next
+                    </button>
+                    <button id="showVisualizerBtn" class="player-btn bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-wave-square mr-2"></i>Show Visualizer
                     </button>
                     <button id="volumeBtn" class="player-btn bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors hidden">
                         <i class="fas fa-volume-up"></i>

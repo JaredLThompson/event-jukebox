@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Jukebox - Settings</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+    
+    <link href="css/output.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .settings-container {
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .setting-item {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .setting-item:hover {
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #8b5cf6;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .service-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-enabled {
+            background: #10b981;
+            color: white;
+        }
+        
+        .status-disabled {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .status-unavailable {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                <i class="fas fa-cog mr-3"></i>Wedding Jukebox Settings
+            </h1>
+            <p class="text-xl text-gray-300">Customize your music experience</p>
+            <div class="mt-4">
+                <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-full transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Return to DJ Interface
+                </a>
+            </div>
+        </header>
+
+        <div class="settings-container p-8">
+            <!-- Audio Visualizer Settings -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-wave-square mr-3 text-purple-400"></i>
+                    Audio Visualizer
+                </h2>
+                
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Enable Visualizer</h3>
+                            <p class="text-gray-300 text-sm">Show animated visual effects during music playback</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="visualizerEnabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-item p-6 mb-4" id="visualizerSettings">
+                    <h3 class="text-lg font-semibold mb-4">Visualizer Preferences</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Default Visualization Type</label>
+                            <select id="defaultVisualizerType" class="w-full bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="bars">Frequency Bars</option>
+                                <option value="waveform">Waveform</option>
+                                <option value="circular">Circular</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Auto-show Behavior</label>
+                            <select id="autoShowBehavior" class="w-full bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="always">Always show when music starts</option>
+                                <option value="spotify-only">Only for Spotify previews</option>
+                                <option value="never">Never auto-show</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Music Services Settings -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-music mr-3 text-green-400"></i>
+                    Music Services
+                </h2>
+                
+                <!-- YouTube Music -->
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <i class="fab fa-youtube text-red-500 mr-3 text-xl"></i>
+                                <h3 class="text-lg font-semibold">YouTube Music</h3>
+                                <span class="service-status status-enabled ml-3">ENABLED</span>
+                            </div>
+                            <p class="text-gray-300 text-sm">Primary music service with full song playback</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="youtubeEnabled" checked disabled>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Spotify -->
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <i class="fab fa-spotify text-green-500 mr-3 text-xl"></i>
+                                <h3 class="text-lg font-semibold">Spotify</h3>
+                                <span class="service-status status-enabled ml-3" id="spotifyStatus">ENABLED</span>
+                            </div>
+                            <p class="text-gray-300 text-sm">30-second previews with real audio visualization</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="spotifyEnabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- SoundCloud (Future) -->
+                <div class="setting-item p-6 mb-4 opacity-60">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <i class="fab fa-soundcloud text-orange-500 mr-3 text-xl"></i>
+                                <h3 class="text-lg font-semibold">SoundCloud</h3>
+                                <span class="service-status status-unavailable ml-3">COMING SOON</span>
+                            </div>
+                            <p class="text-gray-300 text-sm">Independent artist tracks and remixes</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="soundcloudEnabled" disabled>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Apple Music (Future) -->
+                <div class="setting-item p-6 mb-4 opacity-60">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <i class="fab fa-apple text-gray-400 mr-3 text-xl"></i>
+                                <h3 class="text-lg font-semibold">Apple Music</h3>
+                                <span class="service-status status-unavailable ml-3">COMING SOON</span>
+                            </div>
+                            <p class="text-gray-300 text-sm">Apple's music streaming service integration</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="appleMusicEnabled" disabled>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interface Settings -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-palette mr-3 text-blue-400"></i>
+                    Interface
+                </h2>
+                
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Show Service Icons</h3>
+                            <p class="text-gray-300 text-sm">Display music service icons in search results</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="showServiceIcons" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Compact Queue View</h3>
+                            <p class="text-gray-300 text-sm">Show more songs in the queue with smaller cards</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="compactQueue">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Save Settings -->
+            <div class="text-center">
+                <button id="saveAndReturn" class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-3 rounded-full text-lg font-semibold transition-all transform hover:scale-105 shadow-lg mr-4">
+                    <i class="fas fa-check mr-2"></i>Apply & Return
+                </button>
+                <button id="saveSettings" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-full text-lg font-semibold transition-all transform hover:scale-105 shadow-lg">
+                    <i class="fas fa-save mr-2"></i>Save Settings
+                </button>
+                <button id="resetSettings" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-full ml-4 transition-colors">
+                    <i class="fas fa-undo mr-2"></i>Reset to Defaults
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SettingsManager {
+            constructor() {
+                this.settings = this.loadSettings();
+                this.initializeUI();
+                this.bindEvents();
+            }
+            
+            loadSettings() {
+                const defaultSettings = {
+                    visualizerEnabled: true,
+                    defaultVisualizerType: 'bars',
+                    autoShowBehavior: 'always',
+                    youtubeEnabled: true,
+                    spotifyEnabled: true,
+                    soundcloudEnabled: false,
+                    appleMusicEnabled: false,
+                    showServiceIcons: true,
+                    compactQueue: false
+                };
+                
+                const saved = localStorage.getItem('jukeboxSettings');
+                return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+            }
+            
+            saveSettings() {
+                localStorage.setItem('jukeboxSettings', JSON.stringify(this.settings));
+                this.showToast('Settings saved successfully!', 'success');
+                
+                // Try to apply settings to main window if it exists
+                this.applyToMainWindow();
+            }
+            
+            saveAndReturn() {
+                this.saveSettings();
+                // Go back to main jukebox
+                window.location.href = '/';
+            }
+            
+            applyToMainWindow() {
+                // If the main jukebox window is open, apply settings there
+                try {
+                    if (window.opener && window.opener.jukebox) {
+                        window.opener.jukebox.applySettings();
+                        this.showToast('Settings applied to main window', 'info');
+                    }
+                } catch (error) {
+                    // Ignore errors if main window is not accessible
+                }
+            }
+            
+            initializeUI() {
+                // Set all form values from settings
+                Object.keys(this.settings).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.checked = this.settings[key];
+                        } else {
+                            element.value = this.settings[key];
+                        }
+                    }
+                });
+                
+                this.updateVisualizerSettingsVisibility();
+            }
+            
+            bindEvents() {
+                // Visualizer enable/disable
+                document.getElementById('visualizerEnabled').addEventListener('change', (e) => {
+                    this.settings.visualizerEnabled = e.target.checked;
+                    this.updateVisualizerSettingsVisibility();
+                });
+                
+                // All other settings
+                ['defaultVisualizerType', 'autoShowBehavior', 'youtubeEnabled', 'spotifyEnabled', 
+                 'soundcloudEnabled', 'appleMusicEnabled', 'showServiceIcons', 'compactQueue'].forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.addEventListener('change', (e) => {
+                            this.settings[id] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+                        });
+                    }
+                });
+                
+                // Save and reset buttons
+                document.getElementById('saveSettings').addEventListener('click', () => this.saveSettings());
+                document.getElementById('saveAndReturn').addEventListener('click', () => this.saveAndReturn());
+                document.getElementById('resetSettings').addEventListener('click', () => this.resetToDefaults());
+            }
+            
+            updateVisualizerSettingsVisibility() {
+                const visualizerSettings = document.getElementById('visualizerSettings');
+                if (this.settings.visualizerEnabled) {
+                    visualizerSettings.style.display = 'block';
+                } else {
+                    visualizerSettings.style.display = 'none';
+                }
+            }
+            
+            resetToDefaults() {
+                if (confirm('Are you sure you want to reset all settings to defaults?')) {
+                    localStorage.removeItem('jukeboxSettings');
+                    location.reload();
+                }
+            }
+            
+            showToast(message, type) {
+                // Simple toast notification
+                const toast = document.createElement('div');
+                toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg text-white font-semibold z-50 ${
+                    type === 'success' ? 'bg-green-600' : 'bg-red-600'
+                }`;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                
+                setTimeout(() => {
+                    toast.remove();
+                }, 3000);
+            }
+        }
+        
+        // Initialize settings manager
+        const settingsManager = new SettingsManager();
+    </script>
+</body>
+</html>

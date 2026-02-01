@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Visualizer Test</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+    
+    <link href="css/output.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: Arial, sans-serif;
+        }
+        
+        .test-container {
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        #visualizerCanvas {
+            border-radius: 8px;
+            background: linear-gradient(135deg, #000000 0%, #1a1a2e 50%, #16213e 100%);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+            width: 100%;
+            height: 150px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button, select {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #7c3aed;
+        }
+        
+        select {
+            background: #4b5563;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .info {
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎵 Audio Visualizer Test</h1>
+        
+        <div id="visualizerContainer">
+            <canvas id="visualizerCanvas" width="500" height="150"></canvas>
+        </div>
+        
+        <div class="controls">
+            <button id="startBtn">Start Visualizer</button>
+            <button id="stopBtn">Stop Visualizer</button>
+            <select id="visualizerType">
+                <option value="bars">Frequency Bars</option>
+                <option value="waveform">Waveform</option>
+                <option value="circular">Circular</option>
+            </select>
+        </div>
+        
+        <div class="info">
+            This is a test of the audio visualizer with simulated data.<br>
+            In the main app, it will respond to actual music playback.
+        </div>
+    </div>
+
+    <script>
+        // Simplified AudioVisualizer class for testing
+        class AudioVisualizer {
+            constructor() {
+                this.canvas = document.getElementById('visualizerCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.isActive = false;
+                this.animationId = null;
+                this.visualizerType = 'bars';
+                this.bufferLength = 128;
+                this.dataArray = new Uint8Array(this.bufferLength);
+                this.colors = {
+                    primary: '#8b5cf6',
+                    secondary: '#a855f7',
+                    accent: '#ec4899',
+                    background: '#000000'
+                };
+                
+                this.resizeCanvas();
+                this.bindEvents();
+            }
+            
+            resizeCanvas() {
+                const container = this.canvas.parentElement;
+                const rect = container.getBoundingClientRect();
+                this.canvas.width = rect.width - 60;
+                this.canvas.height = 150;
+            }
+            
+            bindEvents() {
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+                document.getElementById('stopBtn').addEventListener('click', () => this.stop());
+                document.getElementById('visualizerType').addEventListener('change', (e) => {
+                    this.visualizerType = e.target.value;
+                });
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+            
+            start() {
+                if (this.isActive) return;
+                this.isActive = true;
+                this.simulateAudioData();
+            }
+            
+            stop() {
+                this.isActive = false;
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                }
+                this.clearCanvas();
+            }
+            
+            simulateAudioData() {
+                if (!this.isActive) return;
+                
+                const time = Date.now() * 0.001;
+                const bassFreq = Math.sin(time * 2) * 0.5 + 0.5;
+                const midFreq = Math.sin(time * 4) * 0.3 + 0.4;
+                const highFreq = Math.sin(time * 8) * 0.2 + 0.3;
+                
+                for (let i = 0; i < this.bufferLength; i++) {
+                    const freq = i / this.bufferLength;
+                    let amplitude = 0;
+                    
+                    if (freq < 0.1) {
+                        amplitude = bassFreq * (Math.random() * 0.3 + 0.7);
+                    } else if (freq < 0.5) {
+                        amplitude = midFreq * (Math.random() * 0.4 + 0.6);
+                    } else {
+                        amplitude = highFreq * (Math.random() * 0.5 + 0.5);
+                    }
+                    
+                    this.dataArray[i] = Math.floor(amplitude * 255);
+                }
+                
+                this.draw();
+                this.animationId = requestAnimationFrame(() => this.simulateAudioData());
+            }
+            
+            draw() {
+                this.clearCanvas();
+                
+                switch (this.visualizerType) {
+                    case 'bars':
+                        this.drawBars();
+                        break;
+                    case 'waveform':
+                        this.drawWaveform();
+                        break;
+                    case 'circular':
+                        this.drawCircular();
+                        break;
+                }
+            }
+            
+            clearCanvas() {
+                this.ctx.fillStyle = this.colors.background;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+            
+            drawBars() {
+                const barWidth = this.canvas.width / this.bufferLength * 2;
+                let x = 0;
+                
+                for (let i = 0; i < this.bufferLength; i++) {
+                    const barHeight = (this.dataArray[i] / 255) * this.canvas.height * 0.8;
+                    
+                    const gradient = this.ctx.createLinearGradient(0, this.canvas.height, 0, this.canvas.height - barHeight);
+                    gradient.addColorStop(0, this.colors.primary);
+                    gradient.addColorStop(0.5, this.colors.secondary);
+                    gradient.addColorStop(1, this.colors.accent);
+                    
+                    this.ctx.fillStyle = gradient;
+                    this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth - 1, barHeight);
+                    
+                    if (this.dataArray[i] > 200) {
+                        this.ctx.shadowColor = this.colors.accent;
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth - 1, barHeight);
+                        this.ctx.shadowBlur = 0;
+                    }
+                    
+                    x += barWidth;
+                }
+            }
+            
+            drawWaveform() {
+                this.ctx.strokeStyle = this.colors.primary;
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                
+                const sliceWidth = this.canvas.width / this.bufferLength;
+                let x = 0;
+                
+                for (let i = 0; i < this.bufferLength; i++) {
+                    const v = this.dataArray[i] / 255;
+                    const y = v * this.canvas.height;
+                    
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        this.ctx.lineTo(x, y);
+                    }
+                    
+                    x += sliceWidth;
+                }
+                
+                this.ctx.stroke();
+            }
+            
+            drawCircular() {
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const radius = Math.min(centerX, centerY) * 0.6;
+                
+                for (let i = 0; i < this.bufferLength; i++) {
+                    const angle = (i / this.bufferLength) * Math.PI * 2;
+                    const amplitude = (this.dataArray[i] / 255) * radius * 0.5;
+                    
+                    const x1 = centerX + Math.cos(angle) * radius;
+                    const y1 = centerY + Math.sin(angle) * radius;
+                    const x2 = centerX + Math.cos(angle) * (radius + amplitude);
+                    const y2 = centerY + Math.sin(angle) * (radius + amplitude);
+                    
+                    const gradient = this.ctx.createLinearGradient(x1, y1, x2, y2);
+                    gradient.addColorStop(0, this.colors.primary);
+                    gradient.addColorStop(1, this.colors.accent);
+                    
+                    this.ctx.strokeStyle = gradient;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x1, y1);
+                    this.ctx.lineTo(x2, y2);
+                    this.ctx.stroke();
+                }
+            }
+        }
+        
+        // Initialize the visualizer
+        const visualizer = new AudioVisualizer();
+    </script>
+</body>
+</html>

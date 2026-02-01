@@ -1,3 +1,62 @@
+// Settings Manager
+class JukeboxSettings {
+    constructor() {
+        this.settings = this.loadSettings();
+    }
+    
+    loadSettings() {
+        const defaultSettings = {
+            visualizerEnabled: true,
+            defaultVisualizerType: 'bars',
+            autoShowBehavior: 'always',
+            youtubeEnabled: true,
+            spotifyEnabled: true,
+            soundcloudEnabled: false,
+            appleMusicEnabled: false,
+            showServiceIcons: true,
+            compactQueue: false
+        };
+        
+        const saved = localStorage.getItem('jukeboxSettings');
+        return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+    }
+    
+    refresh() {
+        this.settings = this.loadSettings();
+    }
+    
+    get(key) {
+        return this.settings[key];
+    }
+    
+    set(key, value) {
+        this.settings[key] = value;
+        localStorage.setItem('jukeboxSettings', JSON.stringify(this.settings));
+    }
+    
+    shouldShowVisualizer() {
+        return this.settings.visualizerEnabled;
+    }
+    
+    shouldAutoShowVisualizer(source) {
+        if (!this.settings.visualizerEnabled) return false;
+        
+        switch (this.settings.autoShowBehavior) {
+            case 'always': return true;
+            case 'spotify-only': return source === 'spotify';
+            case 'never': return false;
+            default: return true;
+        }
+    }
+    
+    isServiceEnabled(service) {
+        return this.settings[`${service}Enabled`];
+    }
+}
+
+// Initialize settings
+const jukeboxSettings = new JukeboxSettings();
+
 class VirtualJukebox {
     constructor() {
         this.socket = io();
@@ -10,9 +69,90 @@ class VirtualJukebox {
         this.bindEvents();
         this.setupSocketListeners();
         this.loadInitialData();
+        this.initializeSettingsUI();
+        
+        // Listen for when user returns from settings page
+        window.addEventListener('focus', () => {
+            this.applySettings();
+        });
+        
+        // Warn before leaving page if music is playing
+        window.addEventListener('beforeunload', (e) => {
+            const isPlaying = this.isPlaying || (this.currentPreviewAudio && !this.currentPreviewAudio.paused);
+            const hasQueue = this.currentQueue && this.currentQueue.length > 0;
+            const hasCurrentSong = this.currentSong && this.currentSong.title;
+            
+            if (isPlaying || hasQueue || hasCurrentSong) {
+                const message = 'Music is playing or queued. Leaving this page will interrupt the jukebox.';
+                e.preventDefault();
+                e.returnValue = message;
+                return message;
+            }
+        });
         
         // Initialize YouTube player when API is ready
         window.onYouTubeIframeAPIReady = () => this.initializeYouTubePlayer();
+    }
+
+    initializeSettingsUI() {
+        this.applySettings();
+    }
+    
+    applySettings() {
+        // Reload settings from localStorage
+        jukeboxSettings.refresh();
+        
+        // Hide/show music service tabs based on settings
+        if (this.spotifyTab) {
+            if (jukeboxSettings.isServiceEnabled('spotify')) {
+                this.spotifyTab.style.display = 'inline-block';
+            } else {
+                this.spotifyTab.style.display = 'none';
+                if (this.currentMusicService === 'spotify') {
+                    this.switchMusicService('youtube');
+                }
+            }
+        }
+        
+        // Hide/show visualizer button and container based on settings
+        const showVisualizerBtn = document.getElementById('showVisualizerBtn');
+        const visualizerContainer = document.getElementById('visualizerContainer');
+        
+        if (jukeboxSettings.shouldShowVisualizer()) {
+            if (showVisualizerBtn) showVisualizerBtn.style.display = 'inline-block';
+            if (visualizerContainer) {
+                visualizerContainer.style.display = 'block';
+                visualizerContainer.classList.remove('hidden');
+            }
+            // Don't auto-show the container, let user control it
+        } else {
+            if (showVisualizerBtn) {
+                showVisualizerBtn.style.display = 'none';
+            }
+            if (visualizerContainer) {
+                visualizerContainer.style.display = 'none';
+                visualizerContainer.classList.add('hidden');
+            }
+            if (window.visualizer) {
+                window.visualizer.stop();
+            }
+        }
+        
+        // Apply compact queue setting
+        if (jukeboxSettings.get('compactQueue')) {
+            document.body.classList.add('compact-queue');
+        } else {
+            document.body.classList.remove('compact-queue');
+        }
+        
+        // Update visualizer type if it exists
+        if (window.visualizer) {
+            window.visualizer.visualizerType = jukeboxSettings.get('defaultVisualizerType');
+            const typeSelect = document.getElementById('visualizerType');
+            if (typeSelect) {
+                typeSelect.value = window.visualizer.visualizerType;
+            }
+        }
     }
 
     initializeElements() {
@@ -98,6 +238,12 @@ class VirtualJukebox {
         this.bufferCount = document.getElementById('bufferCount');
         this.debugBufferBtn = document.getElementById('debugBufferBtn');
         
+        // Visualizer elements
+        this.visualizerContainer = document.getElementById('visualizerContainer');
+        this.visualizerToggle = document.getElementById('visualizerToggle');
+        this.visualizerTypeSelect = document.getElementById('visualizerType');
+        this.visualizerCanvas = document.getElementById('visualizerCanvas');
+        
         // Store the full playlist for searching
         this.fullPlaylist = [];
         this.currentPlaylistIndex = 0;
@@ -115,6 +261,12 @@ class VirtualJukebox {
         this.addSongForm.addEventListener('submit', (e) => this.handleAddSong(e));
         this.nextBtn.addEventListener('click', () => this.playNextSong());
         this.fadeNextBtn.addEventListener('click', () => this.fadeToNextSong());
+        
+        // Visualizer button
+        const showVisualizerBtn = document.getElementById('showVisualizerBtn');
+        if (showVisualizerBtn) {
+            showVisualizerBtn.addEventListener('click', () => this.toggleVisualizer());
+        }
         
         // Tab switching
         this.searchTab.addEventListener('click', () => this.switchToSearchTab());
@@ -606,6 +758,56 @@ class VirtualJukebox {
         }
     }
 
+    toggleVisualizer() {
+        if (window.visualizer) {
+            const isCurrentlyVisible = window.visualizer.visualizerContainer && 
+                                     !window.visualizer.visualizerContainer.classList.contains('hidden');
+            
+            const showVisualizerBtn = document.getElementById('showVisualizerBtn');
+            
+            if (isCurrentlyVisible) {
+                window.visualizer.hide();
+                this.showToast('Visualizer hidden', 'info');
+                if (showVisualizerBtn) {
+                    showVisualizerBtn.innerHTML = '<i class="fas fa-wave-square mr-2"></i>Show Visualizer';
+                }
+            } else {
+                window.visualizer.show();
+                if (!window.visualizer.isActive) {
+                    window.visualizer.start();
+                }
+                this.showToast('Visualizer shown', 'success');
+                if (showVisualizerBtn) {
+                    showVisualizerBtn.innerHTML = '<i class="fas fa-eye-slash mr-2"></i>Hide Visualizer';
+                }
+            }
+        } else {
+            this.showToast('Visualizer not available', 'error');
+        }
+    }
+
+    confirmNavigation(url) {
+        // Check if music is currently playing
+        const isPlaying = this.isPlaying || (this.currentPreviewAudio && !this.currentPreviewAudio.paused);
+        const hasQueue = this.currentQueue && this.currentQueue.length > 0;
+        const hasCurrentSong = this.currentSong && this.currentSong.title;
+        
+        if (isPlaying || hasQueue || hasCurrentSong) {
+            const message = isPlaying 
+                ? "⚠️ Music is currently playing!\n\nNavigating away will interrupt the music and may affect the party experience.\n\nAre you sure you want to continue?"
+                : hasCurrentSong || hasQueue
+                ? "⚠️ You have music queued!\n\nNavigating away may interrupt the jukebox experience.\n\nAre you sure you want to continue?"
+                : "Are you sure you want to leave the DJ interface?";
+                
+            if (confirm(message)) {
+                window.location.href = url;
+            }
+        } else {
+            // No music playing, safe to navigate
+            window.location.href = url;
+        }
+    }
+
     async removeSongFromQueue(songId) {
         try {
             const response = await fetch(`/api/queue/${songId}`, {
@@ -665,6 +867,11 @@ class VirtualJukebox {
         const serviceLabel = isFallback ? '🎵 Wedding DJ Auto-Play' :
                            isSpotify ? '🎵 Spotify' :
                            '🎵 YouTube Music';
+        
+        // Auto-show visualizer when a song starts playing
+        if (window.visualizer && !isSpotify && window.visualizer.show && jukeboxSettings.shouldAutoShowVisualizer('youtube')) {
+            window.visualizer.show();
+        }
         
         // For Spotify songs, show preview button if available
         const previewButton = isSpotify && song.previewUrl ? 
@@ -1178,6 +1385,13 @@ class VirtualJukebox {
         this.currentPreviewAudio = new Audio(previewUrl);
         this.currentPreviewAudio.volume = 0.5; // Moderate volume for now playing preview
         
+        // Connect visualizer to Spotify preview audio
+        if (window.visualizer && jukeboxSettings.shouldAutoShowVisualizer('spotify')) {
+            window.visualizer.connectToAudioSource(this.currentPreviewAudio);
+            window.visualizer.show();
+            window.visualizer.start();
+        }
+        
         this.currentPreviewAudio.play().catch(error => {
             console.error('Spotify preview playback failed:', error);
             this.showToast('Preview playback failed', 'error');
@@ -1189,6 +1403,10 @@ class VirtualJukebox {
         this.currentPreviewAudio.addEventListener('ended', () => {
             this.currentPreviewAudio = null;
             this.showToast('Preview ended', 'info');
+            // Stop visualizer when preview ends
+            if (window.visualizer) {
+                window.visualizer.stop();
+            }
         });
     }
 
@@ -1222,6 +1440,13 @@ class VirtualJukebox {
         this.setVolume(50); // Set default volume
         console.log('YouTube player ready');
         
+        // Initialize visualizer with YouTube player
+        if (window.visualizer && window.visualizer.show) {
+            // For YouTube iframe player, we need to use a different approach
+            // since we can't directly access the audio stream
+            window.visualizer.show();
+        }
+        
         // If there's a current song, start playing it
         if (this.currentSong && this.currentSong.videoId) {
             this.playSong(this.currentSong.videoId);
@@ -1233,10 +1458,20 @@ class VirtualJukebox {
             this.isPlaying = true;
             this.playPauseBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
             this.startProgressTracking();
+            
+            // Start visualizer when playing
+            if (window.visualizer && window.visualizer.start) {
+                window.visualizer.start();
+            }
         } else if (event.data === YT.PlayerState.PAUSED) {
             this.isPlaying = false;
             this.playPauseBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play';
             this.stopProgressTracking();
+            
+            // Stop visualizer when paused
+            if (window.visualizer && window.visualizer.stop) {
+                window.visualizer.stop();
+            }
         } else if (event.data === YT.PlayerState.ENDED) {
             this.playNextSong();
         }
@@ -2489,9 +2724,403 @@ Check browser console (F12) for detailed video IDs`);
     }
 }
 
+// Audio Visualizer Class
+class AudioVisualizer {
+    constructor() {
+        this.canvas = null;
+        this.ctx = null;
+        this.audioContext = null;
+        this.analyser = null;
+        this.dataArray = null;
+        this.bufferLength = 0;
+        this.isActive = false;
+        this.animationId = null;
+        this.visualizerType = 'bars';
+        this.currentSource = null; // Track current audio source
+        this.colors = {
+            primary: '#8b5cf6',
+            secondary: '#a855f7',
+            accent: '#ec4899',
+            background: '#000000'
+        };
+        
+        this.initializeElements();
+        this.bindEvents();
+    }
+    
+    initializeElements() {
+        this.canvas = document.getElementById('visualizerCanvas');
+        this.visualizerContainer = document.getElementById('visualizerContainer');
+        this.visualizerToggle = document.getElementById('visualizerToggle');
+        this.visualizerTypeSelect = document.getElementById('visualizerType');
+        
+        if (this.canvas) {
+            this.ctx = this.canvas.getContext('2d');
+            this.resizeCanvas();
+        } else {
+            console.warn('Visualizer canvas not found - visualizer disabled');
+        }
+    }
+    
+    bindEvents() {
+        if (this.visualizerToggle) {
+            this.visualizerToggle.addEventListener('click', () => this.toggleVisualizer());
+        }
+        
+        if (this.visualizerTypeSelect) {
+            this.visualizerTypeSelect.addEventListener('change', (e) => {
+                this.visualizerType = e.target.value;
+            });
+        }
+        
+        window.addEventListener('resize', () => this.resizeCanvas());
+    }
+    
+    resizeCanvas() {
+        if (!this.canvas) return;
+        
+        const container = this.canvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        this.canvas.width = rect.width - 32; // Account for padding
+        this.canvas.height = 120;
+    }
+    
+    async initializeAudioContext(audioElement) {
+        try {
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+            
+            // Create analyser
+            if (!this.analyser) {
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 256;
+                this.bufferLength = this.analyser.frequencyBinCount;
+                this.dataArray = new Uint8Array(this.bufferLength);
+            }
+            
+            // Connect audio source
+            if (audioElement) {
+                // Disconnect any existing source
+                if (this.currentSource) {
+                    this.currentSource.disconnect();
+                }
+                
+                const source = this.audioContext.createMediaElementSource(audioElement);
+                source.connect(this.analyser);
+                this.analyser.connect(this.audioContext.destination);
+                this.currentSource = source;
+            }
+            
+            return true;
+        } catch (error) {
+            console.warn('Failed to initialize audio context:', error);
+            return false;
+        }
+    }
+    
+    show() {
+        if (this.visualizerContainer) {
+            this.visualizerContainer.classList.remove('hidden');
+        }
+    }
+    
+    hide() {
+        if (this.visualizerContainer) {
+            this.visualizerContainer.classList.add('hidden');
+        }
+        this.stop();
+    }
+    
+    toggleVisualizer() {
+        if (!this.visualizerContainer) return;
+        
+        if (this.isActive) {
+            this.stop();
+            if (this.visualizerToggle) {
+                this.visualizerToggle.innerHTML = '<i class="fas fa-play mr-1"></i>Start';
+            }
+        } else {
+            this.start();
+            if (this.visualizerToggle) {
+                this.visualizerToggle.innerHTML = '<i class="fas fa-pause mr-1"></i>Stop';
+            }
+        }
+    }
+    
+    start() {
+        if (!this.analyser || this.isActive) return;
+        
+        this.isActive = true;
+        this.animate();
+    }
+    
+    stop() {
+        this.isActive = false;
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        this.clearCanvas();
+        
+        // Reset mode indicator to simulated when stopped
+        const modeIndicator = document.getElementById('visualizerMode');
+        if (modeIndicator) {
+            modeIndicator.textContent = '(Simulated)';
+            modeIndicator.className = 'text-xs text-gray-400 ml-2';
+        }
+    }
+    
+    animate() {
+        if (!this.isActive) return;
+        
+        this.animationId = requestAnimationFrame(() => this.animate());
+        
+        if (this.analyser) {
+            this.analyser.getByteFrequencyData(this.dataArray);
+        }
+        
+        this.draw();
+    }
+    
+    draw() {
+        if (!this.ctx || !this.canvas) return;
+        
+        this.clearCanvas();
+        
+        switch (this.visualizerType) {
+            case 'bars':
+                this.drawBars();
+                break;
+            case 'waveform':
+                this.drawWaveform();
+                break;
+            case 'circular':
+                this.drawCircular();
+                break;
+        }
+    }
+    
+    clearCanvas() {
+        if (!this.ctx || !this.canvas) return;
+        this.ctx.fillStyle = this.colors.background;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    
+    drawBars() {
+        if (!this.dataArray) return;
+        
+        const barWidth = this.canvas.width / this.bufferLength * 2;
+        let x = 0;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const barHeight = (this.dataArray[i] / 255) * this.canvas.height * 0.8;
+            
+            // Create gradient with more vibrant colors
+            const gradient = this.ctx.createLinearGradient(0, this.canvas.height, 0, this.canvas.height - barHeight);
+            gradient.addColorStop(0, this.colors.primary);
+            gradient.addColorStop(0.5, this.colors.secondary);
+            gradient.addColorStop(1, this.colors.accent);
+            
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth - 1, barHeight);
+            
+            // Add glow effect for higher frequencies
+            if (this.dataArray[i] > 200) {
+                this.ctx.shadowColor = this.colors.accent;
+                this.ctx.shadowBlur = 10;
+                this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth - 1, barHeight);
+                this.ctx.shadowBlur = 0;
+            }
+            
+            x += barWidth;
+        }
+    }
+    
+    drawWaveform() {
+        if (!this.dataArray) return;
+        
+        this.ctx.strokeStyle = this.colors.primary;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        
+        const sliceWidth = this.canvas.width / this.bufferLength;
+        let x = 0;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const v = this.dataArray[i] / 255;
+            const y = v * this.canvas.height;
+            
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+            
+            x += sliceWidth;
+        }
+        
+        this.ctx.stroke();
+    }
+    
+    drawCircular() {
+        if (!this.dataArray) return;
+        
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const radius = Math.min(centerX, centerY) * 0.6;
+        
+        this.ctx.strokeStyle = this.colors.primary;
+        this.ctx.lineWidth = 2;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const angle = (i / this.bufferLength) * Math.PI * 2;
+            const amplitude = (this.dataArray[i] / 255) * radius * 0.5;
+            
+            const x1 = centerX + Math.cos(angle) * radius;
+            const y1 = centerY + Math.sin(angle) * radius;
+            const x2 = centerX + Math.cos(angle) * (radius + amplitude);
+            const y2 = centerY + Math.sin(angle) * (radius + amplitude);
+            
+            // Create gradient for each line
+            const gradient = this.ctx.createLinearGradient(x1, y1, x2, y2);
+            gradient.addColorStop(0, this.colors.primary);
+            gradient.addColorStop(1, this.colors.accent);
+            
+            this.ctx.strokeStyle = gradient;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x1, y1);
+            this.ctx.lineTo(x2, y2);
+            this.ctx.stroke();
+        }
+    }
+    
+    // Method to connect to YouTube player or other audio sources
+    connectToAudioSource(audioElement) {
+        if (!audioElement) return;
+        
+        this.initializeAudioContext(audioElement).then(success => {
+            if (success) {
+                console.log('✅ Audio visualizer connected to audio source');
+                
+                // Update mode indicator
+                const modeIndicator = document.getElementById('visualizerMode');
+                if (modeIndicator) {
+                    modeIndicator.textContent = '(Real Audio)';
+                    modeIndicator.className = 'text-xs text-green-400 ml-2';
+                }
+                
+                // If we successfully connected to real audio, stop simulation
+                if (this.isActive && this.analyser) {
+                    // Switch from simulation to real audio analysis
+                    this.stop();
+                    this.start();
+                }
+            }
+        });
+    }
+    
+    // Fallback visualizer for YouTube iframe (simulated visualization)
+    startSimulatedVisualization() {
+        if (this.isActive) return;
+        
+        this.isActive = true;
+        this.simulateAudioData();
+    }
+    
+    simulateAudioData() {
+        if (!this.isActive) return;
+        
+        // Create simulated frequency data with some randomness and rhythm
+        if (!this.dataArray) {
+            this.bufferLength = 128;
+            this.dataArray = new Uint8Array(this.bufferLength);
+        }
+        
+        const time = Date.now() * 0.001;
+        const bassFreq = Math.sin(time * 2) * 0.5 + 0.5;
+        const midFreq = Math.sin(time * 4) * 0.3 + 0.4;
+        const highFreq = Math.sin(time * 8) * 0.2 + 0.3;
+        
+        for (let i = 0; i < this.bufferLength; i++) {
+            const freq = i / this.bufferLength;
+            let amplitude = 0;
+            
+            if (freq < 0.1) {
+                // Bass frequencies
+                amplitude = bassFreq * (Math.random() * 0.3 + 0.7);
+            } else if (freq < 0.5) {
+                // Mid frequencies
+                amplitude = midFreq * (Math.random() * 0.4 + 0.6);
+            } else {
+                // High frequencies
+                amplitude = highFreq * (Math.random() * 0.5 + 0.5);
+            }
+            
+            this.dataArray[i] = Math.floor(amplitude * 255);
+        }
+        
+        this.animationId = requestAnimationFrame(() => this.simulateAudioData());
+        this.draw();
+    }
+    
+    start() {
+        if (this.isActive) return;
+        
+        if (this.analyser) {
+            // Real audio analysis
+            this.isActive = true;
+            this.animate();
+        } else {
+            // Fallback simulation for YouTube iframe
+            this.startSimulatedVisualization();
+        }
+    }
+}
+
 // Initialize the jukebox when the page loads
 const jukebox = new VirtualJukebox();
+
+// Initialize visualizer after a short delay to ensure DOM is ready
+setTimeout(() => {
+    try {
+        console.log('Initializing audio visualizer...');
+        const visualizer = new AudioVisualizer();
+        
+        // Set default visualization type from settings
+        visualizer.visualizerType = jukeboxSettings.get('defaultVisualizerType');
+        const typeSelect = document.getElementById('visualizerType');
+        if (typeSelect) {
+            typeSelect.value = visualizer.visualizerType;
+        }
+        
+        // Hide visualizer initially if disabled in settings
+        if (!jukeboxSettings.shouldShowVisualizer()) {
+            visualizer.hide();
+        }
+        
+        window.visualizer = visualizer; // Make visualizer globally accessible
+        console.log('Audio visualizer initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize visualizer:', error);
+    }
+}, 100);
+
 window.jukebox = jukebox; // Make it globally accessible
+
+// Make confirmNavigation globally accessible for onclick handlers
+window.confirmNavigation = function(url) {
+    if (window.jukebox && window.jukebox.confirmNavigation) {
+        window.jukebox.confirmNavigation(url);
+    } else {
+        // Fallback if jukebox not ready
+        window.location.href = url;
+    }
+};
 
 // Initialize playlist editor
 document.addEventListener('DOMContentLoaded', () => {
