@@ -19,9 +19,8 @@ COPY requirements.txt ./
 # Install Node.js dependencies
 RUN npm ci --only=production
 
-# Copy application code (but exclude venv)
+# Copy application code (but exclude venv via .dockerignore)
 COPY . .
-RUN rm -rf venv
 
 # Create Python virtual environment and install dependencies
 RUN python3 -m venv venv && \
