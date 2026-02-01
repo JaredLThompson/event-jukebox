@@ -75,6 +75,21 @@ npm run dev
 
 ## 🎼 How to Use
 
+### 🎵 YouTube Music Setup (Recommended for Ad-Free Experience)
+
+For the best wedding experience without ads, set up YouTube Music authentication:
+
+1. **Prerequisites**: You need a YouTube Music Premium account
+2. **Run the setup script**:
+   ```bash
+   source venv/bin/activate
+   python setup_auth.py
+   ```
+3. **Follow the prompts** to authenticate with your YouTube Music account
+4. **Restart the server** - you'll now have ad-free music playback!
+
+📖 **Detailed instructions**: See [setup_youtube_auth.md](setup_youtube_auth.md) for step-by-step guide
+
 ### Adding Songs
 1. **YouTube Music Search** (Recommended):
    - Click the "Search YouTube Music" tab
@@ -100,19 +115,19 @@ npm run dev
 
 ## Music Service Integration
 
-### Amazon Music API
-Currently, Amazon Music's Web API is in closed beta. Once available, you can integrate it by:
+### YouTube Music (Currently Implemented)
+The app uses YouTube Music via the unofficial `ytmusicapi` Python library:
 
-1. Registering for Amazon Music Developer access
-2. Adding your API credentials to the `.env` file
-3. Implementing the authentication flow in `server.js`
-4. Adding music search and playback functionality
+- **Search**: Real-time search of YouTube Music catalog
+- **No Ads**: With Premium account authentication (see setup above)
+- **Rich Metadata**: Song titles, artists, albums, thumbnails, duration
+- **High Quality**: Streams directly from YouTube Music
 
-### Alternative Services
-The app structure supports integration with other music services like:
+### Future Music Services
+The app structure supports integration with other music services:
 - Spotify Web API
-- Apple Music API
-- YouTube Music API
+- Apple Music API  
+- Amazon Music API (when available)
 - SoundCloud API
 
 ## Project Structure
