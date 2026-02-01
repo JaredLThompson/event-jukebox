@@ -1,17 +1,36 @@
-# Virtual Jukebox 🎵
+# 🎵 Wedding Jukebox - Ultimate Interactive Music Experience
 
-A modern web-based virtual jukebox application with **YouTube Music integration** that allows multiple users to collaboratively search, add, and manage a music queue in real-time.
+A modern web-based wedding jukebox with **YouTube Music integration**, **dual WiFi Pi setup**, and **real-time collaboration**. Perfect for weddings, parties, and events!
 
 ## ✨ Features
 
-- **🎼 YouTube Music Integration**: Search and add real songs from YouTube Music
-- **⚡ Real-time Collaboration**: Multiple users can add songs simultaneously
-- **🔄 Live Queue Management**: See the queue update in real-time across all connected devices
-- **🎨 Modern UI**: Beautiful, responsive design with glassmorphism effects
-- **🔌 Socket.IO Integration**: Real-time updates without page refreshes
-- **👥 User Tracking**: See how many people are currently using the jukebox
-- **🎛️ Queue Controls**: Add, remove, and skip songs in the queue
-- **📱 Mobile Responsive**: Works perfectly on phones, tablets, and desktops
+### 🎵 **Music & Collaboration**
+- **YouTube Music Integration**: Search and add real songs from YouTube Music
+- **Real-time Collaboration**: Multiple guests can add songs simultaneously
+- **Live Queue Management**: See the queue update in real-time across all devices
+- **Song Suppression**: DJs can temporarily skip playlist songs without removing them
+- **Advanced Pre-buffering**: Eliminates WiFi buffering issues during playback
+- **Dual Playlists**: Wedding party playlist + elegant bride's collection
+
+### 🎛️ **DJ Controls**
+- **Queue Management**: Add, remove, reorder, and skip songs
+- **Playlist Browser**: Browse and jump to specific songs
+- **Park/Unpark Queue**: Control when user submissions are active
+- **Play History**: Track all songs played during the event
+- **Real-time Updates**: All changes sync instantly across devices
+
+### 🌐 **Perfect Wedding Setup**
+- **Raspberry Pi Hotspot**: Pi creates "Wedding-Jukebox" WiFi for guests
+- **Dual WiFi**: Pi connects to venue WiFi for YouTube Music searches
+- **Captive Portal**: Any website guests visit redirects to jukebox
+- **No Passwords Needed**: Guests just connect and start requesting songs
+- **Professional Audio**: DJ device handles audio playback to sound system
+
+### 📱 **User Experience**
+- **Mobile Responsive**: Works perfectly on phones, tablets, and desktops
+- **Beautiful UI**: Modern design with glassmorphism effects
+- **QR Code Access**: Easy guest access via QR codes
+- **Real-time Feedback**: See your song added to the queue instantly
 
 ## 🚀 Quick Start
 
@@ -27,7 +46,19 @@ cd wedding-jukebox
 # Access at http://localhost:3000
 ```
 
-### Option 2: Local Development
+### Option 2: Raspberry Pi Wedding Setup (Ultimate! 🌟)
+```bash
+# Docker Pi setup (recommended)
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
+
+# Then setup dual WiFi (hotspot + internet)
+./setup-dual-wifi.sh
+
+# Or traditional Pi setup
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
+```
+
+### Option 3: Local Development
 Run the setup script:
 ```bash
 ./setup.sh
@@ -49,35 +80,87 @@ npm run dev
 
 Open your browser to `http://localhost:3000` and start jamming! 🎶
 
-## Tech Stack
+## 🎯 **Perfect for Weddings**
+
+### **Guest Experience:**
+1. **Connect to "Wedding-Jukebox" WiFi** (no password needed)
+2. **Open any website** → automatically redirected to jukebox
+3. **Request favorite songs** instantly
+4. **See songs added to queue** in real-time
+
+### **DJ Experience:**
+- **Full control interface** at main URL
+- **YouTube Music search** works perfectly (via venue WiFi)
+- **Queue management** (reorder, skip, suppress songs)
+- **Audio plays through DJ device** → mixer → speakers
+
+### **Setup Cost:**
+- **Raspberry Pi Setup**: ~$150 (vs $500+ DJ equipment rental)
+- **Works at any venue** with or without WiFi
+
+## 🌐 **Deployment Options**
+
+| Method | Best For | Difficulty | Cost |
+|--------|----------|------------|------|
+| **Docker** | Development, Cloud | ⭐ Easy | Free |
+| **Pi Hotspot** | Weddings, Events | ⭐⭐ Medium | ~$150 |
+| **Local** | Testing, Small Groups | ⭐ Easy | Free |
+
+## 🎵 **How It Works**
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Raspberry Pi  │    │   DJ Device      │    │  Sound System  │
+│  (Hotspot+WiFi) │◄──►│  (Browser+Audio) │───►│   (Speakers)    │
+│                 │    │                  │    │                 │
+│ • Guest WiFi    │    │ • Plays music    │    │ • Amplifies     │
+│ • YouTube API   │    │ • DJ controls    │    │ • Party sound!  │
+│ • Queue logic   │    │ • Real-time UI   │    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+## 🛠️ **Tech Stack**
 
 - **Backend**: Node.js, Express.js, Socket.IO
 - **Frontend**: Vanilla JavaScript, HTML5, Tailwind CSS
 - **Real-time**: WebSocket connections via Socket.IO
-- **Styling**: Tailwind CSS with custom animations
+- **Music**: YouTube Music API integration
+- **Deployment**: Docker, Raspberry Pi, GitHub Container Registry
+- **Networking**: Dual WiFi, Captive Portal, Hotspot
 
-## Installation
+## 📋 **Complete Setup Guide**
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd virtual-jukebox
-```
+For detailed deployment instructions, see:
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide
+- **[raspberry-pi-setup.md](raspberry-pi-setup.md)** - Detailed Pi instructions
 
-2. Install dependencies:
-```bash
-npm install
-```
+## 🎉 **Success Stories**
 
-3. Create environment file:
-```bash
-cp .env.example .env
-```
+Perfect for:
+- **Weddings** - Guest interaction + professional DJ control
+- **Parties** - Collaborative music selection
+- **Events** - Easy setup, reliable performance
+- **Venues** - No WiFi password sharing needed
 
-4. Build CSS (in a separate terminal):
-```bash
-npm run build:css
-```
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 **License**
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🎊 **Ready for Your Wedding?**
+
+Deploy in minutes and create unforgettable musical memories! 
+
+**Questions?** Open an issue or check the documentation.
+
+**Happy Wedding!** 💒🎵
 
 5. Start the development server:
 ```bash
