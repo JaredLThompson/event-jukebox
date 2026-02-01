@@ -735,10 +735,34 @@ async function getNextFallbackSong() {
 // YouTube Music integration functions
 async function searchYouTubeMusic(query, limit = 10) {
   return new Promise((resolve, reject) => {
-    const python = spawn('bash', [
-      '-c',
-      `source venv/bin/activate && python youtube_music_service.py search --query "${query}" --limit ${limit}`
-    ]);
+    // For Docker environments, use direct python call with proper environment
+    const isDocker = process.env.NODE_ENV === 'production' && fs.existsSync('/app/venv');
+    
+    let python;
+    if (isDocker) {
+      // Docker environment - use venv python directly
+      python = spawn('/app/venv/bin/python', [
+        'youtube_music_service.py', 
+        'search', 
+        '--query', query, 
+        '--limit', limit.toString()
+      ], {
+        cwd: '/app',
+        env: { 
+          ...process.env,
+          PATH: '/app/venv/bin:' + process.env.PATH,
+          PYTHONPATH: '/app'
+        }
+      });
+    } else {
+      // Local development - use bash with venv activation
+      python = spawn('bash', [
+        '-c',
+        `source venv/bin/activate && python youtube_music_service.py search --query "${query}" --limit ${limit}`
+      ], {
+        cwd: __dirname
+      });
+    }
 
     let data = '';
     let error = '';
@@ -754,7 +778,7 @@ async function searchYouTubeMusic(query, limit = 10) {
     python.on('close', (code) => {
       if (code !== 0) {
         console.error('Python script error:', error);
-        reject(new Error(`Python script failed with code ${code}`));
+        reject(new Error(`Python script failed with code ${code}: ${error}`));
         return;
       }
 
@@ -765,6 +789,11 @@ async function searchYouTubeMusic(query, limit = 10) {
         console.error('Failed to parse Python response:', parseError);
         reject(parseError);
       }
+    });
+
+    python.on('error', (err) => {
+      console.error('Failed to start Python process:', err);
+      reject(err);
     });
   });
 }

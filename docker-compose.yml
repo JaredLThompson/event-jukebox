@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  wedding-jukebox:
+    image: wedding-jukebox:latest
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist important data
+      - jukebox-data:/app/data
+      # Mount OAuth and history files if they exist
+      - ./oauth.json:/app/oauth.json:ro
+      - ./wedding-play-history.json:/app/wedding-play-history.json
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    networks:
+      - jukebox-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/playlist/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  jukebox-data:
+    driver: local
+
+networks:
+  jukebox-network:
+    driver: bridge
