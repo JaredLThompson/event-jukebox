@@ -19,6 +19,8 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      actions: read
+      security-events: write
 
     steps:
     - name: Checkout repository
