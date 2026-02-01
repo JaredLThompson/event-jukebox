@@ -49,7 +49,17 @@ node server.js
 - Docker & Docker Compose
 - YouTube Music Premium account (optional for demo)
 
-### Quick Start
+### Quick Start (Using Pre-built Image)
+```bash
+# Clone repository for config files
+git clone https://github.com/JaredLThompson/wedding-jukebox.git
+cd wedding-jukebox
+
+# Deploy from GitHub Container Registry
+./deploy-from-registry.sh
+```
+
+### Build Locally (Optional)
 ```bash
 # Clone repository
 git clone https://github.com/JaredLThompson/wedding-jukebox.git
@@ -95,27 +105,76 @@ docker exec -it wedding-jukebox-container bash
 
 ---
 
-## 🥧 **Option 3: Raspberry Pi (Recommended for Events)**
+## 🥧 **Option 3: Raspberry Pi (ULTIMATE WEDDING SETUP! 🌟)**
+
+The Pi deployment creates the **perfect wedding jukebox experience**:
+- **🏠 Pi acts as WiFi hotspot** - Guests connect to "Wedding-Jukebox" network
+- **🌐 Pi connects to venue WiFi** - Gets internet for YouTube Music searches  
+- **🚪 Automatic captive portal** - Any website guests visit redirects to jukebox
+- **🔑 No venue WiFi password needed** - Guests just connect and go!
+- **💰 Cost: ~$150** (vs $500+ DJ equipment rental!)
 
 ### Hardware Requirements
 - **Raspberry Pi 4** (4GB+ RAM recommended)
+- **USB WiFi Adapter** (for dual WiFi - TP-Link AC600 T2U Plus recommended)
 - **MicroSD Card** (32GB+ Class 10)
 - **Power Supply** (Official Pi 4 power supply)
 - **Case with cooling** (prevents overheating)
-- **Ethernet cable** (optional, for setup)
 
-### Software Requirements
-- **Raspberry Pi OS** (64-bit recommended)
-- **SSH enabled** (for remote setup)
-- **WiFi configured** (if not using ethernet)
-
-### Automated Setup
+### 🚀 **Quick Dual WiFi Setup**
 ```bash
-# On your Raspberry Pi
+# 1. Flash Raspberry Pi OS to SD card with SSH enabled
+# 2. SSH into Pi and run automated setup:
 curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
+
+# 3. Setup dual WiFi (hotspot + internet):
+./setup-dual-wifi.sh
 ```
 
-### Manual Setup
+### 🎉 **Guest Experience**
+1. **Connect to "Wedding-Jukebox" WiFi** (no password needed)
+2. **Open any website** → automatically redirected to jukebox
+3. **Request songs instantly!** 
+4. **Browse internet** through Pi's connection (optional)
+
+### 🎧 **DJ Experience**  
+- **Access full DJ controls** at `http://192.168.4.1:3000`
+- **YouTube Music search works perfectly** (via venue WiFi)
+- **All features available** (queue management, playlist switching, suppression)
+- **Real-time updates** across all connected devices
+
+### 🚀 **Pi Setup Options**
+
+#### **Option A: Docker on Pi (Recommended! 🌟)**
+```bash
+# Quick Docker setup - uses pre-built container
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
+
+# Setup dual WiFi (hotspot + internet):
+./setup-dual-wifi.sh
+```
+
+**Why Docker on Pi?**
+- ✅ **Uses your container image** - same environment as development
+- ✅ **Faster setup** - no building Python packages on Pi
+- ✅ **Easy updates** - `docker pull` gets latest version
+- ✅ **More reliable** - consistent environment
+
+#### **Option B: Direct Code Installation**
+```bash
+# Traditional setup - builds everything on Pi
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
+
+# Setup dual WiFi (hotspot + internet):
+./setup-dual-wifi.sh
+```
+
+**When to use direct code:**
+- ✅ **Maximum control** - edit code directly on Pi
+- ✅ **No Docker** - if you prefer native installation
+- ✅ **Development** - when testing changes on Pi
+
+### Manual Setup (if needed)
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
@@ -148,41 +207,44 @@ sudo systemctl start wedding-jukebox
 
 ### Pi Network Setup Options
 
-#### Option A: Connect to Venue WiFi
+#### 🌟 **Option A: Dual WiFi Setup (RECOMMENDED!)**
+**Perfect for weddings - guests get easy access while Pi gets internet!**
+
+```bash
+# Run the automated dual WiFi setup script
+./setup-dual-wifi.sh
+```
+
+**What this does:**
+- **wlan0**: Connects to venue WiFi for internet access
+- **wlan1**: Creates "Wedding-Jukebox" hotspot for guests  
+- **Captive portal**: Redirects any website to jukebox
+- **Internet sharing**: Guests can browse web through Pi
+
+**Hardware needed:**
+- USB WiFi adapter (TP-Link AC600 T2U Plus recommended)
+- Built-in WiFi connects to venue, USB WiFi creates hotspot
+
+#### **Option B: Connect to Venue WiFi Only**
 ```bash
 # Configure WiFi
 sudo raspi-config
 # Navigate to Network Options > WiFi
 ```
+- Simple setup, guests need venue WiFi password
+- Good for small gatherings with reliable venue WiFi
 
-#### Option B: Create WiFi Hotspot
+#### **Option C: Hotspot Only**
 ```bash
 # Install hostapd and dnsmasq
 sudo apt install -y hostapd dnsmasq
 
-# Configure hotspot
-sudo nano /etc/hostapd/hostapd.conf
+# Configure hotspot (see raspberry-pi-setup.md for details)
 ```
+- No internet access for YouTube Music searches
+- Good for offline-only setups
 
-Add:
-```
-interface=wlan0
-driver=nl80211
-ssid=Wedding-Jukebox
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase=WeddingMusic2024
-wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
-rsn_pairwise=CCMP
-```
-
-#### Option C: Ethernet + WiFi Bridge
+#### **Option D: Ethernet + WiFi Bridge**
 - Connect Pi via ethernet for stability
 - Share connection via WiFi hotspot
 - Best reliability for critical events

@@ -91,6 +91,27 @@ function logSongPlayed(song, action = 'played') {
 // Initialize play history
 loadPlayHistory();
 
+app.get('/captive-portal', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'captive-portal.html'));
+});
+
+// Captive portal detection - redirect common captive portal requests
+app.get('/generate_204', (req, res) => {
+  res.redirect('/captive-portal');
+});
+
+app.get('/hotspot-detect.html', (req, res) => {
+  res.redirect('/captive-portal');
+});
+
+app.get('/library/test/success.html', (req, res) => {
+  res.redirect('/captive-portal');
+});
+
+app.get('/connecttest.txt', (req, res) => {
+  res.redirect('/captive-portal');
+});
+
 // Routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

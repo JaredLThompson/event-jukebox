@@ -4,7 +4,14 @@ venv/
 
 # Environment variables
 .env
+.env.local
+.env.production
 oauth.json
+
+# Security tokens (never commit these!)
+github-token*
+*.token
+.docker/config.json
 
 # Wedding-specific data
 wedding-play-history.json

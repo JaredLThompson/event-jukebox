@@ -15,6 +15,19 @@ A modern web-based virtual jukebox application with **YouTube Music integration*
 
 ## 🚀 Quick Start
 
+### Option 1: Docker (Recommended)
+```bash
+# Clone repository
+git clone https://github.com/JaredLThompson/wedding-jukebox.git
+cd wedding-jukebox
+
+# Deploy from pre-built container
+./deploy-from-registry.sh
+
+# Access at http://localhost:3000
+```
+
+### Option 2: Local Development
 Run the setup script:
 ```bash
 ./setup.sh

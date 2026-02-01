@@ -19,14 +19,15 @@ COPY requirements.txt ./
 # Install Node.js dependencies
 RUN npm ci --only=production
 
+# Copy application code (but exclude venv)
+COPY . .
+RUN rm -rf venv
+
 # Create Python virtual environment and install dependencies
 RUN python3 -m venv venv && \
-    . venv/bin/activate && \
-    pip install --upgrade pip && \
-    pip install -r requirements.txt
-
-# Copy application code
-COPY . .
+    /app/venv/bin/python -m pip install --upgrade pip && \
+    /app/venv/bin/python -m pip install -r requirements.txt && \
+    /app/venv/bin/python --version
 
 # Create data directory for persistent files
 RUN mkdir -p /app/data

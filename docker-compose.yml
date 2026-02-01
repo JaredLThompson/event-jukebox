@@ -2,8 +2,9 @@ version: '3.8'
 
 services:
   wedding-jukebox:
-    image: wedding-jukebox:latest
-    build: .
+    image: ghcr.io/jaredlthompson/wedding-jukebox:latest
+    # Uncomment to build locally instead:
+    # build: .
     ports:
       - "3000:3000"
     volumes:

@@ -7,6 +7,44 @@
 - **Case with cooling** (important for stability)
 - **Ethernet cable** (optional, for setup)
 
+## 🚀 **Quick Setup Options**
+
+### **Option A: Docker Setup (Recommended! 🌟)**
+**Uses pre-built container - faster, easier, more reliable**
+
+```bash
+# Quick Docker setup
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
+
+# Then setup dual WiFi (hotspot + internet):
+./setup-dual-wifi.sh
+```
+
+**Pros:**
+- ✅ **Faster setup** - no building on Pi
+- ✅ **Consistent environment** - same as your dev setup
+- ✅ **Easy updates** - just pull new image
+- ✅ **Less Pi resources** - no compilation needed
+
+### **Option B: Direct Code Installation**
+**Builds everything on the Pi - more control**
+
+```bash
+# Traditional code setup
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
+
+# Then setup dual WiFi (hotspot + internet):
+./setup-dual-wifi.sh
+```
+
+**Pros:**
+- ✅ **Full control** - modify code directly
+- ✅ **No Docker overhead** - runs natively
+
+---
+
+## Manual Installation (if needed)
+
 ## Software Installation
 
 ### 1. Install Raspberry Pi OS
@@ -52,13 +90,130 @@ pip install -r requirements.txt
 python setup_auth.py
 ```
 
-### 4. Configure WiFi Hotspot (Optional)
-```bash
-# Install hostapd and dnsmasq
-sudo apt install -y hostapd dnsmasq
+### 4. Configure Dual WiFi Setup (Hotspot + Internet)
+This is the ULTIMATE wedding setup - Pi creates hotspot for guests while staying connected to venue WiFi for YouTube Music!
 
-# Configure as WiFi hotspot for venues without WiFi
-# This creates a "Wedding-Jukebox" network guests can join
+```bash
+# Install required packages
+sudo apt install -y hostapd dnsmasq iptables-persistent
+
+# Stop services while configuring
+sudo systemctl stop hostapd
+sudo systemctl stop dnsmasq
+```
+
+#### Configure WiFi Interfaces
+```bash
+# Edit dhcpcd.conf to set static IP for hotspot interface
+sudo nano /etc/dhcpcd.conf
+```
+
+Add to end of file:
+```
+# Static IP for hotspot interface
+interface wlan1
+static ip_address=192.168.4.1/24
+nohook wpa_supplicant
+```
+
+#### Configure Hostapd (WiFi Hotspot)
+```bash
+sudo nano /etc/hostapd/hostapd.conf
+```
+
+Add this configuration:
+```
+# Wedding Jukebox Hotspot Configuration
+interface=wlan1
+driver=nl80211
+ssid=Wedding-Jukebox
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=WeddingMusic2024
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+```
+
+```bash
+# Tell hostapd where to find config
+sudo nano /etc/default/hostapd
+```
+Uncomment and set: `DAEMON_CONF="/etc/hostapd/hostapd.conf"`
+
+#### Configure DNSMasq (DHCP for guests)
+```bash
+# Backup original config
+sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+
+# Create new config
+sudo nano /etc/dnsmasq.conf
+```
+
+Add:
+```
+# Wedding Jukebox DHCP Configuration
+interface=wlan1
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+
+# Redirect all DNS queries to our jukebox
+address=/#/192.168.4.1
+```
+
+#### Configure Internet Sharing
+```bash
+# Enable IP forwarding
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+
+# Configure iptables for internet sharing
+sudo iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+sudo iptables -A FORWARD -i wlan0 -o wlan1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -A FORWARD -i wlan1 -o wlan0 -j ACCEPT
+
+# Save iptables rules
+sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+# Load rules on boot
+sudo nano /etc/rc.local
+```
+
+Add before `exit 0`:
+```bash
+iptables-restore < /etc/iptables.ipv4.nat
+```
+
+#### Configure Venue WiFi Connection
+```bash
+# Configure wlan0 to connect to venue WiFi
+sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
+```
+
+Add venue network:
+```
+network={
+    ssid="VenueWiFiName"
+    psk="VenueWiFiPassword"
+    priority=1
+}
+```
+
+#### Enable Services
+```bash
+# Enable services
+sudo systemctl enable hostapd
+sudo systemctl enable dnsmasq
+
+# Start services
+sudo systemctl start hostapd
+sudo systemctl start dnsmasq
+
+# Reboot to apply all changes
+sudo reboot
 ```
 
 ### 5. Auto-start Service
@@ -98,17 +253,50 @@ sudo systemctl start wedding-jukebox
 - Pi connects to venue's WiFi
 - DJ and guests connect to same WiFi
 - Access via Pi's IP address
+- **Pros**: Simple setup
+- **Cons**: Guests need venue WiFi password
 
-### Option 2: Pi as WiFi Hotspot
+### Option 2: Pi as WiFi Hotspot Only
 - Pi creates its own "Wedding-Jukebox" network
-- Perfect for venues with no/poor WiFi
+- Perfect for venues with no WiFi
 - DJ and guests connect to Pi's hotspot
 - Access via http://192.168.4.1:3000
+- **Pros**: No venue WiFi needed
+- **Cons**: No internet for YouTube Music searches
 
-### Option 3: Ethernet + WiFi Bridge
+### Option 3: Dual WiFi Setup (RECOMMENDED! 🌟)
+- **wlan0**: Connects to venue WiFi for internet
+- **wlan1**: Creates "Wedding-Jukebox" hotspot for guests
+- Pi bridges internet from venue WiFi to guest hotspot
+- **Perfect wedding solution!**
+- **Pros**: Guests get easy access + YouTube Music works
+- **Cons**: Requires Pi with dual WiFi or USB WiFi adapter
+
+### Option 4: Ethernet + WiFi Bridge
 - Pi connected via ethernet for stability
 - Pi shares connection via WiFi hotspot
-- Best of both worlds
+- Best for venues with ethernet access
+
+## Hardware for Dual WiFi Setup
+
+### Built-in Dual WiFi (Pi 4 only):
+Some Pi 4 models support dual WiFi, but most reliable approach is:
+
+### USB WiFi Adapter Method:
+```bash
+# Get a reliable USB WiFi adapter
+# Recommended: TP-Link AC600 T2U Plus
+# Built-in WiFi (wlan0) → Venue internet
+# USB WiFi (wlan1) → Guest hotspot
+```
+
+## Guest Experience with Dual WiFi
+
+1. **Guests connect to "Wedding-Jukebox" WiFi**
+2. **Any website they visit redirects to jukebox**
+3. **They can browse internet through Pi's connection**
+4. **DJ gets YouTube Music access for searches**
+5. **Perfect isolated network for the wedding!**
 
 ## Audio Setup
 
