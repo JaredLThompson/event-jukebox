@@ -132,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 ```
 
 ### 🎉 **Guest Experience**
-1. **Connect to "Wedding-Jukebox" WiFi** (no password needed)
+1. **Connect to "Wedding-Jukebox" WiFi** (Password: WeddingMusic2026)
 2. **Open any website** → automatically redirected to jukebox
 3. **Request songs instantly!** 
 4. **Browse internet** through Pi's connection (optional)

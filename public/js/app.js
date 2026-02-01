@@ -38,6 +38,12 @@ class VirtualJukebox {
         this.clearSearchBtn = document.getElementById('clearSearchBtn');
         this.searchResults = document.getElementById('searchResults');
         
+        // Music service selection
+        this.musicServiceTabs = document.getElementById('musicServiceTabs');
+        this.youtubeTab = document.getElementById('youtubeTab');
+        this.spotifyTab = document.getElementById('spotifyTab');
+        this.currentMusicService = 'youtube'; // Default to YouTube Music
+        
         // Audio player elements
         this.audioPlayer = document.getElementById('audioPlayer');
         this.playPauseBtn = document.getElementById('playPauseBtn');
@@ -114,12 +120,16 @@ class VirtualJukebox {
         this.searchTab.addEventListener('click', () => this.switchToSearchTab());
         this.manualTab.addEventListener('click', () => this.switchToManualTab());
         
+        // Music service tabs
+        this.youtubeTab?.addEventListener('click', () => this.switchMusicService('youtube'));
+        this.spotifyTab?.addEventListener('click', () => this.switchMusicService('spotify'));
+        
         // YouTube Music search
-        this.searchBtn.addEventListener('click', () => this.searchYouTubeMusic());
+        this.searchBtn.addEventListener('click', () => this.searchMusic());
         this.clearSearchBtn.addEventListener('click', () => this.clearSearch());
         this.searchQuery.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                this.searchYouTubeMusic();
+                this.searchMusic();
             }
         });
         
@@ -645,8 +655,23 @@ class VirtualJukebox {
 
     updateNowPlayingDisplay(song) {
         const isFallback = song.source === 'fallback';
-        const borderColor = isFallback ? 'from-yellow-600 to-orange-600' : 'from-purple-600 to-pink-600';
-        const icon = isFallback ? 'fas fa-magic' : 'fas fa-play-circle';
+        const isSpotify = song.source === 'spotify';
+        const borderColor = isFallback ? 'from-yellow-600 to-orange-600' : 
+                           isSpotify ? 'from-green-600 to-emerald-600' :
+                           'from-purple-600 to-pink-600';
+        const icon = isFallback ? 'fas fa-magic' : 
+                    isSpotify ? 'fab fa-spotify' : 
+                    'fas fa-play-circle';
+        const serviceLabel = isFallback ? '🎵 Wedding DJ Auto-Play' :
+                           isSpotify ? '🎵 Spotify' :
+                           '🎵 YouTube Music';
+        
+        // For Spotify songs, show preview button if available
+        const previewButton = isSpotify && song.previewUrl ? 
+            `<button onclick="jukebox.playSpotifyPreview('${song.previewUrl}')" 
+                     class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm mt-2 transition-colors">
+                <i class="fas fa-play mr-1"></i>Preview
+             </button>` : '';
         
         this.nowPlaying.innerHTML = `
             <div class="bg-gradient-to-br ${borderColor} rounded-lg p-6 mb-4 pulse-glow">
@@ -656,8 +681,9 @@ class VirtualJukebox {
                         <h3 class="text-2xl font-bold">${song.title}</h3>
                         <p class="text-lg text-purple-200">${song.artist}</p>
                         <p class="text-sm text-purple-300">
-                            ${isFallback ? '🎵 Wedding DJ Auto-Play' : `Added by ${song.addedBy}`}
+                            ${isFallback ? serviceLabel : `Added by ${song.addedBy} • ${serviceLabel}`}
                         </p>
+                        ${previewButton}
                     </div>
                     <div class="text-right">
                         <div class="text-3xl">
@@ -667,6 +693,7 @@ class VirtualJukebox {
                     </div>
                 </div>
                 ${isFallback ? '<div class="mt-3 text-center text-sm text-yellow-200">🎉 Playing wedding favorites while queue is empty</div>' : ''}
+                ${isSpotify && !song.videoId ? '<div class="mt-3 text-center text-sm text-green-200">🎵 Spotify track - use preview or open in Spotify app</div>' : ''}
             </div>
         `;
     }
@@ -685,8 +712,16 @@ class VirtualJukebox {
 
         this.queueList.innerHTML = queue.map((song, index) => {
             const isMicBreak = song.type === 'mic-break';
-            const bgColor = isMicBreak ? 'bg-orange-800 bg-opacity-50 border-orange-500' : 'bg-gray-800 bg-opacity-50';
-            const icon = isMicBreak ? 'fas fa-microphone text-orange-400' : 'fas fa-music text-purple-400';
+            const isSpotify = song.source === 'spotify';
+            const bgColor = isMicBreak ? 'bg-orange-800 bg-opacity-50 border-orange-500' : 
+                           isSpotify ? 'bg-green-800 bg-opacity-50 border-green-500' :
+                           'bg-gray-800 bg-opacity-50';
+            const icon = isMicBreak ? 'fas fa-microphone text-orange-400' : 
+                        isSpotify ? 'fab fa-spotify text-green-400' :
+                        'fas fa-music text-purple-400';
+            const serviceLabel = isMicBreak ? 'DJ Microphone Break' :
+                               isSpotify ? 'Spotify' :
+                               'YouTube Music';
             
             return `
                 <div class="queue-item ${bgColor} rounded-lg p-4 flex items-center space-x-4 hover:bg-opacity-70 transition-all border border-gray-700 cursor-move" 
@@ -694,7 +729,7 @@ class VirtualJukebox {
                     <div class="drag-handle text-gray-500 hover:text-gray-300">
                         <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <div class="text-2xl font-bold w-8 text-center ${isMicBreak ? 'text-orange-400' : 'text-purple-400'}">
+                    <div class="text-2xl font-bold w-8 text-center ${isMicBreak ? 'text-orange-400' : isSpotify ? 'text-green-400' : 'text-purple-400'}">
                         ${index + 1}
                     </div>
                     ${isMicBreak ? 
@@ -705,8 +740,8 @@ class VirtualJukebox {
                     }
                     <div class="flex-1">
                         <h4 class="font-semibold ${isMicBreak ? 'text-orange-200' : ''}">${song.title}</h4>
-                        <p class="text-gray-400 text-sm">${isMicBreak ? 'DJ Microphone Break' : song.artist}</p>
-                        <p class="text-gray-500 text-xs">${isMicBreak ? 'Pause for announcements' : `Added by ${song.addedBy}`}</p>
+                        <p class="text-gray-400 text-sm">${isMicBreak ? serviceLabel : song.artist}</p>
+                        <p class="text-gray-500 text-xs">${isMicBreak ? 'Pause for announcements' : `Added by ${song.addedBy} • ${serviceLabel}`}</p>
                     </div>
                     <div class="text-right">
                         <p class="text-sm text-gray-400">${isMicBreak ? '∞' : song.duration}</p>
@@ -750,6 +785,9 @@ class VirtualJukebox {
         
         this.searchSection.classList.remove('hidden');
         this.addSongForm.classList.add('hidden');
+        
+        // Load music service status when switching to search
+        this.loadMusicServiceStatus();
     }
 
     switchToManualTab() {
@@ -762,7 +800,70 @@ class VirtualJukebox {
         this.searchSection.classList.add('hidden');
     }
 
-    // YouTube Music search methods
+    // Music service switching
+    switchMusicService(service) {
+        this.currentMusicService = service;
+        
+        // Update tab styling
+        if (this.youtubeTab && this.spotifyTab) {
+            this.youtubeTab.classList.remove('bg-purple-600', 'bg-gray-600');
+            this.spotifyTab.classList.remove('bg-purple-600', 'bg-gray-600');
+            
+            if (service === 'youtube') {
+                this.youtubeTab.classList.add('bg-purple-600');
+                this.spotifyTab.classList.add('bg-gray-600');
+            } else {
+                this.spotifyTab.classList.add('bg-purple-600');
+                this.youtubeTab.classList.add('bg-gray-600');
+            }
+        }
+        
+        // Clear previous search results
+        this.clearSearch();
+        
+        // Update search placeholder
+        const placeholder = service === 'spotify' ? 
+            'Search Spotify for songs...' : 
+            'Search YouTube Music for songs...';
+        this.searchQuery.placeholder = placeholder;
+        
+        this.showToast(`Switched to ${service === 'spotify' ? 'Spotify' : 'YouTube Music'}`, 'info');
+    }
+
+    async loadMusicServiceStatus() {
+        try {
+            const response = await fetch('/api/music-services/status');
+            const data = await response.json();
+            
+            // Update Spotify tab availability
+            if (this.spotifyTab) {
+                if (data.spotify.available) {
+                    this.spotifyTab.classList.remove('opacity-50', 'cursor-not-allowed');
+                    this.spotifyTab.title = 'Search Spotify';
+                } else {
+                    this.spotifyTab.classList.add('opacity-50', 'cursor-not-allowed');
+                    this.spotifyTab.title = 'Spotify not configured - run setup_spotify_auth.js';
+                    
+                    // Switch to YouTube if Spotify was selected but not available
+                    if (this.currentMusicService === 'spotify') {
+                        this.switchMusicService('youtube');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load music service status:', error);
+        }
+    }
+
+    // Music search methods (unified for both YouTube and Spotify)
+    async searchMusic() {
+        if (this.currentMusicService === 'spotify') {
+            return this.searchSpotify();
+        } else {
+            return this.searchYouTubeMusic();
+        }
+    }
+
     async searchYouTubeMusic() {
         const query = this.searchQuery.value.trim();
         if (!query) {
@@ -778,12 +879,12 @@ class VirtualJukebox {
             const data = await response.json();
 
             if (response.ok && data.results) {
-                this.displaySearchResults(data.results);
+                this.displaySearchResults(data.results, 'youtube');
             } else {
                 throw new Error(data.error || 'Search failed');
             }
         } catch (error) {
-            console.error('Search error:', error);
+            console.error('YouTube search error:', error);
             this.showToast('Failed to search YouTube Music', 'error');
         } finally {
             this.searchBtn.innerHTML = '<i class="fas fa-search"></i>';
@@ -791,7 +892,38 @@ class VirtualJukebox {
         }
     }
 
-    displaySearchResults(results) {
+    async searchSpotify() {
+        const query = this.searchQuery.value.trim();
+        if (!query) {
+            this.showToast('Please enter a search query', 'error');
+            return;
+        }
+
+        this.searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        this.searchBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/search/spotify?q=${encodeURIComponent(query)}&limit=10`);
+            const data = await response.json();
+
+            if (response.ok && data.results) {
+                this.displaySearchResults(data.results, 'spotify');
+            } else if (response.status === 503) {
+                this.showToast('Spotify not configured. Run setup_spotify_auth.js', 'warning');
+                this.switchMusicService('youtube');
+            } else {
+                throw new Error(data.error || 'Search failed');
+            }
+        } catch (error) {
+            console.error('Spotify search error:', error);
+            this.showToast('Failed to search Spotify', 'error');
+        } finally {
+            this.searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+            this.searchBtn.disabled = false;
+        }
+    }
+
+    displaySearchResults(results, service = 'youtube') {
         const searchResultsList = document.getElementById('searchResultsList');
         
         if (results.length === 0) {
@@ -800,40 +932,85 @@ class VirtualJukebox {
             return;
         }
 
-        searchResultsList.innerHTML = results.map((song, index) => `
-            <div class="bg-gray-800 bg-opacity-50 rounded-lg p-3 flex items-center space-x-3 hover:bg-opacity-70 transition-all">
-                <img src="${song.thumbnail}" alt="Thumbnail" class="w-12 h-12 rounded shadow">
-                <div class="flex-1">
-                    <h4 class="font-semibold text-sm">${song.title}</h4>
-                    <p class="text-gray-400 text-xs">${song.artist}</p>
-                    <p class="text-gray-500 text-xs">${song.album} • ${song.duration_text}</p>
+        const serviceIcon = service === 'spotify' ? 'fab fa-spotify text-green-400' : 'fab fa-youtube text-red-400';
+        const serviceColor = service === 'spotify' ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700';
+
+        searchResultsList.innerHTML = results.map((song, index) => {
+            const explicitBadge = song.explicit ? '<span class="bg-red-500 text-white px-1 py-0.5 rounded text-xs ml-1">E</span>' : '';
+            const previewButton = song.preview_url ? 
+                `<button class="preview-btn bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs transition-colors mr-1"
+                        data-preview-url="${song.preview_url}"
+                        title="Preview 30s">
+                    <i class="fas fa-play"></i>
+                </button>` : '';
+            
+            return `
+                <div class="bg-gray-800 bg-opacity-50 rounded-lg p-3 flex items-center space-x-3 hover:bg-opacity-70 transition-all">
+                    <img src="${song.thumbnail}" alt="Thumbnail" class="w-12 h-12 rounded shadow">
+                    <div class="flex-1">
+                        <div class="flex items-center">
+                            <h4 class="font-semibold text-sm">${song.title}</h4>
+                            ${explicitBadge}
+                        </div>
+                        <p class="text-gray-400 text-xs">${song.artist}</p>
+                        <div class="flex items-center text-gray-500 text-xs">
+                            <i class="${serviceIcon} mr-1"></i>
+                            <span>${song.album} • ${song.duration_text}</span>
+                            ${service === 'spotify' && song.popularity ? ` • ${song.popularity}% popular` : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        ${previewButton}
+                        <button class="add-song-btn ${serviceColor} px-3 py-1 rounded text-sm transition-colors"
+                                data-service="${service}"
+                                data-song-id="${service === 'spotify' ? song.id : song.videoId}"
+                                data-title="${song.title}"
+                                data-artist="${song.artist}"
+                                data-thumbnail="${song.thumbnail}"
+                                data-duration="${song.duration_text}"
+                                data-album="${song.album}"
+                                ${service === 'spotify' ? `data-uri="${song.uri}" data-preview-url="${song.preview_url || ''}"` : ''}>
+                            <i class="fas fa-plus mr-1"></i>Add
+                        </button>
+                    </div>
                 </div>
-                <button class="add-song-btn bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
-                        data-video-id="${song.videoId}"
-                        data-title="${song.title}"
-                        data-artist="${song.artist}"
-                        data-thumbnail="${song.thumbnail}"
-                        data-duration="${song.duration_text}">
-                    <i class="fas fa-plus mr-1"></i>Add
-                </button>
-            </div>
-        `).join('');
+            `;
+        }).join('');
         
-        // Add event listeners to all add buttons
+        // Add event listeners to all buttons
         searchResultsList.querySelectorAll('.add-song-btn').forEach(button => {
             button.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                const videoId = button.dataset.videoId;
+                const service = button.dataset.service;
+                const songId = button.dataset.songId;
                 const title = button.dataset.title;
                 const artist = button.dataset.artist;
                 const thumbnail = button.dataset.thumbnail;
                 const duration = button.dataset.duration;
+                const album = button.dataset.album;
                 
-                this.addYouTubeSong(videoId, title, artist, thumbnail, duration);
+                if (service === 'spotify') {
+                    const uri = button.dataset.uri;
+                    const previewUrl = button.dataset.previewUrl;
+                    this.addSpotifySong(songId, title, artist, thumbnail, duration, album, uri, previewUrl);
+                } else {
+                    this.addYouTubeSong(songId, title, artist, thumbnail, duration);
+                }
             });
         });
+
+        // Add preview functionality for Spotify
+        if (service === 'spotify') {
+            searchResultsList.querySelectorAll('.preview-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.playPreview(button.dataset.previewUrl, button);
+                });
+            });
+        }
         
         this.searchResults.classList.remove('hidden');
     }
@@ -878,6 +1055,141 @@ class VirtualJukebox {
             console.error('Error adding song:', error);
             this.showToast('Failed to add song to queue', 'error');
         }
+    }
+
+    async addSpotifySong(trackId, title, artist, thumbnail, duration, album, uri, previewUrl) {
+        const userName = this.userName.value.trim() || 'Anonymous';
+        
+        const songData = {
+            song: {
+                spotifyId: trackId,
+                title: title,
+                artist: artist,
+                duration: duration,
+                albumArt: thumbnail,
+                album: album,
+                uri: uri,
+                previewUrl: previewUrl,
+                source: 'spotify'
+            },
+            addedBy: userName
+        };
+
+        try {
+            const response = await fetch('/api/queue/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(songData)
+            });
+
+            if (response.ok) {
+                this.showToast('Spotify song added to queue!', 'success');
+            } else if (response.status === 409) {
+                // Duplicate song
+                const errorData = await response.json();
+                this.showToast(errorData.message, 'warning');
+            } else {
+                throw new Error('Failed to add song');
+            }
+        } catch (error) {
+            console.error('Error adding Spotify song:', error);
+            this.showToast('Failed to add song to queue', 'error');
+        }
+    }
+
+    // Spotify preview functionality
+    playPreview(previewUrl, buttonElement) {
+        if (!previewUrl) {
+            this.showToast('No preview available for this track', 'info');
+            return;
+        }
+
+        // Stop any currently playing preview
+        if (this.currentPreviewAudio) {
+            this.currentPreviewAudio.pause();
+            this.currentPreviewAudio = null;
+            
+            // Reset all preview buttons
+            document.querySelectorAll('.preview-btn').forEach(btn => {
+                btn.innerHTML = '<i class="fas fa-play"></i>';
+                btn.classList.remove('bg-red-600');
+                btn.classList.add('bg-blue-600');
+            });
+        }
+
+        // Create and play new preview
+        this.currentPreviewAudio = new Audio(previewUrl);
+        this.currentPreviewAudio.volume = 0.3; // Lower volume for preview
+        
+        buttonElement.innerHTML = '<i class="fas fa-stop"></i>';
+        buttonElement.classList.remove('bg-blue-600');
+        buttonElement.classList.add('bg-red-600');
+        
+        this.currentPreviewAudio.play().catch(error => {
+            console.error('Preview playback failed:', error);
+            this.showToast('Preview playback failed', 'error');
+        });
+
+        // Auto-stop after 30 seconds or when ended
+        this.currentPreviewAudio.addEventListener('ended', () => {
+            buttonElement.innerHTML = '<i class="fas fa-play"></i>';
+            buttonElement.classList.remove('bg-red-600');
+            buttonElement.classList.add('bg-blue-600');
+            this.currentPreviewAudio = null;
+        });
+
+        // Stop preview when clicking the button again
+        buttonElement.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (this.currentPreviewAudio) {
+                this.currentPreviewAudio.pause();
+                this.currentPreviewAudio = null;
+                buttonElement.innerHTML = '<i class="fas fa-play"></i>';
+                buttonElement.classList.remove('bg-red-600');
+                buttonElement.classList.add('bg-blue-600');
+                
+                // Restore original click handler
+                buttonElement.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.playPreview(previewUrl, buttonElement);
+                };
+            }
+        };
+    }
+
+    playSpotifyPreview(previewUrl) {
+        if (!previewUrl) {
+            this.showToast('No preview available for this track', 'info');
+            return;
+        }
+
+        // Stop any currently playing preview
+        if (this.currentPreviewAudio) {
+            this.currentPreviewAudio.pause();
+            this.currentPreviewAudio = null;
+        }
+
+        // Create and play new preview
+        this.currentPreviewAudio = new Audio(previewUrl);
+        this.currentPreviewAudio.volume = 0.5; // Moderate volume for now playing preview
+        
+        this.currentPreviewAudio.play().catch(error => {
+            console.error('Spotify preview playback failed:', error);
+            this.showToast('Preview playback failed', 'error');
+        });
+
+        this.showToast('Playing 30-second Spotify preview', 'info');
+
+        // Auto-stop after 30 seconds
+        this.currentPreviewAudio.addEventListener('ended', () => {
+            this.currentPreviewAudio = null;
+            this.showToast('Preview ended', 'info');
+        });
     }
 
     // YouTube Player Integration
@@ -1889,16 +2201,6 @@ Current Song: ${this.currentSong ? this.currentSong.title : 'None'}
 
 Check browser console (F12) for detailed video IDs`);
     }
-}
-
-// Initialize the jukebox when the page loads
-const jukebox = new VirtualJukebox();
-window.jukebox = jukebox; // Make it globally accessible
-
-// Initialize playlist editor
-document.addEventListener('DOMContentLoaded', () => {
-    jukebox.initializePlaylistEditor();
-});
 
     // Playlist Editor functionality
     initializePlaylistEditor() {
@@ -2186,3 +2488,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 }
+
+// Initialize the jukebox when the page loads
+const jukebox = new VirtualJukebox();
+window.jukebox = jukebox; // Make it globally accessible
+
+// Initialize playlist editor
+document.addEventListener('DOMContentLoaded', () => {
+    jukebox.initializePlaylistEditor();
+});

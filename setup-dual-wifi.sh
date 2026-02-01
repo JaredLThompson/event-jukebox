@@ -54,8 +54,8 @@ echo "============================="
 read -p "Enter hotspot name [Wedding-Jukebox]: " HOTSPOT_SSID
 HOTSPOT_SSID=${HOTSPOT_SSID:-Wedding-Jukebox}
 
-read -s -p "Enter hotspot password [WeddingMusic2024]: " HOTSPOT_PASSWORD
-HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2024}
+read -s -p "Enter hotspot password [WeddingMusic2026]: " HOTSPOT_PASSWORD
+HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2026}
 echo ""
 
 echo ""

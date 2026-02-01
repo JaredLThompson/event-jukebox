@@ -1,11 +1,13 @@
 # 🎵 Wedding Jukebox - Ultimate Interactive Music Experience
 
-A modern web-based wedding jukebox with **YouTube Music integration**, **dual WiFi Pi setup**, and **real-time collaboration**. Perfect for weddings, parties, and events!
+A modern web-based wedding jukebox with **YouTube Music & Spotify integration**, **dual WiFi Pi setup**, and **real-time collaboration**. Perfect for weddings, parties, and events!
 
 ## ✨ Features
 
 ### 🎵 **Music & Collaboration**
 - **YouTube Music Integration**: Search and add real songs from YouTube Music
+- **Spotify Integration**: Search Spotify catalog with 30-second previews
+- **Dual Music Sources**: Choose between YouTube Music and Spotify for searches
 - **Real-time Collaboration**: Multiple guests can add songs simultaneously
 - **Live Queue Management**: See the queue update in real-time across all devices
 - **Song Suppression**: DJs can temporarily skip playlist songs without removing them
@@ -93,7 +95,7 @@ Open your browser to `http://localhost:3000` and start jamming! 🎶
 ## 🎯 **Perfect for Weddings**
 
 ### **Guest Experience:**
-1. **Connect to "Wedding-Jukebox" WiFi** (no password needed)
+1. **Connect to "Wedding-Jukebox" WiFi** (Password: WeddingMusic2026)
 2. **Open any website** → automatically redirected to jukebox
 3. **Request favorite songs** instantly
 4. **See songs added to queue** in real-time
@@ -224,18 +226,38 @@ For the best wedding experience without ads, set up YouTube Music authentication
    python setup_auth.py
    ```
 3. **Follow the prompts** to authenticate with your YouTube Music account
-4. **Restart the server** - you'll now have ad-free music playback!
+4. **Restart the server** - you'll now have ad-free music playbook!
 
 📖 **Detailed instructions**: See [setup_youtube_auth.md](setup_youtube_auth.md) for step-by-step guide
 
+### 🎵 Spotify Integration (Optional)
+
+Add Spotify search with 30-second previews:
+
+1. **Create a Spotify App** at [developer.spotify.com](https://developer.spotify.com/dashboard)
+2. **Run the setup script**:
+   ```bash
+   node setup_spotify_auth.js
+   ```
+3. **Enter your Client ID and Client Secret** when prompted
+4. **Restart the server** - Spotify search will be available!
+
+📖 **Detailed instructions**: See [setup_spotify_integration.md](setup_spotify_integration.md) for complete guide
+
 ### Adding Songs
 1. **YouTube Music Search** (Recommended):
-   - Click the "Search YouTube Music" tab
+   - Click the "Search Music" tab, then "YouTube Music"
    - Type any song, artist, or album name
    - Click on any result to add it to the queue
    - Real song data with thumbnails, duration, and artist info!
 
-2. **Manual Entry**:
+2. **Spotify Search** (With Previews):
+   - Click the "Search Music" tab, then "Spotify"
+   - Search the Spotify catalog
+   - Preview songs with 30-second clips
+   - Add songs to queue (playback depends on availability)
+
+3. **Manual Entry**:
    - Click the "Manual Entry" tab  
    - Fill in song title, artist, and your name
    - Click "Add to Queue"

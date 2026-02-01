@@ -7,6 +7,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
 const BRIDE_PLAYLIST = require('./bride-playlist');
+const SpotifyService = require('./spotify_service');
 require('dotenv').config();
 
 const app = express();
@@ -34,6 +35,9 @@ let fallbackMode = false;
 let activePlaylist = 'bride'; // 'wedding' or 'bride'
 let queueParked = false; // New: park user submissions instead of blocking them
 let suppressedSongs = new Set(); // New: track suppressed playlist songs by index
+
+// Initialize Spotify service
+const spotifyService = new SpotifyService();
 
 // Play history tracking
 const PLAY_HISTORY_FILE = 'wedding-play-history.json';
@@ -130,14 +134,28 @@ app.get('/api/network-info', (req, res) => {
   const interfaces = os.networkInterfaces();
   
   let networkIP = 'localhost';
-  for (const name of Object.keys(interfaces)) {
-    for (const interface of interfaces[name]) {
-      if (interface.family === 'IPv4' && !interface.internal) {
-        networkIP = interface.address;
-        break;
+  
+  // Check if we're running in Docker and have a host IP provided
+  if (process.env.HOST_IP) {
+    networkIP = process.env.HOST_IP;
+  } else {
+    // Fallback to detecting network interfaces
+    // Skip Docker internal networks (172.17.x.x, 172.18.x.x, etc.)
+    for (const name of Object.keys(interfaces)) {
+      for (const interface of interfaces[name]) {
+        if (interface.family === 'IPv4' && !interface.internal) {
+          // Skip Docker internal networks
+          if (!interface.address.startsWith('172.17.') && 
+              !interface.address.startsWith('172.18.') &&
+              !interface.address.startsWith('172.19.') &&
+              !interface.address.startsWith('172.20.')) {
+            networkIP = interface.address;
+            break;
+          }
+        }
       }
+      if (networkIP !== 'localhost') break;
     }
-    if (networkIP !== 'localhost') break;
   }
   
   res.json({
@@ -171,6 +189,92 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// Spotify search endpoint
+app.get('/api/search/spotify', async (req, res) => {
+  const { q, limit = 10 } = req.query;
+  
+  if (!q) {
+    return res.status(400).json({ error: 'Query parameter is required' });
+  }
+
+  try {
+    if (!spotifyService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Spotify service not available',
+        message: 'Spotify API credentials not configured. Run setup_spotify_auth.js to configure.'
+      });
+    }
+
+    const results = await spotifyService.searchTracks(q, limit);
+    res.json(results);
+  } catch (error) {
+    console.error('Spotify search error:', error);
+    res.status(500).json({ error: 'Failed to search Spotify' });
+  }
+});
+
+// Spotify track details endpoint
+app.get('/api/spotify/track/:trackId', async (req, res) => {
+  const { trackId } = req.params;
+  
+  try {
+    if (!spotifyService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Spotify service not available' 
+      });
+    }
+
+    const result = await spotifyService.getTrack(trackId);
+    res.json(result);
+  } catch (error) {
+    console.error('Spotify track error:', error);
+    res.status(500).json({ error: 'Failed to get Spotify track' });
+  }
+});
+
+// Spotify recommendations endpoint
+app.get('/api/spotify/recommendations', async (req, res) => {
+  const { seed_tracks, seed_artists, seed_genres, limit = 10 } = req.query;
+  
+  try {
+    if (!spotifyService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Spotify service not available' 
+      });
+    }
+
+    const seedTracks = seed_tracks ? seed_tracks.split(',') : [];
+    const seedArtists = seed_artists ? seed_artists.split(',') : [];
+    const seedGenres = seed_genres ? seed_genres.split(',') : [];
+
+    const results = await spotifyService.getRecommendations(
+      seedTracks, 
+      seedArtists, 
+      seedGenres, 
+      parseInt(limit)
+    );
+    res.json(results);
+  } catch (error) {
+    console.error('Spotify recommendations error:', error);
+    res.status(500).json({ error: 'Failed to get Spotify recommendations' });
+  }
+});
+
+// Music service status endpoint
+app.get('/api/music-services/status', (req, res) => {
+  res.json({
+    youtube: {
+      available: true,
+      name: 'YouTube Music'
+    },
+    spotify: {
+      available: spotifyService.isAvailable(),
+      name: 'Spotify',
+      status: spotifyService.getStatus()
+    }
+  });
+});
+
 app.post('/api/queue/add', (req, res) => {
   const { song, addedBy } = req.body;
   
@@ -190,18 +294,21 @@ app.post('/api/queue/add', (req, res) => {
     // Check for duplicates in both queues
     const isDuplicateInMain = currentQueue.some(item => 
       (song.videoId && item.videoId === song.videoId) ||
+      (song.spotifyId && item.spotifyId === song.spotifyId) ||
       (item.title.toLowerCase() === song.title.toLowerCase() && 
        item.artist.toLowerCase() === song.artist.toLowerCase())
     );
     
     const isDuplicateInParked = parkedQueue.some(item => 
       (song.videoId && item.videoId === song.videoId) ||
+      (song.spotifyId && item.spotifyId === song.spotifyId) ||
       (item.title.toLowerCase() === song.title.toLowerCase() && 
        item.artist.toLowerCase() === song.artist.toLowerCase())
     );
 
     const isCurrentlyPlaying = currentlyPlaying && (
       (song.videoId && currentlyPlaying.videoId === song.videoId) ||
+      (song.spotifyId && currentlyPlaying.spotifyId === song.spotifyId) ||
       (currentlyPlaying.title.toLowerCase() === song.title.toLowerCase() && 
        currentlyPlaying.artist.toLowerCase() === song.artist.toLowerCase())
     );
@@ -236,10 +343,14 @@ app.post('/api/queue/add', (req, res) => {
     });
   }
 
-  // Check for duplicates by videoId (most reliable) or title+artist
+  // Check for duplicates by videoId/spotifyId (most reliable) or title+artist
   const isDuplicate = currentQueue.some(queueItem => {
+    // Check by unique ID first
     if (song.videoId && queueItem.videoId) {
       return queueItem.videoId === song.videoId;
+    }
+    if (song.spotifyId && queueItem.spotifyId) {
+      return queueItem.spotifyId === song.spotifyId;
     }
     // Fallback to title+artist comparison (case insensitive)
     return queueItem.title.toLowerCase() === song.title.toLowerCase() && 
@@ -249,6 +360,7 @@ app.post('/api/queue/add', (req, res) => {
   // Also check if it's currently playing
   const isCurrentlyPlaying = currentlyPlaying && (
     (song.videoId && currentlyPlaying.videoId === song.videoId) ||
+    (song.spotifyId && currentlyPlaying.spotifyId === song.spotifyId) ||
     (currentlyPlaying.title.toLowerCase() === song.title.toLowerCase() && 
      currentlyPlaying.artist.toLowerCase() === song.artist.toLowerCase())
   );

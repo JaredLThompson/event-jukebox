@@ -2,9 +2,10 @@ version: '3.8'
 
 services:
   wedding-jukebox:
-    image: ghcr.io/jaredlthompson/wedding-jukebox:latest
-    # Uncomment to build locally instead:
-    # build: .
+    # Use local build with latest playlist editor features
+    build: .
+    # Uncomment to use registry image instead:
+    # image: ghcr.io/jaredlthompson/wedding-jukebox:latest
     ports:
       - "3000:3000"
     volumes:

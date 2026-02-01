@@ -134,7 +134,7 @@ macaddr_acl=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
-wpa_passphrase=WeddingMusic2024
+wpa_passphrase=WeddingMusic2026
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
@@ -292,7 +292,7 @@ Some Pi 4 models support dual WiFi, but most reliable approach is:
 
 ## Guest Experience with Dual WiFi
 
-1. **Guests connect to "Wedding-Jukebox" WiFi**
+1. **Guests connect to "Wedding-Jukebox" WiFi** (Password: WeddingMusic2026)
 2. **Any website they visit redirects to jukebox**
 3. **They can browse internet through Pi's connection**
 4. **DJ gets YouTube Music access for searches**

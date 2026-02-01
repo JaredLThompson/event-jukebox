@@ -125,7 +125,7 @@
                 <div class="mb-4">
                     <div class="flex space-x-2 mb-4">
                         <button id="searchTab" class="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold">
-                            <i class="fab fa-youtube mr-2"></i>Search YouTube Music
+                            <i class="fas fa-search mr-2"></i>Search Music
                         </button>
                         <button id="manualTab" class="px-4 py-2 bg-gray-600 text-white rounded-lg">
                             <i class="fas fa-edit mr-2"></i>Manual Entry
@@ -133,10 +133,20 @@
                     </div>
                 </div>
 
-                <!-- YouTube Music Search -->
+                <!-- Music Search -->
                 <div id="searchSection" class="space-y-4">
+                    <!-- Music Service Tabs -->
+                    <div id="musicServiceTabs" class="flex space-x-2 mb-4">
+                        <button id="youtubeTab" class="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold transition-colors">
+                            <i class="fab fa-youtube mr-2"></i>YouTube Music
+                        </button>
+                        <button id="spotifyTab" class="px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold transition-colors">
+                            <i class="fab fa-spotify mr-2"></i>Spotify
+                        </button>
+                    </div>
+                    
                     <div class="flex space-x-2">
-                        <input type="text" id="searchQuery" class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none" placeholder="Search for songs on YouTube Music...">
+                        <input type="text" id="searchQuery" class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none" placeholder="Search for songs...">
                         <button id="searchBtn" class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition-colors">
                             <i class="fas fa-search"></i>
                         </button>
