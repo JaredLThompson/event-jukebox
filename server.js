@@ -25,12 +25,15 @@ app.use(express.static('public'));
 
 // In-memory storage for demo (replace with database in production)
 let currentQueue = [];
+let parkedQueue = []; // New: parked user submissions
 let currentlyPlaying = null;
 let connectedUsers = new Set();
 let fallbackPlaylistIndex = 0;
 let currentFallbackIndex = -1; // Track which song is currently playing from fallback
 let fallbackMode = false;
 let activePlaylist = 'bride'; // 'wedding' or 'bride'
+let queueParked = false; // New: park user submissions instead of blocking them
+let suppressedSongs = new Set(); // New: track suppressed playlist songs by index
 
 // Play history tracking
 const PLAY_HISTORY_FILE = 'wedding-play-history.json';
@@ -97,6 +100,31 @@ app.get('/user', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'user.html'));
 });
 
+app.get('/qr', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'qr.html'));
+});
+
+app.get('/api/network-info', (req, res) => {
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  
+  let networkIP = 'localhost';
+  for (const name of Object.keys(interfaces)) {
+    for (const interface of interfaces[name]) {
+      if (interface.family === 'IPv4' && !interface.internal) {
+        networkIP = interface.address;
+        break;
+      }
+    }
+    if (networkIP !== 'localhost') break;
+  }
+  
+  res.json({
+    networkIP: networkIP,
+    port: process.env.PORT || 3000
+  });
+});
+
 app.get('/api/queue', (req, res) => {
   res.json({
     queue: currentQueue,
@@ -129,6 +157,64 @@ app.post('/api/queue/add', (req, res) => {
     return res.status(400).json({ error: 'Invalid song data' });
   }
 
+  const queueItem = {
+    id: song.id || Date.now().toString(),
+    ...song,
+    addedBy: addedBy || 'Anonymous',
+    addedAt: new Date().toISOString()
+  };
+
+  // If queue is parked, add to parked queue instead of main queue
+  if (queueParked && song.type !== 'mic-break') {
+    // Check for duplicates in both queues
+    const isDuplicateInMain = currentQueue.some(item => 
+      (song.videoId && item.videoId === song.videoId) ||
+      (item.title.toLowerCase() === song.title.toLowerCase() && 
+       item.artist.toLowerCase() === song.artist.toLowerCase())
+    );
+    
+    const isDuplicateInParked = parkedQueue.some(item => 
+      (song.videoId && item.videoId === song.videoId) ||
+      (item.title.toLowerCase() === song.title.toLowerCase() && 
+       item.artist.toLowerCase() === song.artist.toLowerCase())
+    );
+
+    const isCurrentlyPlaying = currentlyPlaying && (
+      (song.videoId && currentlyPlaying.videoId === song.videoId) ||
+      (currentlyPlaying.title.toLowerCase() === song.title.toLowerCase() && 
+       currentlyPlaying.artist.toLowerCase() === song.artist.toLowerCase())
+    );
+
+    if (isDuplicateInMain || isDuplicateInParked) {
+      return res.status(409).json({ 
+        error: 'Song already queued',
+        message: `"${song.title}" by ${song.artist} is already in the queue!`
+      });
+    }
+
+    if (isCurrentlyPlaying) {
+      return res.status(409).json({ 
+        error: 'Song currently playing',
+        message: `"${song.title}" by ${song.artist} is currently playing!`
+      });
+    }
+
+    parkedQueue.push(queueItem);
+    
+    // Broadcast parked queue update
+    io.emit('parkedQueueUpdated', {
+      parkedQueue: parkedQueue,
+      parkedCount: parkedQueue.length
+    });
+
+    return res.json({ 
+      success: true, 
+      queueItem,
+      parked: true,
+      message: `"${song.title}" added to queue! (${parkedQueue.length} songs waiting)`
+    });
+  }
+
   // Check for duplicates by videoId (most reliable) or title+artist
   const isDuplicate = currentQueue.some(queueItem => {
     if (song.videoId && queueItem.videoId) {
@@ -159,13 +245,6 @@ app.post('/api/queue/add', (req, res) => {
       message: `"${song.title}" by ${song.artist} is currently playing!`
     });
   }
-
-  const queueItem = {
-    id: song.id || Date.now().toString(),
-    ...song,
-    addedBy: addedBy || 'Anonymous',
-    addedAt: new Date().toISOString()
-  };
 
   currentQueue.push(queueItem);
   
@@ -206,6 +285,96 @@ app.post('/api/queue/clear', (req, res) => {
   });
 
   res.json({ success: true });
+});
+
+app.post('/api/queue/park', (req, res) => {
+  queueParked = true;
+  
+  // Broadcast park state to all clients
+  io.emit('queueParkChanged', {
+    parked: true,
+    message: 'New songs will be parked - playlist will play through',
+    parkedCount: parkedQueue.length
+  });
+
+  res.json({ 
+    success: true, 
+    message: 'Queue parked - new submissions will be held until unparked',
+    parked: true,
+    parkedCount: parkedQueue.length
+  });
+});
+
+app.post('/api/queue/park-current', (req, res) => {
+  // Move all current queue items to parked queue
+  const movedCount = currentQueue.length;
+  parkedQueue.push(...currentQueue);
+  currentQueue = [];
+  queueParked = true;
+  
+  // Broadcast updates
+  io.emit('queueParkChanged', {
+    parked: true,
+    message: `${movedCount} songs moved to parking - playlist will play through`,
+    parkedCount: parkedQueue.length
+  });
+  
+  io.emit('queueUpdated', {
+    queue: currentQueue
+  });
+  
+  io.emit('parkedQueueUpdated', {
+    parkedQueue: parkedQueue,
+    parkedCount: parkedQueue.length
+  });
+
+  res.json({ 
+    success: true, 
+    message: `${movedCount} songs parked - playlist will now play through`,
+    parked: true,
+    parkedCount: parkedQueue.length,
+    movedCount: movedCount
+  });
+});
+
+app.post('/api/queue/unpark', (req, res) => {
+  // Move all parked songs to the main queue
+  currentQueue.push(...parkedQueue);
+  const unparkedCount = parkedQueue.length;
+  parkedQueue = [];
+  queueParked = false;
+  
+  // Broadcast unpark state and updated queues
+  io.emit('queueParkChanged', {
+    parked: false,
+    message: `${unparkedCount} songs moved to active queue!`
+  });
+  
+  io.emit('queueUpdated', {
+    queue: currentQueue
+  });
+  
+  io.emit('parkedQueueUpdated', {
+    parkedQueue: [],
+    parkedCount: 0
+  });
+
+  res.json({ 
+    success: true, 
+    message: `Queue unparked - ${unparkedCount} songs moved to active queue`,
+    parked: false,
+    unparkedCount: unparkedCount
+  });
+});
+
+app.get('/api/queue/status', (req, res) => {
+  res.json({
+    parked: queueParked,
+    queueLength: currentQueue.length,
+    parkedLength: parkedQueue.length,
+    currentlyPlaying: currentlyPlaying,
+    fallbackMode: fallbackMode
+  });
 });
 
 app.post('/api/queue/next', async (req, res) => {
@@ -347,6 +516,8 @@ app.post('/api/playlist/switch', (req, res) => {
   activePlaylist = playlist;
   fallbackPlaylistIndex = 0;
   currentFallbackIndex = -1;
+  // Clear suppressed songs when switching playlists
+  suppressedSongs.clear();
   
   const playlistName = getPlaylistName();
   
@@ -361,6 +532,63 @@ app.post('/api/playlist/switch', (req, res) => {
     message: `Switched to ${playlistName}`,
     playlist: activePlaylist,
     playlistName: playlistName
+  });
+});
+
+app.post('/api/playlist/suppress', (req, res) => {
+  const { index } = req.body;
+  const playlist = getCurrentPlaylist();
+  
+  if (index < 0 || index >= playlist.length) {
+    return res.status(400).json({ error: 'Invalid playlist index' });
+  }
+  
+  suppressedSongs.add(index);
+  const songName = playlist[index].search.split(' ').slice(0, 2).join(' ');
+  
+  io.emit('playlistSuppressed', {
+    index: index,
+    message: `"${songName}" suppressed - will be skipped`,
+    suppressedCount: suppressedSongs.size
+  });
+  
+  res.json({ 
+    success: true, 
+    message: `Song ${index + 1} suppressed`,
+    suppressedIndex: index,
+    suppressedCount: suppressedSongs.size
+  });
+});
+
+app.post('/api/playlist/unsuppress', (req, res) => {
+  const { index } = req.body;
+  const playlist = getCurrentPlaylist();
+  
+  if (index < 0 || index >= playlist.length) {
+    return res.status(400).json({ error: 'Invalid playlist index' });
+  }
+  
+  suppressedSongs.delete(index);
+  const songName = playlist[index].search.split(' ').slice(0, 2).join(' ');
+  
+  io.emit('playlistUnsuppressed', {
+    index: index,
+    message: `"${songName}" restored - will play normally`,
+    suppressedCount: suppressedSongs.size
+  });
+  
+  res.json({ 
+    success: true, 
+    message: `Song ${index + 1} restored`,
+    unsuppressedIndex: index,
+    suppressedCount: suppressedSongs.size
+  });
+});
+
+app.get('/api/playlist/suppressed', (req, res) => {
+  res.json({
+    suppressedSongs: Array.from(suppressedSongs),
+    suppressedCount: suppressedSongs.size
   });
 });
 
@@ -451,43 +679,56 @@ async function getNextFallbackSong() {
   const playlist = getCurrentPlaylist();
   if (playlist.length === 0) return null;
   
-  // Get the current song from the playlist (cycle through)
-  const playlistItem = playlist[fallbackPlaylistIndex];
+  // Find next non-suppressed song
+  let attempts = 0;
+  const maxAttempts = playlist.length; // Prevent infinite loop
   
-  try {
-    // Search for the song
-    const searchResults = await searchYouTubeMusic(playlistItem.search, 1);
-    if (searchResults.results && searchResults.results.length > 0) {
-      const song = searchResults.results[0];
+  while (attempts < maxAttempts) {
+    // Check if current song is suppressed
+    if (!suppressedSongs.has(fallbackPlaylistIndex)) {
+      // Get the current song from the playlist
+      const playlistItem = playlist[fallbackPlaylistIndex];
       
-      const fallbackSong = {
-        id: `fallback-${Date.now()}`,
-        videoId: song.videoId,
-        title: song.title,
-        artist: song.artist,
-        duration: song.duration_text,
-        albumArt: song.thumbnail,
-        album: song.album,
-        addedBy: activePlaylist === 'wedding' ? '🎵 Wedding DJ' : '✨ Bride\'s Collection',
-        addedAt: new Date().toISOString(),
-        source: 'fallback',
-        type: playlistItem.type,
-        playlist: activePlaylist
-      };
-      
-      // Set current playing index to the song we're about to play
-      currentFallbackIndex = fallbackPlaylistIndex;
-      // Increment index for next time
-      fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
-      
-      return fallbackSong;
+      try {
+        // Search for the song
+        const searchResults = await searchYouTubeMusic(playlistItem.search, 1);
+        if (searchResults.results && searchResults.results.length > 0) {
+          const song = searchResults.results[0];
+          
+          const fallbackSong = {
+            id: `fallback-${Date.now()}`,
+            videoId: song.videoId,
+            title: song.title,
+            artist: song.artist,
+            duration: song.duration_text,
+            albumArt: song.thumbnail,
+            album: song.album,
+            addedBy: activePlaylist === 'wedding' ? '🎵 Wedding DJ' : '✨ Bride\'s Collection',
+            addedAt: new Date().toISOString(),
+            source: 'fallback',
+            type: playlistItem.type,
+            playlist: activePlaylist,
+            playlistIndex: fallbackPlaylistIndex // Track which playlist song this is
+          };
+          
+          // Set current playing index to the song we're about to play
+          currentFallbackIndex = fallbackPlaylistIndex;
+          // Increment index for next time
+          fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
+          
+          return fallbackSong;
+        }
+      } catch (error) {
+        console.error('Error searching for fallback song:', error);
+      }
     }
-  } catch (error) {
-    console.error('Error searching for fallback song:', error);
+    
+    // Move to next song (either because current was suppressed or failed to load)
+    fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
+    attempts++;
   }
   
-  // If we failed to get a song, still increment to avoid getting stuck
-  fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
+  // If all songs are suppressed, return null
   return null;
 }
 

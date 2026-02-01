@@ -53,6 +53,10 @@ class VirtualJukebox {
         this.addMicBreakBtn = document.getElementById('addMicBreakBtn');
         this.resetPlaylistBtn = document.getElementById('resetPlaylistBtn');
         this.clearQueueBtn = document.getElementById('clearQueueBtn');
+        this.parkQueueBtn = document.getElementById('parkQueueBtn');
+        this.parkCurrentBtn = document.getElementById('parkCurrentBtn');
+        this.unparkQueueBtn = document.getElementById('unparkQueueBtn');
+        this.parkedCount = document.getElementById('parkedCount');
         
         // Playlist status elements
         this.playlistStatus = document.getElementById('playlistStatus');
@@ -64,6 +68,7 @@ class VirtualJukebox {
         // Playlist browser elements
         this.expandPlaylistBtn = document.getElementById('expandPlaylistBtn');
         this.collapsePlaylistBtn = document.getElementById('collapsePlaylistBtn');
+        this.togglePlaylistViewBtn = document.getElementById('togglePlaylistViewBtn');
         this.playlistBrowser = document.getElementById('playlistBrowser');
         this.playlistItems = document.getElementById('playlistItems');
         this.playlistSearchInput = document.getElementById('playlistSearchInput');
@@ -82,12 +87,22 @@ class VirtualJukebox {
         this.historyItems = document.getElementById('historyItems');
         this.historyEmpty = document.getElementById('historyEmpty');
         
+        // Buffer status elements
+        this.bufferStatus = document.getElementById('bufferStatus');
+        this.bufferCount = document.getElementById('bufferCount');
+        this.debugBufferBtn = document.getElementById('debugBufferBtn');
+        
         // Store the full playlist for searching
         this.fullPlaylist = [];
         this.currentPlaylistIndex = 0;
+        this.playlistDetailedView = false; // New: toggle for detailed playlist view
+        this.suppressedSongs = new Set(); // Track suppressed songs
         
         // Initialize drag and drop
         this.initializeDragAndDrop();
+        
+        // Initialize connection monitoring
+        this.initializeConnectionMonitoring();
     }
 
     bindEvents() {
@@ -117,10 +132,14 @@ class VirtualJukebox {
         this.addMicBreakBtn.addEventListener('click', () => this.addMicBreak());
         this.resetPlaylistBtn.addEventListener('click', () => this.resetPlaylist());
         this.clearQueueBtn.addEventListener('click', () => this.clearQueue());
+        this.parkQueueBtn.addEventListener('click', () => this.parkQueue());
+        this.parkCurrentBtn.addEventListener('click', () => this.parkCurrentQueue());
+        this.unparkQueueBtn.addEventListener('click', () => this.unparkQueue());
         
         // Playlist browser controls
         this.expandPlaylistBtn.addEventListener('click', () => this.showPlaylistBrowser());
         this.collapsePlaylistBtn.addEventListener('click', () => this.hidePlaylistBrowser());
+        this.togglePlaylistViewBtn.addEventListener('click', () => this.togglePlaylistView());
         
         // Playlist switcher
         document.addEventListener('click', (e) => {
@@ -134,6 +153,10 @@ class VirtualJukebox {
         this.viewHistoryBtn.addEventListener('click', () => this.showPlayHistory());
         this.closeHistoryBtn.addEventListener('click', () => this.hidePlayHistory());
         this.exportHistoryBtn.addEventListener('click', () => this.exportPlayHistory());
+        
+        // Buffer controls
+        this.bufferStatus.addEventListener('click', () => this.forceBufferMore());
+        this.debugBufferBtn.addEventListener('click', () => this.showBufferDebug());
         
         // Playlist search functionality
         this.playlistSearchInput.addEventListener('input', (e) => this.filterPlaylist(e.target.value));
@@ -222,6 +245,43 @@ class VirtualJukebox {
             }
         });
 
+        this.socket.on('queueParkChanged', (data) => {
+            if (data.parked) {
+                this.parkQueueBtn.classList.add('hidden');
+                this.unparkQueueBtn.classList.remove('hidden');
+                this.showToast(data.message, 'info');
+            } else {
+                this.parkQueueBtn.classList.remove('hidden');
+                this.unparkQueueBtn.classList.add('hidden');
+                this.showToast(data.message, 'success');
+            }
+        });
+
+        this.socket.on('parkedQueueUpdated', (data) => {
+            this.parkedCount.textContent = data.parkedCount;
+            if (data.parkedCount > 0) {
+                this.unparkQueueBtn.classList.remove('hidden');
+            }
+        });
+
+        this.socket.on('playlistSuppressed', (data) => {
+            this.suppressedSongs.add(data.index);
+            this.showToast(data.message, 'info');
+            // Refresh playlist browser if it's open
+            if (!this.playlistBrowser.classList.contains('hidden')) {
+                this.displayPlaylistBrowser(this.fullPlaylist, this.currentPlaylistIndex);
+            }
+        });
+
+        this.socket.on('playlistUnsuppressed', (data) => {
+            this.suppressedSongs.delete(data.index);
+            this.showToast(data.message, 'success');
+            // Refresh playlist browser if it's open
+            if (!this.playlistBrowser.classList.contains('hidden')) {
+                this.displayPlaylistBrowser(this.fullPlaylist, this.currentPlaylistIndex);
+            }
+        });
+
         this.socket.on('userCount', (count) => {
             this.userCount.textContent = count;
         });
@@ -272,32 +332,30 @@ class VirtualJukebox {
             const response = await fetch('/api/playlist/status');
             const data = await response.json();
             
-            if (data.fallbackMode || data.currentIndex > 0) {
-                // Show playlist status
-                this.playlistStatus.classList.remove('hidden');
-                
-                // Update playlist name and position
-                this.playlistName.textContent = data.playlistName + ':';
-                this.playlistPosition.textContent = `Song ${data.currentIndex + 1} of ${data.totalSongs}`;
-                
-                // Update progress bar
-                const progressPercent = ((data.currentIndex + 1) / data.totalSongs) * 100;
-                this.playlistProgress.style.width = `${progressPercent}%`;
-                
-                // Show next song if available
-                if (data.nextSong) {
-                    const nextSongName = this.parsePlaylistSong(data.nextSong.search);
-                    this.nextPlaylistSong.textContent = `Next: ${nextSongName}`;
-                } else {
-                    this.nextPlaylistSong.textContent = 'Next: Back to start';
-                }
-                
-                // Update active playlist button styling
-                this.updatePlaylistButtonStyles(data.activePlaylist);
+            // Always show playlist status since we have a default playlist
+            this.playlistStatus.classList.remove('hidden');
+            
+            // Update playlist name and position
+            this.playlistName.textContent = data.playlistName + ':';
+            
+            // Show current position (use 1 as minimum for display)
+            const displayIndex = Math.max(0, data.currentIndex);
+            this.playlistPosition.textContent = `Song ${displayIndex + 1} of ${data.totalSongs}`;
+            
+            // Update progress bar
+            const progressPercent = ((displayIndex + 1) / data.totalSongs) * 100;
+            this.playlistProgress.style.width = `${progressPercent}%`;
+            
+            // Show next song if available
+            if (data.nextSong) {
+                const nextSongName = this.parsePlaylistSong(data.nextSong.search);
+                this.nextPlaylistSong.textContent = `Next: ${nextSongName}`;
             } else {
-                // Hide playlist status when not in fallback mode
-                this.playlistStatus.classList.add('hidden');
+                this.nextPlaylistSong.textContent = 'Next: Back to start';
             }
+            
+            // Update active playlist button styling
+            this.updatePlaylistButtonStyles(data.activePlaylist);
         } catch (error) {
             console.error('Failed to load playlist status:', error);
         }
@@ -617,6 +675,9 @@ class VirtualJukebox {
         this.currentQueue = queue; // Store current queue for reordering
         this.queueCount.textContent = queue.length;
         
+        // Pre-buffer upcoming songs
+        this.preBufferUpcomingSongs();
+        
         if (queue.length === 0) {
             this.queueList.innerHTML = '<p class="text-gray-400 text-center py-8">No songs in queue</p>';
             return;
@@ -830,13 +891,18 @@ class VirtualJukebox {
                 'disablekb': 1,
                 'fs': 0,
                 'modestbranding': 1,
-                'rel': 0
+                'rel': 0,
+                'preload': 'auto' // Enable preloading
             },
             events: {
                 'onReady': (event) => this.onPlayerReady(event),
                 'onStateChange': (event) => this.onPlayerStateChange(event)
             }
         });
+        
+        // Initialize pre-buffering system
+        this.preBufferQueue = [];
+        this.maxPreBuffer = 3; // Pre-buffer up to 3 songs
     }
 
     onPlayerReady(event) {
@@ -1037,6 +1103,69 @@ class VirtualJukebox {
         }
     }
 
+    async parkQueue() {
+        try {
+            const response = await fetch('/api/queue/park', {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.showToast(data.message, 'success');
+            } else {
+                throw new Error('Failed to park queue');
+            }
+        } catch (error) {
+            console.error('Error parking queue:', error);
+            this.showToast('Failed to park queue', 'error');
+        }
+    }
+
+    async parkCurrentQueue() {
+        if (this.currentQueue.length === 0) {
+            this.showToast('No songs in queue to park', 'info');
+            return;
+        }
+
+        if (!confirm(`Park all ${this.currentQueue.length} songs currently in queue? They'll be held until unparked.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/queue/park-current', {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.showToast(data.message, 'success');
+            } else {
+                throw new Error('Failed to park current queue');
+            }
+        } catch (error) {
+            console.error('Error parking current queue:', error);
+            this.showToast('Failed to park current queue', 'error');
+        }
+    }
+
+    async unparkQueue() {
+        try {
+            const response = await fetch('/api/queue/unpark', {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.showToast(data.message, 'success');
+            } else {
+                throw new Error('Failed to unpark queue');
+            }
+        } catch (error) {
+            console.error('Error unparking queue:', error);
+            this.showToast('Failed to unpark queue', 'error');
+        }
+    }
+
     async resetPlaylist() {
         if (!confirm('Reset the wedding playlist back to the first song?')) {
             return;
@@ -1063,6 +1192,11 @@ class VirtualJukebox {
             const response = await fetch('/api/playlist/full');
             const data = await response.json();
             
+            // Also get suppressed songs
+            const suppressedResponse = await fetch('/api/playlist/suppressed');
+            const suppressedData = await suppressedResponse.json();
+            this.suppressedSongs = new Set(suppressedData.suppressedSongs);
+            
             this.fullPlaylist = data.playlist;
             this.currentPlaylistIndex = data.currentIndex;
             
@@ -1080,6 +1214,22 @@ class VirtualJukebox {
     hidePlaylistBrowser() {
         this.playlistBrowser.classList.add('hidden');
         this.clearPlaylistSearch();
+    }
+
+    togglePlaylistView() {
+        this.playlistDetailedView = !this.playlistDetailedView;
+        
+        // Update button text and icon
+        if (this.playlistDetailedView) {
+            this.togglePlaylistViewBtn.innerHTML = '<i class="fas fa-compress-alt mr-1"></i>Compact';
+        } else {
+            this.togglePlaylistViewBtn.innerHTML = '<i class="fas fa-expand-alt mr-1"></i>Detailed';
+        }
+        
+        // Refresh the current display
+        if (this.fullPlaylist.length > 0) {
+            this.displayPlaylistBrowser(this.fullPlaylist, this.currentPlaylistIndex);
+        }
     }
 
     filterPlaylist(searchTerm) {
@@ -1139,27 +1289,77 @@ class VirtualJukebox {
         this.playlistItems.innerHTML = filteredPlaylist.map((song, filterIndex) => {
             const originalIndex = originalIndices[filterIndex];
             const isCurrentSong = originalIndex === this.currentPlaylistIndex;
-            const songName = this.parsePlaylistSong(song.search);
-            const bgColor = isCurrentSong ? 'bg-amber-600 bg-opacity-70' : 'bg-gray-800 bg-opacity-50 hover:bg-gray-700 hover:bg-opacity-70';
-            const textColor = isCurrentSong ? 'text-amber-100' : 'text-gray-200';
-            const icon = isCurrentSong ? 'fas fa-play text-amber-300' : 'fas fa-music text-gray-400';
+            const isSuppressed = this.suppressedSongs.has(originalIndex);
+            const bgColor = isSuppressed ? 'bg-red-800 bg-opacity-50' : 
+                           isCurrentSong ? 'bg-amber-600 bg-opacity-70' : 
+                           'bg-gray-800 bg-opacity-50 hover:bg-gray-700 hover:bg-opacity-70';
+            const textColor = isSuppressed ? 'text-red-200 line-through' :
+                             isCurrentSong ? 'text-amber-100' : 'text-gray-200';
+            const icon = isSuppressed ? 'fas fa-ban text-red-400' :
+                        isCurrentSong ? 'fas fa-play text-amber-300' : 'fas fa-music text-gray-400';
             
-            return `
-                <div class="playlist-item ${bgColor} rounded p-2 flex items-center space-x-3 cursor-pointer transition-all"
-                     onclick="jukebox.jumpToPlaylistSong(${originalIndex})">
-                    <div class="w-6 text-center">
-                        <span class="text-xs font-mono ${textColor}">${(originalIndex + 1).toString().padStart(2, '0')}</span>
+            if (this.playlistDetailedView) {
+                // Detailed view with artist and type
+                const { title, artist } = this.parsePlaylistSongDetails(song.search);
+                return `
+                    <div class="playlist-item ${bgColor} rounded p-3 flex items-center space-x-3 transition-all"
+                         ${!isSuppressed ? `onclick="jukebox.jumpToPlaylistSong(${originalIndex})" style="cursor: pointer;"` : ''}>
+                        <div class="w-6 text-center">
+                            <span class="text-xs font-mono ${textColor}">${(originalIndex + 1).toString().padStart(2, '0')}</span>
+                        </div>
+                        <div class="w-4">
+                            <i class="${icon} text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium ${textColor} truncate">${title}</div>
+                            <div class="text-xs text-gray-400 truncate ${isSuppressed ? 'line-through' : ''}">${artist}</div>
+                            <div class="text-xs text-gray-500 ${isSuppressed ? 'line-through' : ''}">${song.type}</div>
+                        </div>
+                        <div class="flex space-x-1">
+                            ${isSuppressed ? 
+                                `<button onclick="jukebox.unsuppressSong(${originalIndex})" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs transition-colors" title="Restore song">
+                                    <i class="fas fa-undo"></i>
+                                </button>` :
+                                `<button onclick="jukebox.suppressSong(${originalIndex})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs transition-colors" title="Suppress song">
+                                    <i class="fas fa-ban"></i>
+                                </button>`
+                            }
+                        </div>
+                        ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold ml-2">CURRENT</div>' : ''}
+                        ${isSuppressed ? '<div class="text-xs text-red-300 font-semibold ml-2">SUPPRESSED</div>' : ''}
                     </div>
-                    <div class="w-4">
-                        <i class="${icon} text-sm"></i>
+                `;
+            } else {
+                // Compact view (original format)
+                const songName = this.parsePlaylistSong(song.search);
+                return `
+                    <div class="playlist-item ${bgColor} rounded p-2 flex items-center space-x-3 transition-all"
+                         ${!isSuppressed ? `onclick="jukebox.jumpToPlaylistSong(${originalIndex})" style="cursor: pointer;"` : ''}>
+                        <div class="w-6 text-center">
+                            <span class="text-xs font-mono ${textColor}">${(originalIndex + 1).toString().padStart(2, '0')}</span>
+                        </div>
+                        <div class="w-4">
+                            <i class="${icon} text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-sm font-medium ${textColor}">${songName}</span>
+                            <span class="text-xs text-gray-400 ml-2 ${isSuppressed ? 'line-through' : ''}">(${song.type})</span>
+                        </div>
+                        <div class="flex space-x-1">
+                            ${isSuppressed ? 
+                                `<button onclick="jukebox.unsuppressSong(${originalIndex})" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs transition-colors" title="Restore song">
+                                    <i class="fas fa-undo"></i>
+                                </button>` :
+                                `<button onclick="jukebox.suppressSong(${originalIndex})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs transition-colors" title="Suppress song">
+                                    <i class="fas fa-ban"></i>
+                                </button>`
+                            }
+                        </div>
+                        ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold">CURRENT</div>' : ''}
+                        ${isSuppressed ? '<div class="text-xs text-red-300 font-semibold">SUPPRESSED</div>' : ''}
                     </div>
-                    <div class="flex-1">
-                        <span class="text-sm font-medium ${textColor}">${songName}</span>
-                        <span class="text-xs text-gray-400 ml-2">(${song.type})</span>
-                    </div>
-                    ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold">CURRENT</div>' : ''}
-                </div>
-            `;
+                `;
+            }
         }).join('');
     }
 
@@ -1167,28 +1367,114 @@ class VirtualJukebox {
         this.playlistNoResults.classList.add('hidden');
         this.playlistItems.innerHTML = playlist.map((song, index) => {
             const isCurrentSong = index === currentIndex;
-            const songName = this.parsePlaylistSong(song.search);
-            const bgColor = isCurrentSong ? 'bg-amber-600 bg-opacity-70' : 'bg-gray-800 bg-opacity-50 hover:bg-gray-700 hover:bg-opacity-70';
-            const textColor = isCurrentSong ? 'text-amber-100' : 'text-gray-200';
-            const icon = isCurrentSong ? 'fas fa-play text-amber-300' : 'fas fa-music text-gray-400';
+            const isSuppressed = this.suppressedSongs.has(index);
+            const bgColor = isSuppressed ? 'bg-red-800 bg-opacity-50' : 
+                           isCurrentSong ? 'bg-amber-600 bg-opacity-70' : 
+                           'bg-gray-800 bg-opacity-50 hover:bg-gray-700 hover:bg-opacity-70';
+            const textColor = isSuppressed ? 'text-red-200 line-through' :
+                             isCurrentSong ? 'text-amber-100' : 'text-gray-200';
+            const icon = isSuppressed ? 'fas fa-ban text-red-400' :
+                        isCurrentSong ? 'fas fa-play text-amber-300' : 'fas fa-music text-gray-400';
             
-            return `
-                <div class="playlist-item ${bgColor} rounded p-2 flex items-center space-x-3 cursor-pointer transition-all"
-                     onclick="jukebox.jumpToPlaylistSong(${index})">
-                    <div class="w-6 text-center">
-                        <span class="text-xs font-mono ${textColor}">${(index + 1).toString().padStart(2, '0')}</span>
+            if (this.playlistDetailedView) {
+                // Detailed view with artist and type
+                const { title, artist } = this.parsePlaylistSongDetails(song.search);
+                return `
+                    <div class="playlist-item ${bgColor} rounded p-3 flex items-center space-x-3 transition-all"
+                         ${!isSuppressed ? `onclick="jukebox.jumpToPlaylistSong(${index})" style="cursor: pointer;"` : ''}>
+                        <div class="w-6 text-center">
+                            <span class="text-xs font-mono ${textColor}">${(index + 1).toString().padStart(2, '0')}</span>
+                        </div>
+                        <div class="w-4">
+                            <i class="${icon} text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium ${textColor} truncate">${title}</div>
+                            <div class="text-xs text-gray-400 truncate ${isSuppressed ? 'line-through' : ''}">${artist}</div>
+                            <div class="text-xs text-gray-500 ${isSuppressed ? 'line-through' : ''}">${song.type}</div>
+                        </div>
+                        <div class="flex space-x-1">
+                            ${isSuppressed ? 
+                                `<button onclick="jukebox.unsuppressSong(${index})" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs transition-colors" title="Restore song">
+                                    <i class="fas fa-undo"></i>
+                                </button>` :
+                                `<button onclick="jukebox.suppressSong(${index})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs transition-colors" title="Suppress song">
+                                    <i class="fas fa-ban"></i>
+                                </button>`
+                            }
+                        </div>
+                        ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold ml-2">CURRENT</div>' : ''}
+                        ${isSuppressed ? '<div class="text-xs text-red-300 font-semibold ml-2">SUPPRESSED</div>' : ''}
                     </div>
-                    <div class="w-4">
-                        <i class="${icon} text-sm"></i>
+                `;
+            } else {
+                // Compact view (original format)
+                const songName = this.parsePlaylistSong(song.search);
+                return `
+                    <div class="playlist-item ${bgColor} rounded p-2 flex items-center space-x-3 transition-all"
+                         ${!isSuppressed ? `onclick="jukebox.jumpToPlaylistSong(${index})" style="cursor: pointer;"` : ''}>
+                        <div class="w-6 text-center">
+                            <span class="text-xs font-mono ${textColor}">${(index + 1).toString().padStart(2, '0')}</span>
+                        </div>
+                        <div class="w-4">
+                            <i class="${icon} text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-sm font-medium ${textColor}">${songName}</span>
+                            <span class="text-xs text-gray-400 ml-2 ${isSuppressed ? 'line-through' : ''}">(${song.type})</span>
+                        </div>
+                        <div class="flex space-x-1">
+                            ${isSuppressed ? 
+                                `<button onclick="jukebox.unsuppressSong(${index})" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs transition-colors" title="Restore song">
+                                    <i class="fas fa-undo"></i>
+                                </button>` :
+                                `<button onclick="jukebox.suppressSong(${index})" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs transition-colors" title="Suppress song">
+                                    <i class="fas fa-ban"></i>
+                                </button>`
+                            }
+                        </div>
+                        ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold">CURRENT</div>' : ''}
+                        ${isSuppressed ? '<div class="text-xs text-red-300 font-semibold">SUPPRESSED</div>' : ''}
                     </div>
-                    <div class="flex-1">
-                        <span class="text-sm font-medium ${textColor}">${songName}</span>
-                        <span class="text-xs text-gray-400 ml-2">(${song.type})</span>
-                    </div>
-                    ${isCurrentSong ? '<div class="text-xs text-amber-300 font-semibold">CURRENT</div>' : ''}
-                </div>
-            `;
+                `;
+            }
         }).join('');
+    }
+
+    parsePlaylistSongDetails(searchString) {
+        if (!searchString) return { title: 'Unknown Song', artist: 'Unknown Artist' };
+        
+        // Try to parse the search string to extract title and artist
+        // Common patterns: "Song Title Artist Name", "Song Title by Artist", etc.
+        const parts = searchString.split(' ');
+        
+        // Look for common separators or patterns
+        if (searchString.includes(' by ')) {
+            const [title, artist] = searchString.split(' by ');
+            return { title: title.trim(), artist: artist.trim() };
+        }
+        
+        // For orchestral/instrumental versions, try to identify the original song
+        if (searchString.includes('Orchestral') || searchString.includes('Piano') || searchString.includes('Instrumental')) {
+            // Pattern: "Song Title Artist/Version Info"
+            // Take first 2-3 words as title, rest as artist/version
+            if (parts.length >= 3) {
+                const title = parts.slice(0, 2).join(' ');
+                const artist = parts.slice(2).join(' ');
+                return { title, artist };
+            }
+        }
+        
+        // Default: first 2 words as title, rest as artist
+        if (parts.length >= 3) {
+            const title = parts.slice(0, 2).join(' ');
+            const artist = parts.slice(2).join(' ');
+            return { title, artist };
+        } else if (parts.length === 2) {
+            return { title: parts[0], artist: parts[1] };
+        }
+        
+        return { title: searchString, artist: 'Various Artists' };
     }
 
     async jumpToPlaylistSong(index) {
@@ -1261,6 +1547,347 @@ class VirtualJukebox {
                 </div>
             </div>
         `;
+    }
+
+    async suppressSong(index) {
+        try {
+            const response = await fetch('/api/playlist/suppress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ index: index })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.showToast(data.message, 'success');
+            } else {
+                throw new Error('Failed to suppress song');
+            }
+        } catch (error) {
+            console.error('Error suppressing song:', error);
+            this.showToast('Failed to suppress song', 'error');
+        }
+    }
+
+    async unsuppressSong(index) {
+        try {
+            const response = await fetch('/api/playlist/unsuppress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ index: index })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.showToast(data.message, 'success');
+            } else {
+                throw new Error('Failed to unsuppress song');
+            }
+        } catch (error) {
+            console.error('Error unsuppressing song:', error);
+            this.showToast('Failed to unsuppress song', 'error');
+        }
+    }
+
+    // Pre-buffering system to reduce loading delays
+    preBufferUpcomingSongs() {
+        if (!this.player || !this.isPlayerReady) return;
+        
+        // Get next few songs to pre-buffer
+        const songsToBuffer = [];
+        
+        // Add queue songs
+        if (this.currentQueue && this.currentQueue.length > 0) {
+            songsToBuffer.push(...this.currentQueue.slice(0, this.maxPreBuffer));
+        }
+        
+        // If queue is short, add fallback songs
+        if (songsToBuffer.length < this.maxPreBuffer) {
+            this.preBufferFallbackSongs(this.maxPreBuffer - songsToBuffer.length);
+        }
+        
+        // Pre-buffer the songs
+        songsToBuffer.forEach((song, index) => {
+            if (song.videoId && !this.preBufferQueue.includes(song.videoId)) {
+                setTimeout(() => this.preBufferSong(song.videoId), index * 1000); // Stagger requests
+            }
+        });
+    }
+
+    async preBufferFallbackSongs(count) {
+        try {
+            const response = await fetch('/api/playlist/status');
+            const data = await response.json();
+            
+            // Get upcoming fallback songs
+            const upcomingSongs = [];
+            for (let i = 1; i <= count && i < 10; i++) { // Don't go too far ahead
+                const nextIndex = (data.currentIndex + i) % data.totalSongs;
+                upcomingSongs.push({ index: nextIndex });
+            }
+            
+            // Pre-buffer these fallback songs
+            upcomingSongs.forEach((songInfo, index) => {
+                setTimeout(() => this.preBufferFallbackSong(songInfo.index), (index + 1) * 1500);
+            });
+        } catch (error) {
+            console.error('Error pre-buffering fallback songs:', error);
+        }
+    }
+
+    async preBufferFallbackSong(playlistIndex) {
+        try {
+            const response = await fetch('/api/playlist/full');
+            const data = await response.json();
+            
+            if (data.playlist && data.playlist[playlistIndex]) {
+                const playlistItem = data.playlist[playlistIndex];
+                const searchResults = await this.searchForPreBuffer(playlistItem.search);
+                
+                if (searchResults && searchResults.length > 0) {
+                    this.preBufferSong(searchResults[0].videoId);
+                }
+            }
+        } catch (error) {
+            console.error('Error pre-buffering fallback song:', error);
+        }
+    }
+
+    async searchForPreBuffer(query) {
+        try {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=1`);
+            const data = await response.json();
+            return data.results || [];
+        } catch (error) {
+            console.error('Error searching for pre-buffer:', error);
+            return [];
+        }
+    }
+
+    preBufferSong(videoId) {
+        if (!videoId || this.preBufferQueue.includes(videoId)) return;
+        
+        try {
+            // Create a hidden iframe to pre-load the video
+            const preBufferFrame = document.createElement('iframe');
+            preBufferFrame.style.display = 'none';
+            preBufferFrame.style.width = '1px';
+            preBufferFrame.style.height = '1px';
+            preBufferFrame.src = `https://www.youtube.com/embed/${videoId}?autoplay=0&mute=1&controls=0`;
+            preBufferFrame.setAttribute('data-video-id', videoId);
+            preBufferFrame.setAttribute('data-buffer-time', new Date().toISOString());
+            
+            document.body.appendChild(preBufferFrame);
+            
+            // Add to pre-buffer queue
+            this.preBufferQueue.push(videoId);
+            this.updateBufferStatus();
+            
+            // Remove old pre-buffered videos to save memory
+            if (this.preBufferQueue.length > this.maxPreBuffer * 2) {
+                const oldVideoId = this.preBufferQueue.shift();
+                const oldFrame = document.querySelector(`iframe[data-video-id="${oldVideoId}"]`);
+                if (oldFrame) {
+                    oldFrame.remove();
+                }
+            }
+            
+            // Remove the frame after 30 seconds to save memory
+            setTimeout(() => {
+                if (preBufferFrame.parentNode) {
+                    preBufferFrame.remove();
+                }
+                const index = this.preBufferQueue.indexOf(videoId);
+                if (index > -1) {
+                    this.preBufferQueue.splice(index, 1);
+                    this.updateBufferStatus();
+                }
+            }, 30000);
+            
+            console.log(`Pre-buffering: ${videoId}`);
+            this.showToast(`Buffered song ${this.preBufferQueue.length}/${this.maxPreBuffer}`, 'info');
+        } catch (error) {
+            console.error('Error pre-buffering song:', error);
+        }
+    }
+
+    updateBufferStatus() {
+        if (this.bufferCount) {
+            this.bufferCount.textContent = this.preBufferQueue.length;
+            
+            // Update buffer status color based on connection quality
+            if (this.bufferStatus) {
+                const qualityText = this.connectionQuality === 'good' ? 'Good' :
+                                  this.connectionQuality === 'fair' ? 'Fair' : 'Poor';
+                
+                this.bufferStatus.className = `px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer ${
+                    this.connectionQuality === 'good' ? 'bg-green-600' :
+                    this.connectionQuality === 'fair' ? 'bg-yellow-600' : 'bg-red-600'
+                }`;
+                
+                this.bufferStatus.title = `Connection: ${qualityText} | Buffered: ${this.preBufferQueue.length}/${this.maxPreBuffer} songs | Click to buffer more`;
+            }
+        }
+    }
+
+    // Enhanced playSong method with better buffering
+    playSong(videoId) {
+        if (this.player && this.isPlayerReady) {
+            // Show buffering indicator
+            this.showBufferingIndicator();
+            
+            // Set quality to auto (YouTube will choose best for connection)
+            this.player.setPlaybackQuality('auto');
+            
+            // Load and play the video
+            this.player.loadVideoById({
+                videoId: videoId,
+                startSeconds: 0,
+                suggestedQuality: 'auto'
+            });
+            
+            this.showPlayerControls();
+            
+            // Pre-buffer next songs when current song starts
+            setTimeout(() => this.preBufferUpcomingSongs(), 2000);
+        }
+    }
+
+    showBufferingIndicator() {
+        // Add a subtle buffering indicator to the now playing section
+        const bufferingDiv = document.createElement('div');
+        bufferingDiv.id = 'bufferingIndicator';
+        bufferingDiv.className = 'absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs';
+        bufferingDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Loading...';
+        
+        const nowPlayingContainer = this.nowPlaying.querySelector('div');
+        if (nowPlayingContainer) {
+            nowPlayingContainer.style.position = 'relative';
+            nowPlayingContainer.appendChild(bufferingDiv);
+            
+            // Remove after 10 seconds or when song starts playing
+            setTimeout(() => {
+                const indicator = document.getElementById('bufferingIndicator');
+                if (indicator) indicator.remove();
+            }, 10000);
+        }
+    }
+
+    // Override onPlayerStateChange to handle buffering better
+    onPlayerStateChange(event) {
+        // Remove buffering indicator when video starts
+        if (event.data === YT.PlayerState.PLAYING) {
+            const indicator = document.getElementById('bufferingIndicator');
+            if (indicator) indicator.remove();
+            
+            this.isPlaying = true;
+            this.playPauseBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+            this.startProgressTracking();
+        } else if (event.data === YT.PlayerState.PAUSED) {
+            this.isPlaying = false;
+            this.playPauseBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play';
+            this.stopProgressTracking();
+        } else if (event.data === YT.PlayerState.BUFFERING) {
+            // Show buffering indicator
+            this.showBufferingIndicator();
+            this.showToast('Buffering... Please wait', 'info');
+        } else if (event.data === YT.PlayerState.ENDED) {
+            // Check if current song is a mic break
+            if (this.currentSong && this.currentSong.type === 'mic-break') {
+                this.showToast('Mic break ended - click Next Song when ready', 'info');
+            } else {
+                this.playNextSong();
+            }
+        }
+    }
+
+    // Connection quality monitoring
+    initializeConnectionMonitoring() {
+        this.connectionQuality = 'good'; // good, fair, poor
+        this.bufferHealthCheck();
+        
+        // Monitor connection every 30 seconds
+        setInterval(() => this.bufferHealthCheck(), 30000);
+        
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            this.showToast('Connection restored!', 'success');
+            this.connectionQuality = 'good';
+        });
+        
+        window.addEventListener('offline', () => {
+            this.showToast('Connection lost - using cached songs', 'warning');
+            this.connectionQuality = 'poor';
+        });
+    }
+
+    async bufferHealthCheck() {
+        const startTime = Date.now();
+        
+        try {
+            // Test connection speed with a small API call
+            await fetch('/api/playlist/status');
+            const responseTime = Date.now() - startTime;
+            
+            console.log(`🌐 Connection test: ${responseTime}ms`);
+            
+            // Adjust buffering strategy based on response time
+            if (responseTime < 500) {
+                this.connectionQuality = 'good';
+                this.maxPreBuffer = 3;
+            } else if (responseTime < 2000) {
+                this.connectionQuality = 'fair';
+                this.maxPreBuffer = 5; // Buffer more on slower connections
+                this.showToast(`Slow connection detected (${responseTime}ms) - increasing buffer`, 'info');
+            } else {
+                this.connectionQuality = 'poor';
+                this.maxPreBuffer = 8; // Buffer even more on very slow connections
+                this.showToast(`Very slow connection (${responseTime}ms) - buffering more songs`, 'warning');
+            }
+            
+            this.updateBufferStatus();
+        } catch (error) {
+            this.connectionQuality = 'poor';
+            this.maxPreBuffer = 8;
+            console.error('Connection health check failed:', error);
+        }
+    }
+
+    forceBufferMore() {
+        this.showToast('Force buffering more songs...', 'info');
+        this.maxPreBuffer = Math.min(this.maxPreBuffer + 3, 10); // Increase buffer, max 10
+        this.preBufferUpcomingSongs();
+    }
+
+    showBufferDebug() {
+        const debugInfo = {
+            connectionQuality: this.connectionQuality,
+            maxPreBuffer: this.maxPreBuffer,
+            currentBufferCount: this.preBufferQueue.length,
+            bufferedVideoIds: this.preBufferQueue,
+            queueLength: this.currentQueue ? this.currentQueue.length : 0,
+            currentSong: this.currentSong ? this.currentSong.title : 'None'
+        };
+        
+        console.log('🎵 Buffer Debug Info:', debugInfo);
+        
+        // Show debug info in a toast
+        const debugText = `Connection: ${this.connectionQuality} | Buffered: ${this.preBufferQueue.length}/${this.maxPreBuffer} | Queue: ${this.currentQueue ? this.currentQueue.length : 0}`;
+        this.showToast(debugText, 'info');
+        
+        // Also show in alert for easy viewing
+        alert(`Buffer Debug Info:
+Connection Quality: ${this.connectionQuality}
+Max Buffer Size: ${this.maxPreBuffer}
+Currently Buffered: ${this.preBufferQueue.length} songs
+Queue Length: ${this.currentQueue ? this.currentQueue.length : 0}
+Current Song: ${this.currentSong ? this.currentSong.title : 'None'}
+
+Check browser console (F12) for detailed video IDs`);
     }
 }
 

@@ -193,28 +193,32 @@
     
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
-        // Get the current URL and create the user interface URL
-        const currentHost = window.location.host;
-        const protocol = window.location.protocol;
-        const userUrl = `${protocol}//${currentHost}/user`;
-        
-        // Generate QR code
-        QRCode.toCanvas(document.getElementById('qrcode'), userUrl, {
-            width: 300,
-            margin: 2,
-            color: {
-                dark: '#333333',
-                light: '#FFFFFF'
-            }
-        }, function (error) {
-            if (error) {
-                console.error('QR Code generation failed:', error);
-                document.getElementById('qrcode').innerHTML = '<p>QR Code generation failed</p>';
-            }
-        });
-        
-        // Add some interactivity
+        // Wait for DOM to be ready
         document.addEventListener('DOMContentLoaded', function() {
+            // Get the current URL and create the user interface URL
+            const currentHost = window.location.host;
+            const protocol = window.location.protocol;
+            const userUrl = `${protocol}//${currentHost}/user`;
+            
+            console.log('Generating QR code for:', userUrl);
+            
+            // Generate QR code
+            QRCode.toCanvas(document.getElementById('qrcode'), userUrl, {
+                width: 300,
+                margin: 2,
+                color: {
+                    dark: '#333333',
+                    light: '#FFFFFF'
+                }
+            }, function (error) {
+                if (error) {
+                    console.error('QR Code generation failed:', error);
+                    document.getElementById('qrcode').innerHTML = '<p style="color: red;">QR Code generation failed</p>';
+                } else {
+                    console.log('QR Code generated successfully');
+                }
+            });
+            
             // Add click handler to QR code for desktop users
             document.getElementById('qrcode').addEventListener('click', function() {
                 window.open(userUrl, '_blank');
