@@ -2,11 +2,9 @@
 
 A modern web-based wedding jukebox with **YouTube Music & Spotify integration**, **dual WiFi Pi setup**, and **real-time collaboration**. Perfect for weddings, parties, and events!
 
-## ✨ Features
-
-### 🎵 **Music & Collaboration**
+## 🎵 **Music & Collaboration**
 - **YouTube Music Integration**: Search and add real songs from YouTube Music
-- **Spotify Integration**: Search Spotify catalog with 30-second previews
+- **Spotify Integration**: Search Spotify catalog with 30-second previews  
 - **Dual Music Sources**: Choose between YouTube Music and Spotify for searches
 - **Real-time Collaboration**: Multiple guests can add songs simultaneously
 - **Live Queue Management**: See the queue update in real-time across all devices
@@ -283,9 +281,22 @@ The app uses YouTube Music via the unofficial `ytmusicapi` Python library:
 - **Rich Metadata**: Song titles, artists, albums, thumbnails, duration
 - **High Quality**: Streams directly from YouTube Music
 
+### Currently Implemented Music Services
+
+**YouTube Music** (Primary Service)
+- Real-time search of YouTube Music catalog
+- No ads with Premium account authentication
+- Rich metadata: song titles, artists, albums, thumbnails, duration
+- High quality streaming directly from YouTube Music
+
+**Spotify** (Secondary Service)
+- Full Spotify catalog search via Web API
+- 30-second song previews
+- Rich metadata and album artwork
+- Client credentials authentication (no user login required)
+
 ### Future Music Services
-The app structure supports integration with other music services:
-- Spotify Web API
+The app structure supports integration with additional music services:
 - Apple Music API  
 - Amazon Music API (when available)
 - SoundCloud API
