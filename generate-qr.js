@@ -64,6 +64,7 @@ async function generateQRCodes() {
         console.log('📱 For Wedding Guests:');
         console.log(`   • Print qr-guest-interface.png`);
         console.log(`   • Or open qr-codes.html in browser and print`);
+        console.log(`   • Or display http://${localIP}:${port}/qr on a tablet/laptop`);
         console.log('');
         console.log('🎛️ For DJ Setup:');
         console.log(`   • Use qr-dj-interface.png for quick access`);

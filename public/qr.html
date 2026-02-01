@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Jukebox - Add Your Songs!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 30px;
+            padding: 60px 40px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 100%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .title {
+            font-size: 3em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .subtitle {
+            font-size: 1.5em;
+            color: #555;
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+        
+        .qr-container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin: 40px 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+        }
+        
+        .qr-code {
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .instructions {
+            font-size: 1.3em;
+            color: #333;
+            margin-top: 30px;
+            line-height: 1.6;
+        }
+        
+        .step {
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+        
+        .step-number {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            line-height: 30px;
+            font-weight: bold;
+            margin-right: 15px;
+            font-size: 0.9em;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            font-size: 1.1em;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .music-notes {
+            font-size: 2em;
+            margin: 20px 0;
+            opacity: 0.7;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 20px;
+            }
+            
+            .title {
+                font-size: 2.2em;
+            }
+            
+            .subtitle {
+                font-size: 1.2em;
+            }
+            
+            .qr-code {
+                width: 250px;
+                height: 250px;
+            }
+            
+            .instructions {
+                font-size: 1.1em;
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="music-notes floating">🎵 🎶 🎵</div>
+        
+        <h1 class="title">Wedding Jukebox</h1>
+        <p class="subtitle">Help us create the perfect playlist!</p>
+        
+        <div class="qr-container pulse">
+            <canvas id="qrcode" class="qr-code"></canvas>
+        </div>
+        
+        <div class="instructions">
+            <div class="step">
+                <span class="step-number">1</span>
+                <strong>Open your phone's camera</strong>
+            </div>
+            
+            <div class="step">
+                <span class="step-number">2</span>
+                <strong>Point it at the QR code above</strong>
+            </div>
+            
+            <div class="step">
+                <span class="step-number">3</span>
+                <strong>Tap the link that appears</strong>
+            </div>
+            
+            <div class="step">
+                <span class="step-number">4</span>
+                <strong>Search and add your favorite songs!</strong>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>🎉 Thank you for helping make our special day even more memorable! 🎉</p>
+        </div>
+        
+        <div class="music-notes floating" style="animation-delay: 1s;">🎼 ♪ ♫</div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script>
+        // Get the current URL and create the user interface URL
+        const currentHost = window.location.host;
+        const protocol = window.location.protocol;
+        const userUrl = `${protocol}//${currentHost}/user`;
+        
+        // Generate QR code
+        QRCode.toCanvas(document.getElementById('qrcode'), userUrl, {
+            width: 300,
+            margin: 2,
+            color: {
+                dark: '#333333',
+                light: '#FFFFFF'
+            }
+        }, function (error) {
+            if (error) {
+                console.error('QR Code generation failed:', error);
+                document.getElementById('qrcode').innerHTML = '<p>QR Code generation failed</p>';
+            }
+        });
+        
+        // Add some interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add click handler to QR code for desktop users
+            document.getElementById('qrcode').addEventListener('click', function() {
+                window.open(userUrl, '_blank');
+            });
+            
+            // Add hover effect
+            document.getElementById('qrcode').style.cursor = 'pointer';
+            document.getElementById('qrcode').title = 'Click to open song request page';
+        });
+    </script>
+</body>
+</html>
