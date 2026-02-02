@@ -216,6 +216,47 @@ fi
 # Create management scripts
 print_status "Creating management scripts..."
 
+# YouTube Music authentication helper script
+tee "$APP_DIR/setup-youtube-auth.sh" > /dev/null <<'EOF'
+#!/bin/bash
+echo "🎵 Setting up YouTube Music Authentication"
+echo "=========================================="
+
+cd "$(dirname "$0")"
+
+# Check if python3-venv is installed
+if ! python3 -m venv --help &> /dev/null; then
+    echo "Installing python3-venv..."
+    sudo apt update
+    sudo apt install -y python3-venv
+fi
+
+# Create temporary virtual environment
+echo "Creating temporary virtual environment..."
+python3 -m venv auth-venv
+
+# Activate and install ytmusicapi
+echo "Installing ytmusicapi..."
+source auth-venv/bin/activate
+pip install ytmusicapi
+
+# Run authentication setup
+echo ""
+echo "Starting YouTube Music authentication setup..."
+echo "Follow the instructions to authenticate with your YouTube Music account."
+python3 setup_auth.py
+
+# Cleanup
+deactivate
+rm -rf auth-venv
+
+echo ""
+echo "✅ YouTube Music authentication setup complete!"
+echo "The oauth.json file has been created and will be used by the Docker container."
+EOF
+
+chmod +x "$APP_DIR/setup-youtube-auth.sh"
+
 # Update script
 tee "$APP_DIR/update.sh" > /dev/null <<'EOF'
 #!/bin/bash
@@ -319,10 +360,7 @@ echo "=============="
 echo ""
 echo "1. 🎵 Setup YouTube Music Authentication (optional):"
 echo "   cd $APP_DIR"
-echo "   # Install Python temporarily for auth setup"
-echo "   sudo apt install -y python3-pip"
-echo "   pip3 install ytmusicapi"
-echo "   python3 setup_auth.py"
+echo "   ./setup-youtube-auth.sh"
 echo ""
 echo "2. 🚀 Start the service:"
 echo "   sudo systemctl start wedding-jukebox-docker"
