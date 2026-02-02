@@ -185,9 +185,14 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable wedding-jukebox-docker
 
-# Create data directories
+# Create data directories and files
 mkdir -p "$APP_DIR/data"
 mkdir -p "$APP_DIR/backups"
+
+# Create required files if they don't exist (prevents Docker from creating them as directories)
+touch "$APP_DIR/oauth.json" "$APP_DIR/wedding-play-history.json"
+echo '{}' > "$APP_DIR/oauth.json" 2>/dev/null || true
+echo '[]' > "$APP_DIR/wedding-play-history.json" 2>/dev/null || true
 
 # Set permissions
 sudo chown -R pi:pi "$APP_DIR"

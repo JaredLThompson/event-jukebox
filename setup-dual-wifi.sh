@@ -128,14 +128,42 @@ sudo systemctl stop dnsmasq
 
 echo "🌐 Configuring network interfaces..."
 
-# Configure dhcpcd for static IP on hotspot interface
-sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
+# Check if this is Ubuntu (uses netplan) or Raspberry Pi OS (uses dhcpcd)
+if [ -f /etc/netplan/*.yaml ] || [ -d /etc/netplan ]; then
+    echo "   Detected Ubuntu - configuring with netplan..."
+    
+    # Create netplan configuration for hotspot interface
+    sudo tee /etc/netplan/99-wedding-jukebox-hotspot.yaml > /dev/null << EOF
+network:
+  version: 2
+  wifis:
+    $HOTSPOT_INTERFACE:
+      addresses:
+        - 192.168.4.1/24
+      dhcp4: false
+      dhcp6: false
+EOF
+    
+    # Apply netplan configuration
+    sudo netplan apply
+    
+elif [ -f /etc/dhcpcd.conf ]; then
+    echo "   Detected Raspberry Pi OS - configuring with dhcpcd..."
+    
+    # Configure dhcpcd for static IP on hotspot interface
+    sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
 
 # Wedding Jukebox Hotspot Configuration
 interface $HOTSPOT_INTERFACE
 static ip_address=192.168.4.1/24
 nohook wpa_supplicant
 EOF
+    
+else
+    echo "   Unknown network configuration system - using manual IP assignment..."
+    # Fallback: manually assign IP
+    sudo ip addr add 192.168.4.1/24 dev $HOTSPOT_INTERFACE 2>/dev/null || true
+fi
 
 echo "📡 Configuring WiFi hotspot..."
 
@@ -228,6 +256,25 @@ exit 0
 EOF
 
 sudo chmod +x /etc/rc.local
+
+# Create systemd service to ensure hotspot IP is set on boot
+sudo tee /etc/systemd/system/wedding-jukebox-hotspot.service > /dev/null << EOF
+[Unit]
+Description=Wedding Jukebox Hotspot IP Configuration
+After=network.target
+Before=hostapd.service dnsmasq.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'ip addr show $HOTSPOT_INTERFACE | grep -q "192.168.4.1" || ip addr add 192.168.4.1/24 dev $HOTSPOT_INTERFACE'
+ExecStart=/bin/sleep 2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable wedding-jukebox-hotspot
 
 echo "🚀 Enabling services..."
 # Unmask hostapd service (it gets masked during installation)
