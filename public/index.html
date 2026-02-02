@@ -131,9 +131,9 @@
                     </div>
                 </div>
                 
-                <!-- Audio Player -->
+                <!-- Audio Player (Server-side audio - no player needed) -->
                 <div id="audioPlayer" class="hidden mb-4">
-                    <div id="youtubePlayer"></div>
+                    <!-- Server-side audio playback - no browser player needed -->
                 </div>
                 
                 <!-- Audio Visualizer -->
@@ -170,6 +170,9 @@
                     <button id="fadeNextBtn" class="player-btn bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 px-6 py-2 rounded-lg transition-all transform hover:scale-105 font-semibold shadow-lg">
                         <i class="fas fa-volume-down mr-2"></i>Fade to Next
                     </button>
+                    <button id="testAudioBtn" class="player-btn bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-volume-up mr-2"></i>Test Audio
+                    </button>
                     <button id="showVisualizerBtn" class="player-btn bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition-colors">
                         <i class="fas fa-wave-square mr-2"></i>Show Visualizer
                     </button>
@@ -181,6 +184,12 @@
                 <!-- Volume Control -->
                 <div id="volumeControl" class="mt-4 hidden">
                     <input type="range" id="volumeSlider" min="0" max="100" value="50" class="volume-slider w-full">
+                </div>
+                
+                <!-- Buffering Status -->
+                <div id="bufferingStatus" class="mt-2 text-sm text-yellow-400 hidden flex items-center">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                    <span>📦 Buffering...</span>
                 </div>
                 
                 <!-- Progress Bar -->
@@ -297,12 +306,7 @@
                     <button id="viewHistoryBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
                         <i class="fas fa-history mr-2"></i>History (<span id="historyCount">0</span>)
                     </button>
-                    <div id="bufferStatus" class="bg-blue-600 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer" title="Click to force buffer more songs">
-                        <i class="fas fa-wifi mr-2"></i>Buffer: <span id="bufferCount">0</span>
-                    </div>
-                    <button id="debugBufferBtn" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
-                        <i class="fas fa-bug mr-2"></i>Debug Buffer
-                    </button>
+                    <!-- Buffer elements removed - now using server-side pre-buffering -->
                 </div>
             </h2>
             
@@ -532,7 +536,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <!-- YouTube iframe API no longer needed - using server-side audio -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="js/app.js"></script>
 </body>

@@ -612,6 +612,62 @@ app.get('/api/playlist/status', (req, res) => {
   });
 });
 
+// New endpoint for getting pre-resolved fallback songs
+app.get('/api/playlist/next-resolved', async (req, res) => {
+  try {
+    const playlist = getCurrentPlaylist();
+    if (playlist.length === 0) {
+      return res.json({ nextSong: null });
+    }
+    
+    // Get the next song that would be played
+    let nextIndex = fallbackPlaylistIndex;
+    let attempts = 0;
+    const maxAttempts = playlist.length;
+    
+    // Find next non-suppressed song
+    while (attempts < maxAttempts && suppressedSongs.has(nextIndex)) {
+      nextIndex = (nextIndex + 1) % playlist.length;
+      attempts++;
+    }
+    
+    if (attempts >= maxAttempts) {
+      return res.json({ nextSong: null });
+    }
+    
+    const playlistItem = playlist[nextIndex];
+    
+    // Search for the song to get full details
+    const searchResults = await searchYouTubeMusic(playlistItem.search, 1);
+    if (searchResults.results && searchResults.results.length > 0) {
+      const song = searchResults.results[0];
+      
+      const resolvedSong = {
+        id: `fallback-${nextIndex}-${Date.now()}`,
+        videoId: song.videoId,
+        title: song.title,
+        artist: song.artist,
+        duration: song.duration_text,
+        albumArt: song.thumbnail,
+        album: song.album,
+        addedBy: activePlaylist === 'wedding' ? '🎵 Wedding DJ' : '✨ Bride\'s Collection',
+        addedAt: new Date().toISOString(),
+        source: 'fallback',
+        type: playlistItem.type,
+        playlist: activePlaylist,
+        playlistIndex: nextIndex
+      };
+      
+      res.json({ nextSong: resolvedSong });
+    } else {
+      res.json({ nextSong: null });
+    }
+  } catch (error) {
+    console.error('Error getting next resolved song:', error);
+    res.status(500).json({ error: 'Failed to get next song' });
+  }
+});
+
 app.get('/api/playlist/full', (req, res) => {
   const playlist = getCurrentPlaylist();
   res.json({
@@ -1069,6 +1125,15 @@ app.post('/api/history/clear', (req, res) => {
   });
 });
 
+app.post('/api/audio/test', (req, res) => {
+  console.log('🧪 Test audio requested');
+  
+  // Emit test audio command to audio service
+  io.emit('testAudioCommand');
+  
+  res.json({ success: true, message: 'Test audio command sent' });
+});
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -1091,6 +1156,33 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     connectedUsers.delete(socket.id);
     socket.broadcast.emit('userCount', connectedUsers.size);
+  });
+  
+  // Handle audio service commands and forward to audio service
+  socket.on('pauseCommand', () => {
+    console.log('⏸️ Pause command received from web interface, forwarding to audio service');
+    io.emit('pauseCommand');
+  });
+  
+  socket.on('resumeCommand', () => {
+    console.log('▶️ Resume command received from web interface, forwarding to audio service');
+    io.emit('resumeCommand');
+  });
+  
+  socket.on('skipCommand', () => {
+    console.log('⏭️ Skip command received from web interface, forwarding to audio service');
+    io.emit('skipCommand');
+  });
+  
+  socket.on('manualPlayCommand', () => {
+    console.log('🎵 Manual play command received from web interface, forwarding to audio service');
+    io.emit('manualPlayCommand');
+  });
+  
+  // Handle audio service status updates and forward to all clients
+  socket.on('audioServiceStatus', (data) => {
+    // Forward audio service status to all connected clients
+    io.emit('audioServiceStatus', data);
   });
 });
 

@@ -117,9 +117,14 @@ services:
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
       - ./wedding-play-history.json:/app/wedding-play-history.json
+      # Audio device access
+      - /dev/snd:/dev/snd
+    devices:
+      - /dev/snd:/dev/snd
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - PULSE_RUNTIME_PATH=/run/user/1000/pulse
     restart: unless-stopped
     networks:
       - jukebox-network

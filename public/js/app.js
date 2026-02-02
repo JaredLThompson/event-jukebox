@@ -90,8 +90,7 @@ class VirtualJukebox {
             }
         });
         
-        // Initialize YouTube player when API is ready
-        window.onYouTubeIframeAPIReady = () => this.initializeYouTubePlayer();
+        // Server-side audio - no YouTube Player API needed
     }
 
     initializeSettingsUI() {
@@ -233,10 +232,7 @@ class VirtualJukebox {
         this.historyItems = document.getElementById('historyItems');
         this.historyEmpty = document.getElementById('historyEmpty');
         
-        // Buffer status elements
-        this.bufferStatus = document.getElementById('bufferStatus');
-        this.bufferCount = document.getElementById('bufferCount');
-        this.debugBufferBtn = document.getElementById('debugBufferBtn');
+        // Buffer elements removed - now using server-side pre-buffering
         
         // Visualizer elements
         this.visualizerContainer = document.getElementById('visualizerContainer');
@@ -268,6 +264,12 @@ class VirtualJukebox {
             showVisualizerBtn.addEventListener('click', () => this.toggleVisualizer());
         }
         
+        // Test audio button
+        const testAudioBtn = document.getElementById('testAudioBtn');
+        if (testAudioBtn) {
+            testAudioBtn.addEventListener('click', () => this.testAudio());
+        }
+        
         // Tab switching
         this.searchTab.addEventListener('click', () => this.switchToSearchTab());
         this.manualTab.addEventListener('click', () => this.switchToManualTab());
@@ -285,8 +287,17 @@ class VirtualJukebox {
             }
         });
         
-        // Audio controls
-        this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        // Audio controls - with debugging
+        console.log('🔧 Binding playPauseBtn event listener, element:', this.playPauseBtn);
+        if (this.playPauseBtn) {
+            this.playPauseBtn.addEventListener('click', () => {
+                console.log('🔧 Play/Pause button clicked - event listener triggered!');
+                this.togglePlayPause();
+            });
+        } else {
+            console.error('❌ playPauseBtn element not found!');
+        }
+        
         this.volumeBtn.addEventListener('click', () => this.toggleVolumeControl());
         this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
         
@@ -316,9 +327,7 @@ class VirtualJukebox {
         this.closeHistoryBtn.addEventListener('click', () => this.hidePlayHistory());
         this.exportHistoryBtn.addEventListener('click', () => this.exportPlayHistory());
         
-        // Buffer controls
-        this.bufferStatus.addEventListener('click', () => this.forceBufferMore());
-        this.debugBufferBtn.addEventListener('click', () => this.showBufferDebug());
+        // Buffer controls removed - now using server-side pre-buffering
         
         // Playlist search functionality
         this.playlistSearchInput.addEventListener('input', (e) => this.filterPlaylist(e.target.value));
@@ -454,6 +463,11 @@ class VirtualJukebox {
 
         this.socket.on('disconnect', () => {
             this.showToast('Disconnected from jukebox', 'error');
+        });
+        
+        // Listen for audio service status updates (progress, etc.)
+        this.socket.on('audioServiceStatus', (data) => {
+            this.updateAudioServiceStatus(data);
         });
     }
 
@@ -663,7 +677,7 @@ class VirtualJukebox {
                 duration: '3:30', // Placeholder - would come from music service
                 albumArt: 'https://via.placeholder.com/100x100/6366f1/ffffff?text=♪'
             },
-            addedBy: this.userName.value.trim() || 'Anonymous'
+            addedBy: this.userName.value.trim() || 'DJ'
         };
 
         try {
@@ -688,6 +702,15 @@ class VirtualJukebox {
     }
 
     async playNextSong() {
+        // Check if we're using the audio service (headless mode or fallback songs)
+        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+            // Send skip command directly to audio service
+            this.socket.emit('skipCommand');
+            this.showToast('Playing next song!', 'success');
+            return;
+        }
+        
+        // Fallback to server API for non-audio service mode
         try {
             const response = await fetch('/api/queue/next', {
                 method: 'POST'
@@ -709,53 +732,36 @@ class VirtualJukebox {
     }
 
     async fadeToNextSong() {
-        if (!this.player || !this.isPlayerReady || !this.isPlaying) {
-            // If not playing, just go to next song normally
-            this.playNextSong();
+        console.log('🎵 Fade to Next button clicked');
+        console.log('Current state - isPlaying:', this.isPlaying, 'currentlyPlaying:', this.currentlyPlaying);
+        console.log('Socket connected:', this.socket.connected);
+        
+        // Test socket connection first
+        console.log('🏓 Testing socket connection...');
+        this.socket.emit('ping');
+        this.socket.once('pong', () => {
+            console.log('✅ Socket connection confirmed - pong received');
+        });
+        
+        // Always try to send skip command if something is playing
+        if (this.isPlaying) {
+            console.log('📤 Audio is playing, sending skip command to audio service');
+            console.log('Emitting skipCommand via socket...');
+            this.socket.emit('skipCommand');
+            this.showToast('Skipping to next song...', 'info');
+            
+            // Also try the Next Song API as a fallback after a delay
+            console.log('🔄 Also trying Next Song API as fallback in 2 seconds...');
+            setTimeout(() => {
+                console.log('🔄 Executing fallback Next Song API call...');
+                this.playNextSong();
+            }, 2000);
             return;
         }
-
-        try {
-            // Get current volume
-            const currentVolume = this.player.getVolume();
-            const fadeSteps = 20; // Number of fade steps
-            const fadeInterval = 100; // Milliseconds between steps
-            const volumeStep = currentVolume / fadeSteps;
-
-            // Show fade indicator
-            this.showToast('Fading to next song...', 'info');
-
-            // Fade out current song
-            let step = 0;
-            const fadeOut = setInterval(() => {
-                step++;
-                const newVolume = Math.max(0, currentVolume - (volumeStep * step));
-                this.setVolume(newVolume);
-
-                if (step >= fadeSteps || newVolume <= 0) {
-                    clearInterval(fadeOut);
-                    
-                    // Stop the current song completely before starting next
-                    this.player.pauseVideo();
-                    
-                    // Play next song after a brief pause
-                    setTimeout(() => {
-                        this.playNextSong();
-                        
-                        // Restore volume after the new song starts
-                        setTimeout(() => {
-                            this.setVolume(currentVolume);
-                            this.volumeSlider.value = currentVolume;
-                        }, 500);
-                    }, 100);
-                }
-            }, fadeInterval);
-
-        } catch (error) {
-            console.error('Error during fade transition:', error);
-            this.showToast('Fade failed, skipping to next song', 'error');
-            this.playNextSong();
-        }
+        
+        // If nothing seems to be playing, try to start the next song
+        console.log('🚀 Nothing playing, trying to start next song...');
+        this.playNextSong();
     }
 
     toggleVisualizer() {
@@ -909,8 +915,7 @@ class VirtualJukebox {
         this.currentQueue = queue; // Store current queue for reordering
         this.queueCount.textContent = queue.length;
         
-        // Pre-buffer upcoming songs
-        this.preBufferUpcomingSongs();
+        // Server-side pre-buffering now handles this automatically
         
         if (queue.length === 0) {
             this.queueList.innerHTML = '<p class="text-gray-400 text-center py-8">No songs in queue</p>';
@@ -1223,7 +1228,7 @@ class VirtualJukebox {
     }
 
     async addYouTubeSong(videoId, title, artist, thumbnail, duration) {
-        const userName = this.userName.value.trim() || 'Anonymous';
+        const userName = this.userName.value.trim() || 'DJ';
         
         const songData = {
             song: {
@@ -1265,7 +1270,7 @@ class VirtualJukebox {
     }
 
     async addSpotifySong(trackId, title, artist, thumbnail, duration, album, uri, previewUrl) {
-        const userName = this.userName.value.trim() || 'Anonymous';
+        const userName = this.userName.value.trim() || 'DJ';
         
         const songData = {
             song: {
@@ -1485,7 +1490,38 @@ class VirtualJukebox {
     }
 
     togglePlayPause() {
-        if (!this.player || !this.isPlayerReady) return;
+        console.log('🎵 Play/Pause button clicked');
+        console.log('Current state - isPlaying:', this.isPlaying, 'currentSong:', this.currentSong);
+        
+        // Check if we're using the audio service (headless mode or fallback songs)
+        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+            // Test socket connection first
+            console.log('🏓 Testing socket connection before pause...');
+            this.socket.emit('ping');
+            
+            // Send pause/resume command to audio service
+            if (this.isPlaying) {
+                console.log('📤 Sending pause command to audio service');
+                this.socket.emit('pauseCommand');
+            } else {
+                console.log('📤 Sending resume command to audio service');
+                this.socket.emit('resumeCommand');
+            }
+            return;
+        }
+        
+        // If no song is currently playing, try to start the queue
+        if (!this.currentSong && !this.isPlaying) {
+            console.log('🚀 No song playing, sending manual play command to audio service...');
+            this.socket.emit('manualPlayCommand');
+            return;
+        }
+        
+        // Fallback to YouTube player if available
+        if (!this.player || !this.isPlayerReady) {
+            console.log('⚠️ No YouTube player available');
+            return;
+        }
         
         if (this.isPlaying) {
             this.player.pauseVideo();
@@ -1497,6 +1533,162 @@ class VirtualJukebox {
     setVolume(volume) {
         if (this.player && this.isPlayerReady) {
             this.player.setVolume(volume);
+        }
+    }
+    
+    async testAudio() {
+        const testAudioBtn = document.getElementById('testAudioBtn');
+        if (!testAudioBtn) return;
+        
+        // Disable button and show loading state
+        testAudioBtn.disabled = true;
+        testAudioBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Testing...';
+        
+        try {
+            const response = await fetch('/api/audio/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Show success state
+                testAudioBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Playing Test';
+                testAudioBtn.className = 'player-btn bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors';
+                
+                // Reset button after 5 seconds
+                setTimeout(() => {
+                    testAudioBtn.disabled = false;
+                    testAudioBtn.innerHTML = '<i class="fas fa-volume-up mr-2"></i>Test Audio';
+                    testAudioBtn.className = 'player-btn bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition-colors';
+                }, 5000);
+            } else {
+                throw new Error(result.message || 'Test audio failed');
+            }
+        } catch (error) {
+            console.error('Test audio error:', error);
+            
+            // Show error state
+            testAudioBtn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Error';
+            testAudioBtn.className = 'player-btn bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors';
+            
+            // Reset button after 3 seconds
+            setTimeout(() => {
+                testAudioBtn.disabled = false;
+                testAudioBtn.innerHTML = '<i class="fas fa-volume-up mr-2"></i>Test Audio';
+                testAudioBtn.className = 'player-btn bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition-colors';
+            }, 3000);
+        }
+    }
+    
+    updateAudioServiceStatus(data) {
+        console.log('📊 updateAudioServiceStatus called with:', {
+            isPlaying: data.isPlaying,
+            isPaused: data.isPaused,
+            currentSong: data.currentSong?.title,
+            position: data.position,
+            duration: data.duration
+        });
+        
+        // Update internal playing state
+        this.isPlaying = data.isPlaying;
+        
+        // Update Now Playing display if audio service has a different song
+        if (data.currentSong && data.isPlaying) {
+            const audioServiceSong = data.currentSong;
+            
+            // Check if the audio service song is different from what we're showing
+            if (!this.currentSong || this.currentSong.title !== audioServiceSong.title) {
+                console.log('🔄 Audio service playing different song, updating display:', audioServiceSong.title);
+                
+                // Create a song object that matches our display format
+                const displaySong = {
+                    id: `audio-service-${Date.now()}`,
+                    title: audioServiceSong.title,
+                    artist: audioServiceSong.artist || 'Unknown Artist',
+                    duration: this.formatTime(data.duration),
+                    albumArt: audioServiceSong.albumArt || 'https://via.placeholder.com/100x100/6366f1/ffffff?text=♪',
+                    addedBy: audioServiceSong.addedBy || '🎵 Audio Service',
+                    source: 'headless-audio',
+                    type: audioServiceSong.type || 'song'
+                };
+                
+                this.updateNowPlaying(displaySong);
+            }
+        }
+        
+        // Update play/pause button based on audio service status
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        if (playPauseBtn) {
+            console.log('🔘 Updating play/pause button - isPlaying:', data.isPlaying, 'isPaused:', data.isPaused);
+            
+            if (data.isPlaying) {
+                playPauseBtn.innerHTML = '<i class="fas fa-pause mr-2"></i>Pause';
+                playPauseBtn.classList.remove('hidden');
+                console.log('✅ Button set to Pause');
+            } else if (data.isPaused) {
+                playPauseBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Resume';
+                playPauseBtn.classList.remove('hidden');
+                console.log('✅ Button set to Resume (paused)');
+            } else {
+                playPauseBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Play';
+                // Keep button visible even when not playing
+                playPauseBtn.classList.remove('hidden');
+                console.log('✅ Button set to Play');
+            }
+        } else {
+            console.log('⚠️ Play/pause button not found in DOM');
+        }
+        
+        // Update buffering status
+        const bufferingStatus = document.getElementById('bufferingStatus');
+        if (data.isBuffering && data.bufferingProgress) {
+            if (bufferingStatus) {
+                bufferingStatus.textContent = `📦 Buffering: ${data.bufferingProgress}`;
+                bufferingStatus.classList.remove('hidden');
+            }
+        } else {
+            if (bufferingStatus) {
+                bufferingStatus.classList.add('hidden');
+            }
+        }
+        
+        // Update progress bar if audio service is playing
+        if (data.isPlaying && data.currentSong && data.duration > 0) {
+            const progressPercent = (data.position / data.duration) * 100;
+            
+            // Update progress bar
+            const progressBar = document.getElementById('progressBar');
+            if (progressBar) {
+                progressBar.style.width = `${progressPercent}%`;
+            }
+            
+            // Update time displays
+            const currentTime = document.getElementById('currentTime');
+            const totalTime = document.getElementById('totalTime');
+            
+            if (currentTime) {
+                currentTime.textContent = this.formatTime(data.position);
+            }
+            
+            if (totalTime) {
+                totalTime.textContent = this.formatTime(data.duration);
+            }
+            
+            // Show progress container
+            const progressContainer = document.getElementById('progressContainer');
+            if (progressContainer) {
+                progressContainer.classList.remove('hidden');
+            }
+        } else {
+            // Hide progress container when not playing
+            const progressContainer = document.getElementById('progressContainer');
+            if (progressContainer) {
+                progressContainer.classList.add('hidden');
+            }
         }
     }
 
