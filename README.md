@@ -61,6 +61,14 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 # Then setup dual WiFi (hotspot + internet)
 ./setup-dual-wifi.sh
 
+# IMPORTANT: Setup headless audio service for Pi speakers
+cd /home/pi/wedding-jukebox
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable wedding-jukebox-audio
+sudo systemctl start wedding-jukebox-audio
+
 # Or traditional Pi setup
 curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
 ```
@@ -68,6 +76,12 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 **How dual WiFi works:**
 - **Built-in WiFi (wlan0)**: Connects to venue WiFi for internet
 - **USB WiFi (wlan1)**: Creates "Wedding-Jukebox" hotspot for guests
+
+**NEW: Headless Audio System:**
+- **Real music playback** through Pi speakers (not browser-based)
+- **Any device can be DJ** - laptop, tablet, phone all work
+- **Server-side audio** with pause, resume, skip controls
+- **Automatic queue management** and pre-buffering
 
 ### Option 3: Local Development
 Run the setup script:
@@ -127,17 +141,41 @@ Open your browser to `http://localhost:3000` and start jamming! 🎶
 
 ## 🎵 **How It Works**
 
+### **NEW: Headless Audio Architecture**
+
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Raspberry Pi  │    │   DJ Device      │    │  Sound System  │
-│ (Dual WiFi Hub) │◄──►│  (Browser+Audio) │───►│   (Speakers)    │
+│   DJ Device     │    │   Raspberry Pi   │    │   Sound System  │
+│  (Any Browser)  │◄──►│  Audio Service   │───►│   (Speakers)    │
 │                 │    │                  │    │                 │
-│ • Built-in WiFi │    │ • Plays music    │    │ • Amplifies     │
-│   → Venue net   │    │ • DJ controls    │    │ • Party sound!  │
-│ • USB WiFi      │    │ • Real-time UI   │    │                 │
-│   → Guest hotspot│    │                  │    │                 │
+│ • DJ controls   │    │ • Downloads songs│    │ • Real music    │
+│ • Queue mgmt    │    │ • Plays via mpg123│    │ • Full quality  │
+│ • Real-time UI  │    │ • Progress track │    │ • No buffering  │
+│ • Any device!   │    │ • Pre-buffering  │    │ • Party sound!  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+            ▲                                            ▲
+            │                                            │
+    ┌───────────────┐                                   │
+    │ Guest Devices │                                   │
+    │ (Phones/Tabs) │                                   │
+    │               │                                   │
+    │ • Add songs   │                                   │
+    │ • See queue   │                                   │
+    │ • No audio    │                                   │
+    └───────────────┘                                   │
+                                                        │
+                                              ┌─────────────────┐
+                                              │ Wedding Guests  │
+                                              │ (Dancing! 💃🕺) │
+                                              └─────────────────┘
 ```
+
+**Key Benefits:**
+- **Any device can be DJ** - laptop, tablet, phone all work the same
+- **Real music from Pi** - no browser audio issues or quality loss  
+- **Reliable playback** - server-side processing eliminates buffering
+- **Full DJ control** - pause, resume, skip work perfectly
+- **Guest interaction** - multiple people can add songs simultaneously
 
 **Why USB WiFi Adapter is Essential:**
 - **Single WiFi Pi**: Can only connect to venue OR create hotspot (not both)

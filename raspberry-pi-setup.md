@@ -43,6 +43,96 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 
 ---
 
+## 🎵 **Headless Audio System Setup**
+
+**NEW!** The jukebox now includes a complete headless audio system that plays real music through Pi speakers!
+
+### **What is Headless Audio?**
+- **Real music playback** through Pi speakers (not browser-based)
+- **Server-side audio processing** with mpg123 and yt-dlp
+- **Full DJ controls** - pause, resume, skip, volume control
+- **Automatic queue management** and pre-buffering
+- **Works with any display device** - laptop, tablet, phone
+
+### **Audio System Services**
+
+The headless audio system requires **two services** to run:
+
+1. **`wedding-jukebox`** - Main web server (Docker or native)
+2. **`wedding-jukebox-audio`** - Audio service for Pi speakers
+
+### **Setting Up Audio Service**
+
+After running the main setup script, you need to set up the audio service:
+
+```bash
+cd /home/pi/wedding-jukebox
+
+# Install audio dependencies
+sudo apt update
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+
+# Copy audio service files
+sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Enable and start audio service
+sudo systemctl enable wedding-jukebox-audio
+sudo systemctl start wedding-jukebox-audio
+```
+
+### **Verify Audio Setup**
+
+```bash
+# Check both services are running
+sudo systemctl status wedding-jukebox-docker    # Main web server
+sudo systemctl status wedding-jukebox-audio     # Audio service
+
+# Test audio output
+speaker-test -t wav -c 2
+
+# Check audio service logs
+sudo journalctl -u wedding-jukebox-audio -f
+```
+
+### **Audio Service Management**
+
+```bash
+# Start/stop audio service
+sudo systemctl start wedding-jukebox-audio
+sudo systemctl stop wedding-jukebox-audio
+sudo systemctl restart wedding-jukebox-audio
+
+# View audio service logs
+sudo journalctl -u wedding-jukebox-audio -n 50
+
+# Check audio processes
+ps aux | grep mpg123
+ps aux | grep audio-integration
+```
+
+### **How It Works**
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Web Browser   │    │   Raspberry Pi   │    │   Speakers      │
+│  (DJ Interface) │◄──►│  Audio Service   │───►│  (Real Music!)  │
+│                 │    │                  │    │                 │
+│ • DJ controls   │    │ • Downloads songs│    │ • Party sound   │
+│ • Queue mgmt    │    │ • Plays via mpg123│    │ • Full quality  │
+│ • Real-time UI  │    │ • Progress track │    │ • No buffering  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+**Key Benefits:**
+- **No browser audio issues** - music plays directly from Pi
+- **Better performance** - no audio streaming to browser
+- **Reliable playback** - server-side audio processing
+- **Full DJ control** - pause, resume, skip work perfectly
+- **Any device can be DJ** - laptop, tablet, phone all work
+
+---
+
 ## Manual Installation (if needed)
 
 ## Software Installation
@@ -67,6 +157,9 @@ sudo apt-get install -y nodejs
 
 # Install Python and pip
 sudo apt install -y python3 python3-pip python3-venv
+
+# Install audio dependencies for headless audio system
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
 
 # Install Git
 sudo apt install -y git
@@ -216,7 +309,9 @@ sudo systemctl start dnsmasq
 sudo reboot
 ```
 
-### 5. Auto-start Service
+### 5. Auto-start Services
+
+#### Main Web Service
 ```bash
 # Create systemd service
 sudo nano /etc/systemd/system/wedding-jukebox.service
@@ -225,7 +320,7 @@ sudo nano /etc/systemd/system/wedding-jukebox.service
 Add this content:
 ```ini
 [Unit]
-Description=Wedding Jukebox
+Description=Wedding Jukebox Web Server
 After=network.target
 
 [Service]
@@ -241,10 +336,19 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
+#### Audio Service (NEW!)
 ```bash
-# Enable and start service
+# Copy the audio service file
+sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+
+# Enable both services
+sudo systemctl daemon-reload
 sudo systemctl enable wedding-jukebox
+sudo systemctl enable wedding-jukebox-audio
+
+# Start both services
 sudo systemctl start wedding-jukebox
+sudo systemctl start wedding-jukebox-audio
 ```
 
 ## Network Setup Options
@@ -300,38 +404,65 @@ Some Pi 4 models support dual WiFi, but most reliable approach is:
 
 ## Audio Setup
 
-### DJ Device Options:
-1. **Laptop** - Full browser, best performance
-2. **Tablet** - Portable, touch-friendly
-3. **Phone** - Emergency backup option
+### NEW: Headless Audio System
+With the new headless audio system, **any device can be the DJ interface**:
 
-### Audio Connection:
-```
-DJ Device → 3.5mm/USB/Bluetooth → Mixer/Speakers
-```
+1. **DJ Device Options**:
+   - **Laptop** - Full browser, best performance
+   - **Tablet** - Portable, touch-friendly  
+   - **Phone** - Emergency backup option
+
+2. **Audio Connection**:
+   ```
+   Raspberry Pi → 3.5mm/USB/HDMI → Mixer/Speakers
+   ```
+
+3. **How It Works**:
+   - DJ controls music through web browser
+   - Pi downloads and plays music through its audio output
+   - No audio streaming between devices needed!
 
 ### Pro Tips:
-- Use **wired audio connection** (3.5mm or USB) for best quality
-- Keep DJ device **plugged in** during event
-- Have **backup device** ready with same browser bookmarks
+- Use **Pi's audio output** (3.5mm, USB, or HDMI) to mixer/speakers
+- Keep Pi **plugged in** and in a ventilated area
+- DJ device just needs **web browser** - no special audio setup needed
+- Have **backup DJ device** ready with same browser bookmarks
 
 ## Monitoring and Maintenance
 
 ### Check Service Status
 ```bash
-sudo systemctl status wedding-jukebox
+# Check both services
+sudo systemctl status wedding-jukebox        # Web server
+sudo systemctl status wedding-jukebox-audio  # Audio service
+
+# Or check Docker version
+sudo systemctl status wedding-jukebox-docker
 ```
 
 ### View Logs
 ```bash
+# Web server logs
 sudo journalctl -u wedding-jukebox -f
+
+# Audio service logs (NEW!)
+sudo journalctl -u wedding-jukebox-audio -f
+
+# Docker logs
+docker-compose -f docker-compose.pi.yml logs -f
 ```
 
 ### Update Application
 ```bash
 cd /home/pi/wedding-jukebox
 git pull origin main
+
+# Restart services
 sudo systemctl restart wedding-jukebox
+sudo systemctl restart wedding-jukebox-audio
+
+# Or for Docker
+sudo systemctl restart wedding-jukebox-docker
 ```
 
 ## Performance Optimization
@@ -354,6 +485,9 @@ sudo reboot
 # Backup important files
 cp oauth.json oauth.json.backup
 cp wedding-play-history.json wedding-play-history.json.backup
+
+# Backup audio cache (NEW!)
+tar -czf audio-cache-backup.tar.gz audio-cache/
 ```
 
 ## Troubleshooting
@@ -363,6 +497,27 @@ cp wedding-play-history.json wedding-play-history.json.backup
 2. **WiFi drops** - Use ethernet, update Pi firmware
 3. **YouTube auth expires** - Re-run setup_auth.py
 4. **Memory issues** - Use Pi 4 with 4GB+ RAM
+5. **Audio not playing** - Check audio service status and Pi audio output
+6. **Multiple songs playing** - Restart audio service
+
+### Audio System Troubleshooting:
+```bash
+# Check audio service
+sudo systemctl status wedding-jukebox-audio
+
+# Check audio processes
+ps aux | grep mpg123
+ps aux | grep audio-integration
+
+# Test Pi audio output
+speaker-test -t wav -c 2
+
+# Check audio service logs
+sudo journalctl -u wedding-jukebox-audio -n 50
+
+# Restart audio service
+sudo systemctl restart wedding-jukebox-audio
+```
 
 ### Performance Monitoring:
 ```bash
@@ -374,6 +529,9 @@ vcgencmd measure_temp
 
 # Check network
 ping google.com
+
+# Check audio cache size
+du -sh audio-cache/
 ```
 
 ## Security Considerations
