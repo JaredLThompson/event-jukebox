@@ -39,12 +39,14 @@ fi
 
 # Check Pi version
 PI_VERSION=$(grep "Revision" /proc/cpuinfo | awk '{print $3}')
-if [[ $PI_VERSION == *"a03111"* ]] || [[ $PI_VERSION == *"b03111"* ]] || [[ $PI_VERSION == *"c03111"* ]]; then
+if [[ $PI_VERSION == *"c04170"* ]] || [[ $PI_VERSION == *"d04170"* ]]; then
+    print_success "Raspberry Pi 5 detected - excellent for Docker!"
+elif [[ $PI_VERSION == *"a03111"* ]] || [[ $PI_VERSION == *"b03111"* ]] || [[ $PI_VERSION == *"c03111"* ]]; then
     print_success "Raspberry Pi 4 detected - perfect for Docker!"
 elif [[ $PI_VERSION == *"a020d3"* ]] || [[ $PI_VERSION == *"a02082"* ]]; then
     print_warning "Raspberry Pi 3 detected - Docker will work but may be slower"
 else
-    print_warning "Older Pi detected - consider using the direct code installation instead"
+    print_warning "Pi model not specifically recognized (revision: $PI_VERSION) - Docker should still work fine"
 fi
 
 # Update system
