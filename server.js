@@ -129,6 +129,10 @@ app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
+app.get('/kiosk', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'kiosk.html'));
+});
+
 app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
