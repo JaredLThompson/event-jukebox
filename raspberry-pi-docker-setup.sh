@@ -67,11 +67,23 @@ fi
 
 # Install Docker Compose
 print_status "Installing Docker Compose..."
-if ! command -v docker-compose &> /dev/null; then
-    sudo apt install -y docker-compose
-    print_success "Docker Compose installed successfully"
+if ! docker compose version &> /dev/null && ! command -v docker-compose &> /dev/null; then
+    # Try to install docker-compose-plugin first (preferred method)
+    if sudo apt install -y docker-compose-plugin 2>/dev/null; then
+        print_success "Docker Compose plugin installed successfully"
+    else
+        # Fallback to standalone docker-compose if plugin fails
+        sudo apt install -y docker-compose
+        print_success "Docker Compose installed successfully"
+    fi
 else
-    print_status "Docker Compose already installed"
+    print_status "Docker Compose already available"
+    # Show which version is available
+    if docker compose version &> /dev/null; then
+        print_status "Using Docker Compose V2 (plugin): $(docker compose version --short 2>/dev/null || echo 'version unknown')"
+    elif command -v docker-compose &> /dev/null; then
+        print_status "Using Docker Compose V1: $(docker-compose --version 2>/dev/null || echo 'version unknown')"
+    fi
 fi
 
 # Create application directory
@@ -136,6 +148,21 @@ EOF
 
 # Create systemd service for Docker Compose
 print_status "Creating systemd service..."
+
+# Determine which Docker Compose command to use
+if docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+    COMPOSE_PATH="/usr/bin/docker"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+    COMPOSE_PATH="/usr/bin/docker-compose"
+else
+    print_error "No Docker Compose found!"
+    exit 1
+fi
+
+print_status "Using Docker Compose command: $COMPOSE_CMD"
+
 sudo tee /etc/systemd/system/wedding-jukebox-docker.service > /dev/null <<EOF
 [Unit]
 Description=Wedding Jukebox Docker
@@ -146,8 +173,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/docker-compose -f docker-compose.pi.yml up -d
-ExecStop=/usr/bin/docker-compose -f docker-compose.pi.yml down
+ExecStart=$COMPOSE_PATH compose -f docker-compose.pi.yml up -d
+ExecStop=$COMPOSE_PATH compose -f docker-compose.pi.yml down
 TimeoutStartSec=0
 
 [Install]
@@ -262,9 +289,28 @@ chmod +x "$APP_DIR/update.sh"
 chmod +x "$APP_DIR/status.sh"
 chmod +x "$APP_DIR/backup.sh"
 
-# Pull the Docker image
+# Pull the Docker image (with retry for authentication issues)
 print_status "Pulling Wedding Jukebox Docker image..."
-docker pull ghcr.io/jaredlthompson/wedding-jukebox:latest
+if ! docker pull ghcr.io/jaredlthompson/wedding-jukebox:latest; then
+    print_warning "Failed to pull from GitHub Container Registry. This might be due to rate limiting."
+    print_status "Attempting to pull without authentication..."
+    
+    # Try with explicit public access
+    if ! docker pull ghcr.io/jaredlthompson/wedding-jukebox:latest 2>/dev/null; then
+        print_warning "Unable to pull pre-built image. Building locally instead..."
+        print_status "Building Wedding Jukebox Docker image locally..."
+        if docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .; then
+            print_success "Docker image built successfully"
+        else
+            print_error "Failed to build Docker image"
+            exit 1
+        fi
+    else
+        print_success "Docker image pulled successfully"
+    fi
+else
+    print_success "Docker image pulled successfully"
+fi
 
 print_success "Docker installation complete!"
 echo ""
