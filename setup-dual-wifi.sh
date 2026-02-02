@@ -19,18 +19,23 @@ fi
 
 # Check if USB WiFi adapter is connected
 echo "🔍 Checking for WiFi interfaces..."
-WIFI_INTERFACES=$(ls /sys/class/net/ | grep wlan | wc -l)
 
-if [ "$WIFI_INTERFACES" -lt 2 ]; then
-    echo "⚠️  Warning: Only found $WIFI_INTERFACES WiFi interface(s)"
+# Find all wireless interfaces (wlan* and wlx*)
+WIFI_INTERFACES=($(ls /sys/class/net/ | grep -E '^(wlan|wlx)'))
+WIFI_COUNT=${#WIFI_INTERFACES[@]}
+
+echo "Found WiFi interfaces: ${WIFI_INTERFACES[*]}"
+
+if [ "$WIFI_COUNT" -lt 2 ]; then
+    echo "⚠️  Warning: Only found $WIFI_COUNT WiFi interface(s)"
     echo "   For dual WiFi setup, you need:"
     echo "   - Built-in WiFi (wlan0) for venue internet"
-    echo "   - USB WiFi adapter (wlan1) for guest hotspot"
+    echo "   - USB WiFi adapter (wlan1/wlx*) for guest hotspot"
     echo ""
     echo "   Recommended USB WiFi adapters:"
     echo "   - TP-Link AC600 T2U Plus"
     echo "   - Panda PAU09"
-    echo "   - Any RTL8812AU chipset adapter"
+    echo "   - Any RTL8812AU/RTL8821AU chipset adapter"
     echo ""
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo
@@ -38,6 +43,38 @@ if [ "$WIFI_INTERFACES" -lt 2 ]; then
         exit 1
     fi
 fi
+
+# Determine which interfaces to use
+VENUE_INTERFACE=""
+HOTSPOT_INTERFACE=""
+
+# Look for built-in WiFi (usually wlan0)
+if [[ " ${WIFI_INTERFACES[*]} " =~ " wlan0 " ]]; then
+    VENUE_INTERFACE="wlan0"
+fi
+
+# Look for USB WiFi adapter (wlan1 or wlx*)
+for iface in "${WIFI_INTERFACES[@]}"; do
+    if [[ "$iface" != "$VENUE_INTERFACE" ]]; then
+        HOTSPOT_INTERFACE="$iface"
+        break
+    fi
+done
+
+# If we don't have wlan0, use the first available interface for venue
+if [[ -z "$VENUE_INTERFACE" && ${#WIFI_INTERFACES[@]} -gt 0 ]]; then
+    VENUE_INTERFACE="${WIFI_INTERFACES[0]}"
+    # And use the second for hotspot if available
+    if [[ ${#WIFI_INTERFACES[@]} -gt 1 ]]; then
+        HOTSPOT_INTERFACE="${WIFI_INTERFACES[1]}"
+    fi
+fi
+
+echo ""
+echo "📡 Interface Assignment:"
+echo "   Venue WiFi: $VENUE_INTERFACE"
+echo "   Guest Hotspot: $HOTSPOT_INTERFACE"
+echo ""
 
 # Get venue WiFi credentials
 echo ""
@@ -73,7 +110,7 @@ echo "🌐 Configuring network interfaces..."
 sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
 
 # Wedding Jukebox Hotspot Configuration
-interface wlan1
+interface $HOTSPOT_INTERFACE
 static ip_address=192.168.4.1/24
 nohook wpa_supplicant
 EOF
@@ -83,7 +120,7 @@ echo "📡 Configuring WiFi hotspot..."
 # Configure hostapd
 sudo tee /etc/hostapd/hostapd.conf > /dev/null << EOF
 # Wedding Jukebox Hotspot Configuration
-interface=wlan1
+interface=$HOTSPOT_INTERFACE
 driver=nl80211
 ssid=$HOTSPOT_SSID
 hw_mode=g
@@ -110,7 +147,7 @@ sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig 2>/dev/null || true
 # Configure dnsmasq
 sudo tee /etc/dnsmasq.conf > /dev/null << EOF
 # Wedding Jukebox DHCP Configuration
-interface=wlan1
+interface=$HOTSPOT_INTERFACE
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 
 # Captive portal - redirect all DNS to jukebox
@@ -142,9 +179,9 @@ echo "🔀 Configuring internet sharing..."
 echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
 
 # Configure iptables for NAT
-sudo iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-sudo iptables -A FORWARD -i wlan0 -o wlan1 -m state --state RELATED,ESTABLISHED -j ACCEPT
-sudo iptables -A FORWARD -i wlan1 -o wlan0 -j ACCEPT
+sudo iptables -t nat -A POSTROUTING -o $VENUE_INTERFACE -j MASQUERADE
+sudo iptables -A FORWARD -i $VENUE_INTERFACE -o $HOTSPOT_INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -A FORWARD -i $HOTSPOT_INTERFACE -o $VENUE_INTERFACE -j ACCEPT
 
 # Save iptables rules
 sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
@@ -179,8 +216,8 @@ echo "✅ Dual WiFi setup complete!"
 echo ""
 echo "📋 Configuration Summary:"
 echo "========================"
-echo "🏢 Venue WiFi (wlan0): $VENUE_SSID"
-echo "📡 Guest Hotspot (wlan1): $HOTSPOT_SSID"
+echo "🏢 Venue WiFi ($VENUE_INTERFACE): $VENUE_SSID"
+echo "📡 Guest Hotspot ($HOTSPOT_INTERFACE): $HOTSPOT_SSID"
 echo "🔑 Hotspot Password: $HOTSPOT_PASSWORD"
 echo "🌐 Guest Access: http://192.168.4.1:3000"
 echo ""
