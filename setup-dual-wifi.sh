@@ -26,6 +26,10 @@ WIFI_COUNT=${#WIFI_INTERFACES[@]}
 
 echo "Found WiFi interfaces: ${WIFI_INTERFACES[*]}"
 
+# Debug: Show all network interfaces
+echo "All network interfaces:"
+ls /sys/class/net/ | grep -E '^(wlan|wlx)' || echo "  No wireless interfaces found"
+
 if [ "$WIFI_COUNT" -lt 2 ]; then
     echo "⚠️  Warning: Only found $WIFI_COUNT WiFi interface(s)"
     echo "   For dual WiFi setup, you need:"
@@ -36,6 +40,11 @@ if [ "$WIFI_COUNT" -lt 2 ]; then
     echo "   - TP-Link AC600 T2U Plus"
     echo "   - Panda PAU09"
     echo "   - Any RTL8812AU/RTL8821AU chipset adapter"
+    echo ""
+    echo "   Check if USB adapter is connected:"
+    echo "   - Run: ip link show"
+    echo "   - Look for wlx* interfaces"
+    echo "   - Try: sudo ip link set wlx984827665cdf up"
     echo ""
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo
@@ -99,6 +108,19 @@ echo ""
 echo "🔧 Installing required packages..."
 sudo apt update
 sudo apt install -y hostapd dnsmasq iptables-persistent
+
+echo "🔌 Bringing up WiFi interfaces..."
+# Bring up all WiFi interfaces
+for iface in $(ls /sys/class/net/ | grep -E '^(wlan|wlx)'); do
+    echo "  Bringing up $iface..."
+    sudo ip link set "$iface" up 2>/dev/null || echo "    Failed to bring up $iface (may be normal)"
+done
+
+# Re-scan for interfaces after bringing them up
+echo "🔍 Re-scanning for WiFi interfaces..."
+WIFI_INTERFACES=($(ls /sys/class/net/ | grep -E '^(wlan|wlx)'))
+WIFI_COUNT=${#WIFI_INTERFACES[@]}
+echo "Found WiFi interfaces after bringing up: ${WIFI_INTERFACES[*]}"
 
 echo "⏹️  Stopping services for configuration..."
 sudo systemctl stop hostapd
@@ -208,6 +230,8 @@ EOF
 sudo chmod +x /etc/rc.local
 
 echo "🚀 Enabling services..."
+# Unmask hostapd service (it gets masked during installation)
+sudo systemctl unmask hostapd
 sudo systemctl enable hostapd
 sudo systemctl enable dnsmasq
 
