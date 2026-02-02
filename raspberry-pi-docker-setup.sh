@@ -38,8 +38,8 @@ if ! grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
 fi
 
 # Check Pi version
-PI_VERSION=$(grep "Revision" /proc/cpuinfo | awk '{print $3}')
-if [[ $PI_VERSION == *"c04170"* ]] || [[ $PI_VERSION == *"d04170"* ]]; then
+PI_VERSION=$(grep "Revision" /proc/cpuinfo | head -1 | awk '{print $3}')
+if [[ $PI_VERSION == *"c04170"* ]] || [[ $PI_VERSION == *"d04170"* ]] || [[ $PI_VERSION == *"c04171"* ]] || [[ $PI_VERSION == *"d04171"* ]]; then
     print_success "Raspberry Pi 5 detected - excellent for Docker!"
 elif [[ $PI_VERSION == *"a03111"* ]] || [[ $PI_VERSION == *"b03111"* ]] || [[ $PI_VERSION == *"c03111"* ]]; then
     print_success "Raspberry Pi 4 detected - perfect for Docker!"
