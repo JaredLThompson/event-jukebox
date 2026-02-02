@@ -52,6 +52,10 @@ fi
 print_status "Installing Python and build tools..."
 sudo apt install -y python3 python3-pip python3-venv git build-essential
 
+# Install audio dependencies for headless audio system
+print_status "Installing audio dependencies for headless audio system..."
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+
 # Install additional tools
 print_status "Installing additional tools..."
 sudo apt install -y htop curl wget nano
@@ -105,6 +109,18 @@ EOF
 # Enable service
 sudo systemctl daemon-reload
 sudo systemctl enable wedding-jukebox
+
+# Setup headless audio service
+print_status "Setting up headless audio service..."
+if [ -f "$APP_DIR/wedding-jukebox-audio.service" ]; then
+    sudo cp "$APP_DIR/wedding-jukebox-audio.service" /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable wedding-jukebox-audio
+    print_success "Audio service configured and enabled"
+else
+    print_warning "wedding-jukebox-audio.service file not found - audio service not configured"
+    print_warning "You may need to set up the audio service manually after cloning the latest code"
+fi
 
 # Create data directories
 mkdir -p "$APP_DIR/data"
@@ -167,8 +183,9 @@ echo "🔄 Updating Wedding Jukebox..."
 # Backup first
 ./backup.sh
 
-# Stop service
+# Stop services
 sudo systemctl stop wedding-jukebox
+sudo systemctl stop wedding-jukebox-audio
 
 # Pull latest changes
 git pull origin main
@@ -178,8 +195,15 @@ npm install
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Restart service
+# Update audio service if it exists
+if [ -f "wedding-jukebox-audio.service" ]; then
+    sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+fi
+
+# Restart services
 sudo systemctl start wedding-jukebox
+sudo systemctl start wedding-jukebox-audio
 
 echo "✅ Update complete!"
 EOF
@@ -196,8 +220,12 @@ echo "========================"
 echo ""
 
 # Service status
-echo "📊 Service Status:"
+echo "📊 Web Service Status:"
 sudo systemctl status wedding-jukebox --no-pager -l
+
+echo ""
+echo "🎵 Audio Service Status:"
+sudo systemctl status wedding-jukebox-audio --no-pager -l
 
 echo ""
 echo "🌡️  System Info:"
@@ -210,8 +238,12 @@ echo "🌐 Network:"
 hostname -I | awk '{print "IP Address: " $1}'
 
 echo ""
-echo "📝 Recent Logs:"
+echo "📝 Web Service Logs (last 10 lines):"
 sudo journalctl -u wedding-jukebox --no-pager -n 10
+
+echo ""
+echo "🎵 Audio Service Logs (last 10 lines):"
+sudo journalctl -u wedding-jukebox-audio --no-pager -n 10
 EOF
 
 chmod +x "$APP_DIR/status.sh"
@@ -226,8 +258,9 @@ echo "   cd $APP_DIR"
 echo "   source venv/bin/activate"
 echo "   python setup_auth.py"
 echo ""
-echo "2. 🚀 Start the service:"
+echo "2. 🚀 Start the services:"
 echo "   sudo systemctl start wedding-jukebox"
+echo "   sudo systemctl start wedding-jukebox-audio"
 echo ""
 echo "3. 🌐 Access the jukebox:"
 echo "   Find your Pi's IP: hostname -I"
@@ -239,7 +272,9 @@ echo "Status:    $APP_DIR/status.sh"
 echo "Update:    $APP_DIR/update.sh"
 echo "Backup:    $APP_DIR/backup.sh"
 echo "Logs:      sudo journalctl -u wedding-jukebox -f"
+echo "Audio Logs: sudo journalctl -u wedding-jukebox-audio -f"
 echo "Restart:   sudo systemctl restart wedding-jukebox"
+echo "           sudo systemctl restart wedding-jukebox-audio"
 echo ""
 
 # Get IP address

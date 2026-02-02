@@ -202,6 +202,23 @@ echo '[]' > "$APP_DIR/wedding-play-history.json" 2>/dev/null || true
 # Set permissions
 sudo chown -R pi:pi "$APP_DIR"
 
+# Install audio dependencies for headless audio system
+print_status "Installing audio dependencies for headless audio system..."
+sudo apt update
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+
+# Setup headless audio service
+print_status "Setting up headless audio service..."
+if [ -f "$APP_DIR/wedding-jukebox-audio.service" ]; then
+    sudo cp "$APP_DIR/wedding-jukebox-audio.service" /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable wedding-jukebox-audio
+    print_success "Audio service configured and enabled"
+else
+    print_warning "wedding-jukebox-audio.service file not found - audio service not configured"
+    print_warning "You may need to set up the audio service manually after cloning the latest code"
+fi
+
 # Configure firewall (if ufw is installed)
 if command -v ufw &> /dev/null; then
     print_status "Configuring firewall..."
@@ -297,6 +314,10 @@ echo "📊 Container Status:"
 docker-compose -f docker-compose.pi.yml ps
 
 echo ""
+echo "🎵 Audio Service Status:"
+sudo systemctl status wedding-jukebox-audio --no-pager -l
+
+echo ""
 echo "🌡️  System Info:"
 echo "Temperature: $(vcgencmd measure_temp)"
 echo "Memory: $(free -h | grep Mem | awk '{print $3 "/" $2}')"
@@ -307,8 +328,12 @@ echo "🌐 Network:"
 hostname -I | awk '{print "IP Address: " $1}'
 
 echo ""
-echo "📝 Container Logs:"
+echo "📝 Container Logs (last 10 lines):"
 docker-compose -f docker-compose.pi.yml logs --tail=10
+
+echo ""
+echo "🎵 Audio Service Logs (last 10 lines):"
+sudo journalctl -u wedding-jukebox-audio -n 10 --no-pager
 EOF
 
 # Backup script
@@ -372,8 +397,9 @@ echo "1. 🎵 Setup YouTube Music Authentication (optional):"
 echo "   cd $APP_DIR"
 echo "   ./setup-youtube-auth.sh"
 echo ""
-echo "2. 🚀 Start the service:"
+echo "2. 🚀 Start the services:"
 echo "   sudo systemctl start wedding-jukebox-docker"
+echo "   sudo systemctl start wedding-jukebox-audio"
 echo ""
 echo "3. 🌐 Access the jukebox:"
 echo "   Find your Pi's IP: hostname -I"
@@ -385,7 +411,9 @@ echo "Status:    $APP_DIR/status.sh"
 echo "Update:    $APP_DIR/update.sh"
 echo "Backup:    $APP_DIR/backup.sh"
 echo "Logs:      docker-compose -f docker-compose.pi.yml logs -f"
+echo "Audio Logs: sudo journalctl -u wedding-jukebox-audio -f"
 echo "Restart:   sudo systemctl restart wedding-jukebox-docker"
+echo "           sudo systemctl restart wedding-jukebox-audio"
 echo ""
 
 # Get IP address
