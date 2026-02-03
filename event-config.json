@@ -16,7 +16,7 @@
   "playlists": {
     "primary": {
       "key": "wedding",
-      "file": "wedding-playlist.js",
+      "file": "playlists/wedding-playlist.js",
       "name": "Wedding Party Playlist",
       "shortName": "Wedding Party",
       "label": "Wedding Playlist",
@@ -24,7 +24,7 @@
     },
     "secondary": {
       "key": "bride",
-      "file": "bride-playlist.js",
+      "file": "playlists/bride-playlist.js",
       "name": "Bride's Elegant Playlist",
       "shortName": "Bride's Elegant",
       "label": "Bride's Playlist",
