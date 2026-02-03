@@ -16,6 +16,7 @@ class AudioIntegration {
         this.lastPlayedSongId = null; // Track last played song to prevent duplicates
         this.wasPlaying = false; // Track previous playing state to detect song ends
         this.isFading = false;
+        this.suppressNextSongEnd = false; // Prevent double-advance on manual stop/skip
         this.enableStatusLogs = process.env.JUKEBOX_STATUS_LOG === '1';
         
         this.setupSocketListeners();
@@ -164,6 +165,7 @@ class AudioIntegration {
         
         this.socket.on('stopCommand', () => {
             console.log('⏹️ Stop command received');
+            this.suppressNextSongEnd = true;
             this.audioService.stop();
             this.emitStatus();
         });
@@ -181,6 +183,7 @@ class AudioIntegration {
             
             // Force clear the processing flag first
             this.isProcessingQueue = false;
+            this.suppressNextSongEnd = true;
             
             // Stop current audio and clear the lock
             this.audioService.stop();
@@ -213,6 +216,7 @@ class AudioIntegration {
             try {
                 let startVolume = this.audioService.volume;
                 if (this.audioService.isPlaying) {
+                    this.suppressNextSongEnd = true;
                     startVolume = await this.audioService.fadeOut(durationMs);
                     this.audioService.stop();
                     this.audioService.clearLock();
@@ -411,7 +415,7 @@ class AudioIntegration {
     
     handleSongEnd(finishedSong) {
         console.log('🎵 Song ended:', finishedSong.title);
-        console.log('🔄 Will process queue after short delay...');
+        console.log('🔄 Advancing to next song after short delay...');
         
         this.socket.emit('songEnded', {
             song: finishedSong,
@@ -420,8 +424,16 @@ class AudioIntegration {
         
         // Process next song after a delay
         setTimeout(() => {
-            console.log('🔄 Processing next song after song end...');
-            this.processQueue();
+            console.log('🔄 Calling server to advance to next song after song end...');
+            this.postToApi('/api/queue/next').then(response => {
+                if (response.ok) {
+                    console.log('✅ Server advanced to next song after song end');
+                } else {
+                    console.log('⚠️ Server failed to advance after song end');
+                }
+            }).catch(error => {
+                console.log('❌ Error advancing after song end:', error.message);
+            });
         }, 1000);
     }
     
@@ -446,7 +458,10 @@ class AudioIntegration {
         
         // Only detect song end if we were actually playing and now we're not, 
         // AND the song actually finished (not paused or stopped manually)
-        if (this.wasPlaying && !status.isPlaying && !status.isPaused && status.currentSong) {
+        if (this.suppressNextSongEnd && !status.isPlaying) {
+            console.log('🛑 Suppressing song end detection (manual stop/skip)');
+            this.suppressNextSongEnd = false;
+        } else if (this.wasPlaying && !status.isPlaying && !status.isPaused && status.currentSong) {
             // Additional check: only trigger song end if we played for a reasonable amount of time
             if (status.position > 5 || (status.duration > 0 && status.position >= status.duration - 1)) {
                 console.log('🎵 Song end detected via status change!');

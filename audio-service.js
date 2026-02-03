@@ -90,6 +90,14 @@ class AudioService {
         try {
             console.log('🎵 Playing:', song.title, 'by', song.artist);
             
+            // If we were paused, clear paused state so resume can't resurrect old audio
+            if (this.isPaused) {
+                console.log('🧹 Clearing paused state before new playback');
+                this.isPaused = false;
+                this.pausedSong = null;
+                this.pausedPosition = 0;
+            }
+            
             // CRITICAL: Stop ALL current playback first
             this.stop();
             this.killAllMpg123Sync(); // Extra safety - kill all mpg123 processes synchronously

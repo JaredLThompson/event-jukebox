@@ -43,7 +43,8 @@ jobs:
           type=ref,event=pr
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest,enable={{is_tag}}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -56,3 +57,12 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64,linux/arm64
+
+    - name: Ensure GHCR package is public
+      if: github.event_name != 'pull_request'
+      run: |
+        gh api -X PATCH \
+          /user/packages/container/wedding-jukebox/visibility \
+          -f visibility=public
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
-  "name": "virtual-jukebox",
-  "version": "1.0.0",
-  "description": "A web-based virtual jukebox application",
+  "name": "wedding-jukebox",
+  "version": "0.9.0",
+  "description": "A wedding-focused virtual jukebox with guest requests and DJ controls",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -28,6 +28,6 @@
     "music",
     "web-app"
   ],
-  "author": "Your Name",
+  "author": "Jared L. Thompson",
   "license": "MIT"
 }
