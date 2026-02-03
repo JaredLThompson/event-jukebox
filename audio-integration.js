@@ -197,7 +197,7 @@ class AudioIntegration {
             try {
                 let startVolume = this.audioService.volume;
                 if (this.audioService.isPlaying) {
-                    startVolume = await this.audioService.fadeOut(durationMs, 10);
+                    startVolume = await this.audioService.fadeOut(durationMs);
                     this.audioService.stop();
                     this.audioService.clearLock();
                 }

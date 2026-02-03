@@ -14,7 +14,8 @@ class JukeboxSettings {
             soundcloudEnabled: false,
             appleMusicEnabled: false,
             showServiceIcons: true,
-            compactQueue: false
+            compactQueue: false,
+            fadeDurationMs: 2000
         };
         
         const saved = localStorage.getItem('jukeboxSettings');
@@ -64,6 +65,7 @@ class VirtualJukebox {
         this.isPlayerReady = false;
         this.currentSong = null;
         this.isPlaying = false;
+        this.isFading = false;
         
         this.initializeElements();
         this.bindEvents();
@@ -150,6 +152,14 @@ class VirtualJukebox {
             const typeSelect = document.getElementById('visualizerType');
             if (typeSelect) {
                 typeSelect.value = window.visualizer.visualizerType;
+            }
+        }
+
+        const fadeDurationInput = document.getElementById('fadeDurationMs');
+        if (fadeDurationInput) {
+            const duration = parseInt(jukeboxSettings.get('fadeDurationMs'), 10);
+            if (!Number.isNaN(duration)) {
+                fadeDurationInput.value = duration;
             }
         }
     }
@@ -746,8 +756,11 @@ class VirtualJukebox {
         // If using headless audio, ask the audio service to fade then skip
         if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
             console.log('📤 Headless audio detected, sending fade command to audio service');
-            this.socket.emit('fadeCommand', { durationMs: 2000 });
+            const durationMs = this.getFadeDurationMs();
+            this.setFadeUI(true, durationMs);
+            this.socket.emit('fadeCommand', { durationMs });
             this.showToast('Fading to next song...', 'info');
+            setTimeout(() => this.setFadeUI(false), durationMs + 250);
             return;
         }
 
@@ -763,6 +776,27 @@ class VirtualJukebox {
         // If nothing seems to be playing, try to start the next song
         console.log('🚀 Nothing playing, trying to start next song...');
         this.playNextSong();
+    }
+
+    getFadeDurationMs() {
+        const raw = jukeboxSettings.get('fadeDurationMs');
+        const parsed = parseInt(raw, 10);
+        if (Number.isNaN(parsed)) return 2000;
+        return Math.min(10000, Math.max(500, parsed));
+    }
+
+    setFadeUI(isFading, durationMs = 2000) {
+        this.isFading = isFading;
+        if (!this.fadeNextBtn) return;
+        if (isFading) {
+            this.fadeNextBtn.disabled = true;
+            this.fadeNextBtn.classList.add('opacity-70', 'cursor-not-allowed');
+            this.fadeNextBtn.innerHTML = `<i class="fas fa-volume-down mr-2"></i>Fading... (${Math.round(durationMs / 1000)}s)`;
+        } else {
+            this.fadeNextBtn.disabled = false;
+            this.fadeNextBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+            this.fadeNextBtn.innerHTML = '<i class="fas fa-volume-down mr-2"></i>Fade to Next';
+        }
     }
 
     toggleVisualizer() {

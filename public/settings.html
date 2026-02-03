@@ -169,6 +169,25 @@
                 </div>
             </section>
 
+            <!-- Playback Settings -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-sliders-h mr-3 text-teal-300"></i>
+                    Playback
+                </h2>
+                
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Fade to Next Duration (ms)</h3>
+                            <p class="text-gray-300 text-sm">How long the song fades out before advancing to the next track (500-10000 ms)</p>
+                        </div>
+                        <input id="fadeDurationMs" type="number" min="500" max="10000" step="100"
+                               class="w-40 bg-gray-700 text-white rounded px-3 py-2" value="2000">
+                    </div>
+                </div>
+            </section>
+
             <!-- Music Services Settings -->
             <section class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -316,7 +335,8 @@
                     soundcloudEnabled: false,
                     appleMusicEnabled: false,
                     showServiceIcons: true,
-                    compactQueue: false
+                    compactQueue: false,
+                    fadeDurationMs: 2000
                 };
                 
                 const saved = localStorage.getItem('jukeboxSettings');
@@ -374,7 +394,7 @@
                 
                 // All other settings
                 ['defaultVisualizerType', 'autoShowBehavior', 'youtubeEnabled', 'spotifyEnabled', 
-                 'soundcloudEnabled', 'appleMusicEnabled', 'showServiceIcons', 'compactQueue'].forEach(id => {
+                 'soundcloudEnabled', 'appleMusicEnabled', 'showServiceIcons', 'compactQueue', 'fadeDurationMs'].forEach(id => {
                     const element = document.getElementById(id);
                     if (element) {
                         element.addEventListener('change', (e) => {

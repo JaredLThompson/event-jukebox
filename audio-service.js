@@ -662,23 +662,27 @@ class AudioService {
     /**
      * Fade volume to 0 over a duration. Returns the starting volume.
      */
-    fadeOut(durationMs = 2000, steps = 10) {
+    fadeOut(durationMs = 2000, steps = null) {
         return new Promise((resolve) => {
             const startVolume = this.volume;
-            if (startVolume <= 0 || steps <= 0) {
+            const resolvedSteps = steps === null
+                ? Math.max(5, Math.min(40, Math.round(durationMs / 100)))
+                : steps;
+
+            if (startVolume <= 0 || resolvedSteps <= 0) {
                 this.setVolume(0);
                 resolve(startVolume);
                 return;
             }
 
-            const stepMs = Math.max(50, Math.floor(durationMs / steps));
+            const stepMs = Math.max(50, Math.floor(durationMs / resolvedSteps));
             let currentStep = 0;
             const timer = setInterval(() => {
                 currentStep += 1;
-                const factor = Math.max(0, 1 - currentStep / steps);
+                const factor = Math.max(0, 1 - currentStep / resolvedSteps);
                 this.setVolume(startVolume * factor);
 
-                if (currentStep >= steps) {
+                if (currentStep >= resolvedSteps) {
                     clearInterval(timer);
                     this.setVolume(0);
                     resolve(startVolume);
