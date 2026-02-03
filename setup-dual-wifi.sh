@@ -237,6 +237,21 @@ if systemctl is-active --quiet NetworkManager; then
     echo "   This bypasses hostapd/dnsmasq/dhcpcd and works with Debian 13."
     echo ""
 
+    echo "🔐 Ensuring PolicyKit allows WiFi scan/share for this user..."
+    APP_USER="${SUDO_USER:-$(whoami)}"
+    run_cmd sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+polkit.addRule(function(action, subject) {
+  if (subject.user === "$APP_USER") {
+    if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
+        action.id === "org.freedesktop.NetworkManager.network-control" ||
+        action.id === "org.freedesktop.NetworkManager.settings.modify.system") {
+      return polkit.Result.YES;
+    }
+  }
+});
+EOF
+    run_cmd sudo systemctl restart polkit || true
+
     echo "🔧 Ensuring wpa_supplicant is installed..."
     run_cmd sudo apt update
     run_cmd sudo apt install -y wpasupplicant
@@ -248,7 +263,14 @@ if systemctl is-active --quiet NetworkManager; then
     echo "🧹 Cleaning existing connections..."
     # Remove any existing hotspot connection to avoid IP conflicts
     nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
-    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
+    HOTSPOT_CONN_NAME="Wedding-Jukebox-Hotspot"
+    mapfile -t HOTSPOT_UUIDS < <(nmcli -t -f UUID,NAME,TYPE con show | awk -F: -v name="$HOTSPOT_CONN_NAME" '$3=="wifi" && $2==name {print $1}')
+    if [[ ${#HOTSPOT_UUIDS[@]} -gt 1 ]]; then
+        echo "⚠️  Multiple hotspot profiles found. Removing duplicates..."
+        for uuid in "${HOTSPOT_UUIDS[@]:1}"; do
+            run_cmd nmcli con delete "$uuid"
+        done
+    fi
 
     # Remove existing venue connection by SSID to avoid stale DHCP leases
     # Older nmcli versions don't support 802-11-wireless.ssid in con show fields,
@@ -280,11 +302,14 @@ if systemctl is-active --quiet NetworkManager; then
     fi
 
     echo "📡 Creating guest hotspot on $HOTSPOT_INTERFACE..."
-    run_cmd nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "Wedding-Jukebox-Hotspot" ssid "$HOTSPOT_SSID"
-    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless.mode ap 802-11-wireless.band bg
-    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.key-mgmt wpa-psk
-    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.psk "$HOTSPOT_PASSWORD"
-    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore
+    if [[ ${#HOTSPOT_UUIDS[@]} -eq 0 ]]; then
+        run_cmd nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "$HOTSPOT_CONN_NAME" ssid "$HOTSPOT_SSID"
+    fi
+    run_cmd nmcli con modify "$HOTSPOT_CONN_NAME" connection.interface-name "$HOTSPOT_INTERFACE"
+    run_cmd nmcli con modify "$HOTSPOT_CONN_NAME" 802-11-wireless.mode ap 802-11-wireless.band bg
+    run_cmd nmcli con modify "$HOTSPOT_CONN_NAME" 802-11-wireless-security.key-mgmt wpa-psk
+    run_cmd nmcli con modify "$HOTSPOT_CONN_NAME" 802-11-wireless-security.psk "$HOTSPOT_PASSWORD"
+    run_cmd nmcli con modify "$HOTSPOT_CONN_NAME" ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore
 
     echo "📈 Setting route metrics (prefer WiFi over Ethernet if both are up)..."
     VENUE_CONN_NAME=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$VENUE_INTERFACE" '$2==dev {print $1}' | head -n 1)
@@ -299,7 +324,7 @@ if systemctl is-active --quiet NetworkManager; then
     # Stop dnsmasq so NetworkManager can manage shared mode cleanly
     run_cmd sudo systemctl stop dnsmasq 2>/dev/null || true
 
-    run_cmd nmcli con up "Wedding-Jukebox-Hotspot"
+    run_cmd nmcli con up "$HOTSPOT_CONN_NAME"
 
     echo "🧰 Ensuring forwarding + NAT rules exist..."
     if ! sudo iptables -S FORWARD 2>/dev/null | grep -q "$HOTSPOT_INTERFACE"; then
