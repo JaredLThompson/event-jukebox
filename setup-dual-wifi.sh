@@ -251,12 +251,21 @@ if systemctl is-active --quiet NetworkManager; then
     nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
 
     # Remove existing venue connection by SSID to avoid stale DHCP leases
-    nmcli -t -f NAME,TYPE,802-11-wireless.ssid con show | \
+    nmcli -g NAME,TYPE,802-11-wireless.ssid con show | \
         awk -F: -v ssid="$VENUE_SSID" '$2=="802-11-wireless" && $3==ssid {print $1}' | \
         xargs -r -I{} run_cmd nmcli con delete "{}"
 
     echo "📶 Connecting to venue WiFi on $VENUE_INTERFACE..."
-    run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"
+    ACTIVE_SSID=$(nmcli -t -f ACTIVE,SSID,DEVICE dev wifi | awk -F: -v dev="$VENUE_INTERFACE" '$1=="yes" && $3==dev {print $2; exit}')
+    if [[ "$ACTIVE_SSID" == "$VENUE_SSID" ]]; then
+        echo "✅ Already connected to $VENUE_SSID on $VENUE_INTERFACE"
+    else
+        run_cmd nmcli dev wifi rescan ifname "$VENUE_INTERFACE" || true
+        if ! run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"; then
+            echo "⚠️  SSID not found. Retrying with hidden network flag..."
+            run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE" hidden yes
+        fi
+    fi
 
     echo "📡 Creating guest hotspot on $HOTSPOT_INTERFACE..."
     run_cmd nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "Wedding-Jukebox-Hotspot" ssid "$HOTSPOT_SSID"

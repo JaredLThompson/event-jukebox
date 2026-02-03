@@ -58,16 +58,32 @@ fi
 
 # 5) NetworkManager shared mode (if available)
 if command -v nmcli >/dev/null 2>&1; then
-  nm_shared=$(nmcli -t -f DEVICE,IP4.METHOD dev show 2>/dev/null | awk -F: -v dev="$HOTSPOT_IFACE" '$1==dev {print $2}')
-  if [[ "$nm_shared" == "shared" ]]; then
-    pass "NetworkManager shared mode enabled on $HOTSPOT_IFACE"
-  elif [[ -n "$nm_shared" ]]; then
-    warn "NetworkManager IP4 method on $HOTSPOT_IFACE is '$nm_shared' (expected 'shared')"
+  nm_conn=$(nmcli -t -f DEVICE,GENERAL.CONNECTION dev show 2>/dev/null | awk -F: -v dev="$HOTSPOT_IFACE" '$1==dev {print $2}')
+  if [[ -n "$nm_conn" && "$nm_conn" != "--" ]]; then
+    nm_shared=$(nmcli -t -f IP4.METHOD connection show "$nm_conn" 2>/dev/null | awk -F: '{print $2}')
+    if [[ "$nm_shared" == "shared" ]]; then
+      pass "NetworkManager shared mode enabled on $HOTSPOT_IFACE"
+    elif [[ -n "$nm_shared" ]]; then
+      warn "NetworkManager IP4 method on $HOTSPOT_IFACE is '$nm_shared' (expected 'shared')"
+    else
+      warn "NetworkManager IP4 method not found for connection '$nm_conn'"
+    fi
   else
-    warn "NetworkManager info not found for $HOTSPOT_IFACE"
+    warn "NetworkManager connection not found for $HOTSPOT_IFACE"
   fi
 else
   info "nmcli not installed; skipping NetworkManager shared-mode check"
+fi
+
+# 5b) nftables NAT/forward rules (if iptables rules are missing)
+if command -v nft >/dev/null 2>&1; then
+  if sudo nft list ruleset 2>/dev/null | grep -q "masquerade"; then
+    pass "nftables masquerade rule present"
+  else
+    warn "No nftables masquerade rule found"
+  fi
+else
+  info "nft not installed; skipping nftables checks"
 fi
 
 # 6) dnsmasq (if using hostapd/dnsmasq path)
