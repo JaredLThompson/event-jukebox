@@ -57,6 +57,7 @@
                         <option value="size_asc">Smallest</option>
                     </select>
                     <button id="refreshBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">Refresh</button>
+                    <button id="rebuildBtn" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded text-sm">Rebuild Metadata</button>
                     <div class="flex items-center gap-2">
                         <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
                                class="bg-gray-700 text-white text-sm rounded px-2 py-2 w-20">
@@ -80,6 +81,7 @@
         const cacheCount = document.getElementById('cacheCount');
         const refreshBtn = document.getElementById('refreshBtn');
         const clearBtn = document.getElementById('clearBtn');
+        const rebuildBtn = document.getElementById('rebuildBtn');
         const clearOlderBtn = document.getElementById('clearOlderBtn');
         const olderThanDaysInput = document.getElementById('olderThanDays');
         const cacheTotalSize = document.getElementById('cacheTotalSize');
@@ -179,6 +181,15 @@
         clearBtn.addEventListener('click', async () => {
             if (!confirm('Clear all cached audio files?')) return;
             await fetch('/api/cache/clear', { method: 'POST' });
+            await loadCache();
+        });
+        rebuildBtn.addEventListener('click', async () => {
+            if (!confirm('Rebuild metadata for cached files? This may take a bit.')) return;
+            rebuildBtn.disabled = true;
+            rebuildBtn.textContent = 'Rebuilding...';
+            await fetch('/api/cache/rebuild', { method: 'POST' });
+            rebuildBtn.disabled = false;
+            rebuildBtn.textContent = 'Rebuild Metadata';
             await loadCache();
         });
         clearOlderBtn.addEventListener('click', async () => {

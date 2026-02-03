@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const https = require('https');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
 const BRIDE_PLAYLIST = require('./bride-playlist');
 const SpotifyService = require('./spotify_service');
@@ -43,6 +44,47 @@ const spotifyService = new SpotifyService();
 const PLAY_HISTORY_FILE = 'wedding-play-history.json';
 const AUDIO_CACHE_DIR = path.join(__dirname, 'audio-cache');
 let playHistory = [];
+
+function loadCacheManifest() {
+  const manifestPath = path.join(AUDIO_CACHE_DIR, 'cache-manifest.json');
+  if (!fs.existsSync(manifestPath)) return {};
+  try {
+    const data = fs.readFileSync(manifestPath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveCacheManifest(manifest) {
+  const manifestPath = path.join(AUDIO_CACHE_DIR, 'cache-manifest.json');
+  try {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  } catch (error) {
+    console.error('Failed to save cache manifest:', error.message);
+  }
+}
+
+function fetchYouTubeOEmbed(youtubeId) {
+  return new Promise((resolve) => {
+    const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`;
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          return resolve(null);
+        }
+        try {
+          const json = JSON.parse(data);
+          resolve(json);
+        } catch {
+          resolve(null);
+        }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
 
 // Load existing play history if it exists
 function loadPlayHistory() {
@@ -183,16 +225,7 @@ app.get('/api/cache', (req, res) => {
       return res.json({ files: [] });
     }
 
-    let manifest = {};
-    const manifestPath = path.join(AUDIO_CACHE_DIR, 'cache-manifest.json');
-    if (fs.existsSync(manifestPath)) {
-      try {
-        const data = fs.readFileSync(manifestPath, 'utf8');
-        manifest = JSON.parse(data);
-      } catch (error) {
-        manifest = {};
-      }
-    }
+    let manifest = loadCacheManifest();
 
     const files = fs.readdirSync(AUDIO_CACHE_DIR)
       .filter(name => name.endsWith('.mp3'))
@@ -286,6 +319,44 @@ app.post('/api/cache/clear', (req, res) => {
     res.json({ success: true, deleted });
   } catch (error) {
     res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
+app.post('/api/cache/rebuild', async (req, res) => {
+  try {
+    if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+      return res.json({ success: true, updated: 0 });
+    }
+
+    const manifest = loadCacheManifest();
+    const files = fs.readdirSync(AUDIO_CACHE_DIR).filter(name => name.endsWith('.mp3'));
+    let updated = 0;
+
+    for (const name of files) {
+      const youtubeId = name.replace('.mp3', '');
+      const existing = manifest[youtubeId];
+      if (existing && (existing.title || existing.artist)) {
+        continue;
+      }
+
+      const info = await fetchYouTubeOEmbed(youtubeId);
+      if (!info) continue;
+
+      manifest[youtubeId] = {
+        youtubeId,
+        filename: name,
+        title: info.title || null,
+        artist: info.author_name || null,
+        source: 'youtube-oembed',
+        cachedAt: new Date().toISOString()
+      };
+      updated += 1;
+    }
+
+    saveCacheManifest(manifest);
+    res.json({ success: true, updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to rebuild cache metadata' });
   }
 });
 
