@@ -100,6 +100,29 @@ print_status "Cloning Wedding Jukebox repository..."
 git clone https://github.com/JaredLThompson/wedding-jukebox.git "$APP_DIR"
 cd "$APP_DIR"
 
+# Ensure NetworkManager (nmcli) is available for host WiFi API
+print_status "Ensuring NetworkManager tools are installed..."
+if ! command -v nmcli &> /dev/null; then
+    print_warning "nmcli not found - installing network-manager..."
+    sudo apt install -y network-manager
+fi
+sudo systemctl enable --now NetworkManager 2>/dev/null || true
+
+# Detect host IP for container -> host API calls
+HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
+if [[ -z "$HOST_IP" ]]; then
+    HOST_IP=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+' | grep -v '^127\\.' | grep -v '^172\\.17\\.' | grep -v '^172\\.18\\.' | head -n 1)
+fi
+
+WIFI_API_URL_VALUE=""
+if [[ -n "$HOST_IP" ]]; then
+    WIFI_API_URL_VALUE="http://$HOST_IP:8787"
+    print_success "Detected host IP: $HOST_IP"
+else
+    print_warning "Could not determine host IP automatically."
+    print_warning "WiFi scanning will require manual WIFI_API_URL configuration."
+fi
+
 # Create docker-compose.yml for Pi
 print_status "Creating Pi-optimized docker-compose.yml..."
 tee docker-compose.pi.yml > /dev/null <<EOF
@@ -125,6 +148,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - PULSE_RUNTIME_PATH=/run/user/1000/pulse
+      - WIFI_API_URL=${WIFI_API_URL_VALUE}
     restart: unless-stopped
     networks:
       - jukebox-network
@@ -191,6 +215,7 @@ EOF
 # Enable service
 sudo systemctl daemon-reload
 sudo systemctl enable wedding-jukebox-docker
+sudo systemctl start wedding-jukebox-docker
 
 # Create data directories and files
 mkdir -p "$APP_DIR/data"
@@ -239,6 +264,38 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable wedding-jukebox-audio
 print_success "Audio service configured and enabled"
+
+# Setup WiFi API service (host-side)
+print_status "Setting up host WiFi API service..."
+sudo tee /etc/systemd/system/wedding-jukebox-wifi-api.service > /dev/null <<EOF
+[Unit]
+Description=Wedding Jukebox WiFi API
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=simple
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/env node wifi-api.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+Environment=WIFI_API_PORT=8787
+Environment=PATH=/usr/bin:/usr/local/bin
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable wedding-jukebox-wifi-api
+sudo systemctl start wedding-jukebox-wifi-api
+print_success "WiFi API service configured and enabled"
 
 # Install Node dependencies for host audio service
 print_status "Installing Node dependencies for audio service..."

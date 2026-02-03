@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const https = require('https');
+const httpClient = require('http');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
 const BRIDE_PLAYLIST = require('./bride-playlist');
 const SpotifyService = require('./spotify_service');
@@ -216,6 +217,60 @@ function runNmcli(args) {
   });
 }
 
+function getWifiApiBase() {
+  return process.env.WIFI_API_URL || '';
+}
+
+function proxyWifiRequest(req, res) {
+  const baseUrl = getWifiApiBase();
+  if (!baseUrl) {
+    return res.status(500).json({ error: 'WiFi API unavailable.', details: 'WIFI_API_URL not configured.' });
+  }
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(req.originalUrl, baseUrl);
+  } catch (error) {
+    return res.status(500).json({ error: 'WiFi API proxy error.', details: error.message });
+  }
+
+  const isHttps = targetUrl.protocol === 'https:';
+  const client = isHttps ? https : httpClient;
+  const body = req.method === 'GET' ? null : JSON.stringify(req.body || {});
+
+  const proxyReq = client.request(
+    targetUrl,
+    {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': body ? Buffer.byteLength(body) : 0
+      },
+      timeout: 15000
+    },
+    (proxyRes) => {
+      let data = '';
+      proxyRes.on('data', (chunk) => {
+        data += chunk;
+      });
+      proxyRes.on('end', () => {
+        res.status(proxyRes.statusCode || 500);
+        res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'application/json');
+        res.send(data);
+      });
+    }
+  );
+
+  proxyReq.on('error', (error) => {
+    res.status(500).json({ error: 'WiFi API proxy error.', details: error.message });
+  });
+
+  if (body) {
+    proxyReq.write(body);
+  }
+  proxyReq.end();
+}
+
 function splitNmcliLine(line) {
   const fields = [];
   let current = '';
@@ -290,6 +345,9 @@ app.get('/api/wifi/scan', async (req, res) => {
     const networks = Array.from(networksBySsid.values()).sort((a, b) => b.signal - a.signal);
     return res.json({ iface, networks });
   } catch (error) {
+    if ((error.code === 'ENOENT' || (error.message || '').includes('ENOENT')) && getWifiApiBase()) {
+      return proxyWifiRequest(req, res);
+    }
     return res.status(500).json({
       error: 'Failed to scan WiFi networks.',
       details: error.stderr || error.message
@@ -356,6 +414,9 @@ app.get('/api/wifi/status', async (req, res) => {
       dns: info['IP4.DNS'] || []
     });
   } catch (error) {
+    if ((error.code === 'ENOENT' || (error.message || '').includes('ENOENT')) && getWifiApiBase()) {
+      return proxyWifiRequest(req, res);
+    }
     return res.status(500).json({
       error: 'Failed to load WiFi status.',
       details: error.stderr || error.message
@@ -381,6 +442,9 @@ app.post('/api/wifi/connect', async (req, res) => {
     const { stdout } = await runNmcli(args);
     return res.json({ ok: true, output: stdout.trim() });
   } catch (error) {
+    if ((error.code === 'ENOENT' || (error.message || '').includes('ENOENT')) && getWifiApiBase()) {
+      return proxyWifiRequest(req, res);
+    }
     return res.status(500).json({
       error: 'Failed to connect to WiFi network.',
       details: error.stderr || error.message
