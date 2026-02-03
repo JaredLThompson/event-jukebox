@@ -19,6 +19,11 @@ CONTAINER_NAME="wedding-jukebox"
 IMAGE_NAME="wedding-jukebox:latest"
 PORT=${PORT:-3000}
 HOST_PORT=${HOST_PORT:-3000}
+FORCE_LOCAL_BUILD=0
+
+if [[ "$1" == "--force-local" ]]; then
+    FORCE_LOCAL_BUILD=1
+fi
 
 echo -e "${PURPLE}🎵 Virtual Jukebox - Local Docker Deployment${NC}"
 echo -e "${PURPLE}================================================${NC}"
@@ -70,6 +75,15 @@ if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.
     fi
 
     print_status "Starting services with docker-compose.pi.yml..."
+    if [[ "$FORCE_LOCAL_BUILD" -eq 1 ]]; then
+        print_warning "Force local build enabled. Building image locally..."
+        docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .
+    else
+        if ! $COMPOSE_CMD -f docker-compose.pi.yml pull; then
+            print_warning "Image pull failed. Building locally instead..."
+            docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .
+        fi
+    fi
     $COMPOSE_CMD -f docker-compose.pi.yml up -d
 
     echo ""
