@@ -66,9 +66,9 @@
                 </div>
             </div>
             <div class="grid grid-cols-12 text-xs uppercase text-gray-400 pb-2">
-                <div class="col-span-5">File</div>
+                <div class="col-span-6">Track</div>
                 <div class="col-span-2 text-right">Size</div>
-                <div class="col-span-3 text-right">Modified</div>
+                <div class="col-span-2 text-right">Modified</div>
                 <div class="col-span-2 text-right">Actions</div>
             </div>
             <div id="cacheList" class="text-sm"></div>
@@ -136,18 +136,25 @@
                 return;
             }
 
-            cacheList.innerHTML = files.map(file => `
-                <div class="grid grid-cols-12 items-center py-2 row">
-                    <div class="col-span-5 truncate" title="${file.name}">${file.name}</div>
-                    <div class="col-span-2 text-right text-gray-300">${formatBytes(file.sizeBytes)}</div>
-                    <div class="col-span-3 text-right text-gray-400">${formatDate(file.modified)}</div>
-                    <div class="col-span-2 text-right flex justify-end gap-2">
-                        <a class="text-purple-300 hover:text-purple-200" href="/api/cache/file/${encodeURIComponent(file.name)}" target="_blank">▶</a>
-                        <a class="text-blue-300 hover:text-blue-200" href="/api/cache/file/${encodeURIComponent(file.name)}?download=1" download>⬇</a>
-                        <button class="text-red-300 hover:text-red-200" data-delete="${encodeURIComponent(file.name)}">✕</button>
+            cacheList.innerHTML = files.map(file => {
+                const title = file.title || file.name;
+                const artist = file.artist ? ` — ${file.artist}` : '';
+                return `
+                    <div class="grid grid-cols-12 items-center py-2 row">
+                        <div class="col-span-6 truncate" title="${title}${artist}">
+                            <div class="font-medium">${title}${artist}</div>
+                            <div class="text-xs text-gray-400">${file.name}</div>
+                        </div>
+                        <div class="col-span-2 text-right text-gray-300">${formatBytes(file.sizeBytes)}</div>
+                        <div class="col-span-2 text-right text-gray-400">${formatDate(file.modified)}</div>
+                        <div class="col-span-2 text-right flex justify-end gap-2">
+                            <a class="text-purple-300 hover:text-purple-200" href="/api/cache/file/${encodeURIComponent(file.name)}" target="_blank">▶</a>
+                            <a class="text-blue-300 hover:text-blue-200" href="/api/cache/file/${encodeURIComponent(file.name)}?download=1" download>⬇</a>
+                            <button class="text-red-300 hover:text-red-200" data-delete="${encodeURIComponent(file.name)}">✕</button>
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         async function loadCache() {

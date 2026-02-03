@@ -33,9 +33,46 @@ class AudioService {
         if (!fs.existsSync(this.cacheDir)) {
             fs.mkdirSync(this.cacheDir, { recursive: true });
         }
+
+        this.cacheManifestPath = path.join(this.cacheDir, 'cache-manifest.json');
+        this.cacheManifest = this.loadCacheManifest();
         
         console.log('🎵 Audio Service initialized');
         console.log('📁 Cache directory:', this.cacheDir);
+    }
+
+    loadCacheManifest() {
+        try {
+            if (fs.existsSync(this.cacheManifestPath)) {
+                const data = fs.readFileSync(this.cacheManifestPath, 'utf8');
+                return JSON.parse(data);
+            }
+        } catch (error) {
+            console.log('⚠️ Failed to load cache manifest, starting fresh');
+        }
+        return {};
+    }
+
+    saveCacheManifest() {
+        try {
+            fs.writeFileSync(this.cacheManifestPath, JSON.stringify(this.cacheManifest, null, 2));
+        } catch (error) {
+            console.log('⚠️ Failed to save cache manifest:', error.message);
+        }
+    }
+
+    recordCacheEntry(youtubeId, song, filepath) {
+        if (!youtubeId) return;
+        const filename = path.basename(filepath || `${youtubeId}.mp3`);
+        this.cacheManifest[youtubeId] = {
+            youtubeId,
+            filename,
+            title: song?.title || null,
+            artist: song?.artist || null,
+            source: song?.source || null,
+            cachedAt: new Date().toISOString()
+        };
+        this.saveCacheManifest();
     }
     
     /**
@@ -63,6 +100,7 @@ class AudioService {
             this.bufferingProgress = `Preparing ${song.title}...`;
             
             let audioFile = null;
+            let youtubeId = null;
             
             // Handle different audio sources with fallbacks
             if (song.audioUrl) {
@@ -77,7 +115,7 @@ class AudioService {
                 } catch (error) {
                     console.log('⚠️ Spotify failed, trying YouTube fallback...');
                     if (song.videoId || song.youtubeId) {
-                        const youtubeId = song.videoId || song.youtubeId;
+                        youtubeId = song.videoId || song.youtubeId;
                         this.bufferingProgress = `Downloading ${song.title} from YouTube...`;
                         audioFile = await this.extractYouTubeAudio(youtubeId);
                     } else {
@@ -86,7 +124,7 @@ class AudioService {
                 }
             } else if (song.videoId || song.youtubeId) {
                 // YouTube video - extract audio
-                const youtubeId = song.videoId || song.youtubeId;
+                youtubeId = song.videoId || song.youtubeId;
                 this.bufferingProgress = `Downloading ${song.title} from YouTube...`;
                 audioFile = await this.extractYouTubeAudio(youtubeId);
             } else {
@@ -95,6 +133,10 @@ class AudioService {
             
             if (!audioFile || !fs.existsSync(audioFile)) {
                 throw new Error('Audio file not found');
+            }
+
+            if (youtubeId) {
+                this.recordCacheEntry(youtubeId, song, audioFile);
             }
             
             this.bufferingProgress = `Starting playback of ${song.title}...`;
@@ -768,6 +810,7 @@ class AudioService {
                 
                 // Download in background
                 await this.extractYouTubeAudio(youtubeId);
+                this.recordCacheEntry(youtubeId, song, filepath);
                 console.log('✅ Pre-buffered:', song.title);
                 this.isBuffering = false;
                 this.bufferingProgress = null;

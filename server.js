@@ -183,15 +183,31 @@ app.get('/api/cache', (req, res) => {
       return res.json({ files: [] });
     }
 
+    let manifest = {};
+    const manifestPath = path.join(AUDIO_CACHE_DIR, 'cache-manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const data = fs.readFileSync(manifestPath, 'utf8');
+        manifest = JSON.parse(data);
+      } catch (error) {
+        manifest = {};
+      }
+    }
+
     const files = fs.readdirSync(AUDIO_CACHE_DIR)
       .filter(name => name.endsWith('.mp3'))
       .map(name => {
         const fullPath = path.join(AUDIO_CACHE_DIR, name);
         const stats = fs.statSync(fullPath);
+        const youtubeId = name.replace('.mp3', '');
+        const meta = manifest[youtubeId] || Object.values(manifest).find(entry => entry.filename === name) || null;
         return {
           name,
           sizeBytes: stats.size,
-          modified: stats.mtime.toISOString()
+          modified: stats.mtime.toISOString(),
+          title: meta?.title || null,
+          artist: meta?.artist || null,
+          youtubeId: meta?.youtubeId || youtubeId
         };
       })
       .sort((a, b) => b.modified.localeCompare(a.modified));
