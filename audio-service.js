@@ -736,16 +736,36 @@ class AudioService {
             ? [control]
             : ['Master', 'PCM', 'Speaker', 'Headphone'];
 
+        const normalizeDeviceForAmixer = (rawDevice) => {
+            if (!rawDevice) return null;
+            if (rawDevice === 'default') return null;
+            if (rawDevice.includes(',DEV=')) {
+                return rawDevice.replace(/,DEV=\d+/g, '');
+            }
+            return rawDevice;
+        };
+
+        const normalizedDevice = normalizeDeviceForAmixer(device);
+        let applied = false;
+
         for (const ctl of controlsToTry) {
             const args = [];
-            if (device) {
-                args.push('-D', device);
+            if (normalizedDevice) {
+                args.push('-D', normalizedDevice);
             }
             args.push('sset', ctl, `${percent}%`);
             const result = spawnSync('amixer', args, { stdio: 'ignore' });
             if (result && result.status === 0) {
-                return;
+                applied = true;
+                break;
             }
+        }
+
+        if (!applied) {
+            console.log('⚠️ Failed to apply volume via amixer', {
+                device: normalizedDevice || 'default',
+                controlsTried: controlsToTry
+            });
         }
     }
 
