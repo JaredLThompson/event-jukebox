@@ -132,16 +132,21 @@ app.get('/api/wifi/status', async (req, res) => {
 
     const info = {};
     stdout.trim().split('\n').filter(Boolean).forEach((line) => {
-      const [key, value] = line.split(':');
+      const separatorIndex = line.indexOf(':');
+      if (separatorIndex === -1) return;
+      const key = line.slice(0, separatorIndex);
+      const value = line.slice(separatorIndex + 1);
       if (!key) return;
-      if (info[key]) {
-        if (Array.isArray(info[key])) {
-          info[key].push(value);
+
+      const baseKey = key.replace(/\[\d+\]$/, '');
+      if (info[baseKey]) {
+        if (Array.isArray(info[baseKey])) {
+          info[baseKey].push(value);
         } else {
-          info[key] = [info[key], value];
+          info[baseKey] = [info[baseKey], value];
         }
       } else {
-        info[key] = value;
+        info[baseKey] = value;
       }
     });
 
@@ -168,7 +173,7 @@ app.get('/api/wifi/status', async (req, res) => {
       connected,
       ssid: activeSsid,
       connection: info['GENERAL.CONNECTION'] || '',
-      ip: info['IP4.ADDRESS'] || '',
+      ip: Array.isArray(info['IP4.ADDRESS']) ? info['IP4.ADDRESS'][0] : (info['IP4.ADDRESS'] || ''),
       gateway: info['IP4.GATEWAY'] || '',
       dns: info['IP4.DNS'] || []
     });
