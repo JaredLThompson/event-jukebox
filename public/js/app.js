@@ -854,6 +854,12 @@ class VirtualJukebox {
     }
 
     confirmNavigation(url) {
+        const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+        if (isHeadless) {
+            window.location.href = url;
+            return;
+        }
+
         // Check if music is currently playing
         const isPlaying = this.isPlaying || (this.currentPreviewAudio && !this.currentPreviewAudio.paused);
         const hasQueue = this.currentQueue && this.currentQueue.length > 0;

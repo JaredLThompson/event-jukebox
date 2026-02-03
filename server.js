@@ -126,31 +126,32 @@ function saveAudioOutput(device) {
 
 function listAudioOutputs() {
   return new Promise((resolve) => {
-    execFile('aplay', ['-L'], (error, stdout) => {
+    execFile('aplay', ['-l'], (error, stdout) => {
       if (error || !stdout) {
         return resolve([
           { id: 'default', name: 'Default', description: 'System default output' }
         ]);
       }
 
-      const lines = stdout.split('\n');
       const outputs = [];
-      let current = null;
+      const lines = stdout.split('\n');
+      const deviceLine = /^card\s+(\d+):\s+([^\[]+)\[([^\]]+)\],\s+device\s+(\d+):\s+([^\[]+)\[([^\]]+)\]/;
 
       for (const line of lines) {
-        if (!line.trim()) continue;
-        if (!line.startsWith(' ')) {
-          if (current) outputs.push(current);
-          current = { id: line.trim(), name: line.trim(), description: '' };
-        } else if (current && !current.description) {
-          current.description = line.trim();
-        }
+        const match = line.match(deviceLine);
+        if (!match) continue;
+        const cardId = match[2].trim();
+        const cardName = match[3].trim();
+        const deviceId = match[4].trim();
+        const deviceName = match[6].trim();
+        const id = `hw:CARD=${cardId},DEV=${deviceId}`;
+        const name = `${cardName} (${deviceName})`;
+        const description = `${cardId} / device ${deviceId}`;
+        outputs.push({ id, name, description });
       }
-      if (current) outputs.push(current);
 
-      const normalized = outputs.filter(item => item.id !== 'null');
-      normalized.unshift({ id: 'default', name: 'Default', description: 'System default output' });
-      resolve(normalized);
+      outputs.unshift({ id: 'default', name: 'Default', description: 'System default output' });
+      resolve(outputs);
     });
   });
 }
