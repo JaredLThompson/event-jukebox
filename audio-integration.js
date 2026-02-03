@@ -14,6 +14,7 @@ class AudioIntegration {
         this.isProcessingQueue = false;
         this.lastPlayedSongId = null; // Track last played song to prevent duplicates
         this.wasPlaying = false; // Track previous playing state to detect song ends
+        this.isFading = false;
         
         this.setupSocketListeners();
         console.log('🔗 Audio Integration connected to:', jukeboxUrl);
@@ -24,7 +25,7 @@ class AudioIntegration {
             console.log('✅ Connected to Wedding Jukebox');
             this.socket.emit('audioServiceConnected', {
                 service: 'headless-audio',
-                capabilities: ['play', 'pause', 'stop', 'volume']
+                capabilities: ['play', 'pause', 'stop', 'volume', 'fade']
             });
         });
         
@@ -181,6 +182,39 @@ class AudioIntegration {
             }).catch(error => {
                 console.log('❌ Error calling next song API:', error.message);
             });
+        });
+
+        this.socket.on('fadeCommand', async (data = {}) => {
+            if (this.isFading) {
+                console.log('🎚️ Fade already in progress, ignoring new fade command');
+                return;
+            }
+
+            this.isFading = true;
+            const durationMs = typeof data.durationMs === 'number' ? data.durationMs : 2000;
+            console.log(`🎚️ Fade command received (duration: ${durationMs}ms)`);
+
+            try {
+                let startVolume = this.audioService.volume;
+                if (this.audioService.isPlaying) {
+                    startVolume = await this.audioService.fadeOut(durationMs, 10);
+                    this.audioService.stop();
+                    this.audioService.clearLock();
+                }
+
+                // Restore volume to previous level for next track
+                if (typeof startVolume === 'number') {
+                    this.audioService.setVolume(startVolume);
+                }
+
+                console.log('🔄 Calling server to advance to next song after fade...');
+                await fetch('http://localhost:3000/api/queue/next', { method: 'POST' });
+            } catch (error) {
+                console.log('❌ Fade command error:', error.message);
+            } finally {
+                this.isFading = false;
+                this.emitStatus();
+            }
         });
         
         this.socket.on('testAudioCommand', () => {

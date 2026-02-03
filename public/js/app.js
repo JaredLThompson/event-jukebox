@@ -743,19 +743,20 @@ class VirtualJukebox {
             console.log('✅ Socket connection confirmed - pong received');
         });
         
-        // Always try to send skip command if something is playing
+        // If using headless audio, ask the audio service to fade then skip
+        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+            console.log('📤 Headless audio detected, sending fade command to audio service');
+            this.socket.emit('fadeCommand', { durationMs: 2000 });
+            this.showToast('Fading to next song...', 'info');
+            return;
+        }
+
+        // Always try to send skip command if something is playing (non-headless)
         if (this.isPlaying) {
             console.log('📤 Audio is playing, sending skip command to audio service');
             console.log('Emitting skipCommand via socket...');
             this.socket.emit('skipCommand');
             this.showToast('Skipping to next song...', 'info');
-            
-            // Also try the Next Song API as a fallback after a delay
-            console.log('🔄 Also trying Next Song API as fallback in 2 seconds...');
-            setTimeout(() => {
-                console.log('🔄 Executing fallback Next Song API call...');
-                this.playNextSong();
-            }, 2000);
             return;
         }
         

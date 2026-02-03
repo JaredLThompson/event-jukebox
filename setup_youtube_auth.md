@@ -15,7 +15,9 @@
 4. **Go to Network tab**
 5. **Refresh the page** (Ctrl+R or Cmd+R)
 6. **Look for a request** that says "browse" or "youtubei/v1/browse"
-7. **Right-click on it** → Copy → Copy as cURL
+7. **Copy either:**
+   - Copy as cURL (recommended), or
+   - Copy request headers (raw headers)
 
 ### Step 2: Create Authentication File
 1. **Run the setup script:**
@@ -25,7 +27,7 @@
    ```
 
 2. **Choose option 1** (Automatic)
-3. **Paste your cURL command** when prompted
+3. **Paste your cURL command or raw header block** when prompted, then press **Ctrl-D**
 4. **Wait for confirmation** ✅
 
 ### Step 3: Update the Server
@@ -47,6 +49,7 @@ If the automatic method doesn't work:
    - In Developer Tools → Application tab
    - Look for Cookies → https://music.youtube.com
    - Copy the entire cookie string
+   - You will also need `X-Goog-AuthUser` (usually `0`)
 
 ## Test It Works
 After setup, restart your server:

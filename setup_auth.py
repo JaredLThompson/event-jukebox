@@ -4,9 +4,52 @@ Setup YouTube Music authentication for the jukebox
 This will create an oauth.json file with your credentials to avoid ads
 """
 
-from ytmusicapi import YTMusic
+from ytmusicapi import YTMusic, setup as ytm_setup
 import json
 import os
+import re
+import sys
+
+def _read_paste_block():
+    """Read a pasted block from stdin (Ctrl-D to finish)."""
+    print("\n📋 Paste your cURL command OR raw request headers below, then press Ctrl-D:")
+    try:
+        data = sys.stdin.read()
+    except KeyboardInterrupt:
+        return ""
+    if data:
+        return data.strip()
+    # Fallback to single-line input
+    try:
+        return input().strip()
+    except EOFError:
+        return ""
+
+def _extract_headers_from_curl(curl_text):
+    """Extract header lines from a curl command."""
+    headers = []
+    for line in curl_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("-H ") or line.startswith("--header "):
+            # Remove leading -H/--header and surrounding quotes
+            line = re.sub(r"^(-H|--header)\s+", "", line)
+            line = line.strip()
+            if (line.startswith("'") and line.endswith("'")) or (line.startswith('"') and line.endswith('"')):
+                line = line[1:-1]
+            # Strip trailing backslash if present
+            if line.endswith("\\"):
+                line = line[:-1].rstrip()
+            headers.append(line)
+    return "\n".join(headers).strip()
+
+def _normalize_headers_input(raw_input):
+    """Accept either curl or raw headers and return header block."""
+    if "curl " in raw_input or raw_input.strip().startswith("curl "):
+        headers = _extract_headers_from_curl(raw_input)
+        return headers
+    return raw_input.strip()
 
 def setup_oauth():
     """Setup OAuth authentication for YouTube Music"""
@@ -24,12 +67,13 @@ def setup_oauth():
     print("3. Go to Network tab")
     print("4. Refresh the page")
     print("5. Look for a request to 'browse' or 'youtubei/v1/browse'")
-    print("6. Right-click → Copy → Copy as cURL")
+    print("6. Copy either:")
+    print("   - Copy as cURL (recommended), OR")
+    print("   - Copy request headers (raw headers)")
     print("\n" + "="*60)
     
     # Get headers from user
-    print("\n📋 Paste your cURL command below and press Enter:")
-    headers_raw = input()
+    headers_raw = _read_paste_block()
     
     if not headers_raw.strip():
         print("❌ No cURL command provided. Exiting...")
@@ -38,8 +82,15 @@ def setup_oauth():
     try:
         print("\n🔄 Processing authentication...")
         
-        # Use ytmusicapi's setup method
-        YTMusic.setup(filepath="oauth.json", headers_raw=headers_raw)
+        headers = _normalize_headers_input(headers_raw)
+        if "cookie:" not in headers.lower() or "x-goog-authuser:" not in headers.lower():
+            print("❌ Missing required headers. Make sure your paste includes:")
+            print("   - cookie:")
+            print("   - x-goog-authuser:")
+            return False
+
+        # Use ytmusicapi's setup method (module-level)
+        ytm_setup("oauth.json", headers)
         
         print("✅ Authentication setup complete!")
         print("📁 Created oauth.json file")

@@ -104,6 +104,62 @@ read -s -p "Enter hotspot password [WeddingMusic2026]: " HOTSPOT_PASSWORD
 HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2026}
 echo ""
 
+# If NetworkManager is active, use nmcli workflow (Debian 13 / Trixie default)
+if systemctl is-active --quiet NetworkManager; then
+    echo ""
+    echo "🧭 NetworkManager detected - using nmcli configuration"
+    echo "   This bypasses hostapd/dnsmasq/dhcpcd and works with Debian 13."
+    echo ""
+
+    echo "🔧 Ensuring wpa_supplicant is installed..."
+    sudo apt update
+    sudo apt install -y wpasupplicant
+    sudo systemctl enable --now wpa_supplicant
+
+    echo "🔄 Restarting NetworkManager..."
+    sudo systemctl restart NetworkManager
+
+    echo "🧹 Cleaning existing connections..."
+    # Remove any existing hotspot connection to avoid IP conflicts
+    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Hotspot"{print $1}' | xargs -r nmcli con delete
+    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r nmcli con delete
+
+    # Remove existing venue connection by SSID to avoid stale DHCP leases
+    nmcli -t -f NAME,TYPE,802-11-wireless.ssid con show | \
+        awk -F: -v ssid="$VENUE_SSID" '$2=="802-11-wireless" && $3==ssid {print $1}' | \
+        xargs -r nmcli con delete
+
+    echo "📶 Connecting to venue WiFi on $VENUE_INTERFACE..."
+    nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"
+
+    echo "📡 Creating guest hotspot on $HOTSPOT_INTERFACE..."
+    nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "Wedding-Jukebox-Hotspot" ssid "$HOTSPOT_SSID"
+    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless.mode ap 802-11-wireless.band bg
+    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.key-mgmt wpa-psk
+    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.psk "$HOTSPOT_PASSWORD"
+    nmcli con modify "Wedding-Jukebox-Hotspot" ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore
+
+    # Stop dnsmasq so NetworkManager can manage shared mode cleanly
+    sudo systemctl stop dnsmasq 2>/dev/null || true
+
+    nmcli con up "Wedding-Jukebox-Hotspot"
+
+    echo ""
+    echo "✅ Dual WiFi setup complete (NetworkManager)!"
+    echo ""
+    echo "📋 Configuration Summary:"
+    echo "========================"
+    echo "🏢 Venue WiFi ($VENUE_INTERFACE): $VENUE_SSID"
+    echo "📡 Guest Hotspot ($HOTSPOT_INTERFACE): $HOTSPOT_SSID"
+    echo "🔑 Hotspot Password: $HOTSPOT_PASSWORD"
+    echo "🌐 Guest Access: http://192.168.4.1:3000"
+    echo ""
+    echo "ℹ️  If venue WiFi does not get an IP, re-run this script or delete the WiFi profile:"
+    echo "    nmcli con delete \"$VENUE_SSID\" && nmcli dev wifi connect \"$VENUE_SSID\" password \"<pass>\" ifname \"$VENUE_INTERFACE\""
+    echo ""
+    exit 0
+fi
+
 echo ""
 echo "🔧 Installing required packages..."
 sudo apt update

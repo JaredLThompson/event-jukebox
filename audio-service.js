@@ -205,7 +205,14 @@ class AudioService {
             this.bufferingProgress = `Downloading audio from YouTube...`;
             
             // Use yt-dlp to extract audio with additional options to bypass restrictions
-            const ytdlp = spawn('/usr/local/bin/yt-dlp', [
+            // Prefer PATH lookup, but allow override via YTDLP_PATH and common absolute paths.
+            const ytdlpCandidates = [
+                process.env.YTDLP_PATH,
+                '/usr/local/bin/yt-dlp',
+                '/usr/bin/yt-dlp'
+            ].filter(Boolean);
+            const ytdlpPath = ytdlpCandidates.find((candidate) => fs.existsSync(candidate)) || 'yt-dlp';
+            const ytdlp = spawn(ytdlpPath, [
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '0',
@@ -255,6 +262,9 @@ class AudioService {
             });
             
             ytdlp.on('error', (error) => {
+                if (error && error.code === 'ENOENT') {
+                    console.error('❌ yt-dlp not found. Install it or set YTDLP_PATH.');
+                }
                 console.error('❌ yt-dlp process error:', error);
                 reject(error);
             });
@@ -647,6 +657,34 @@ class AudioService {
         
         // Use amixer to set system volume
         spawn('amixer', ['set', 'Master', Math.round(this.volume * 100) + '%']);
+    }
+
+    /**
+     * Fade volume to 0 over a duration. Returns the starting volume.
+     */
+    fadeOut(durationMs = 2000, steps = 10) {
+        return new Promise((resolve) => {
+            const startVolume = this.volume;
+            if (startVolume <= 0 || steps <= 0) {
+                this.setVolume(0);
+                resolve(startVolume);
+                return;
+            }
+
+            const stepMs = Math.max(50, Math.floor(durationMs / steps));
+            let currentStep = 0;
+            const timer = setInterval(() => {
+                currentStep += 1;
+                const factor = Math.max(0, 1 - currentStep / steps);
+                this.setVolume(startVolume * factor);
+
+                if (currentStep >= steps) {
+                    clearInterval(timer);
+                    this.setVolume(0);
+                    resolve(startVolume);
+                }
+            }, stepMs);
+        });
     }
     
     /**
