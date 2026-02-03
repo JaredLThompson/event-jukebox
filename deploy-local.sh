@@ -64,6 +64,10 @@ if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.
     # Use compose for Pi deployment
     print_status "Stopping any existing services..."
     $COMPOSE_CMD -f docker-compose.pi.yml down || true
+    if docker ps -a --format '{{.Names}}' | grep -q "^wedding-jukebox-pi$"; then
+        print_status "Removing stale container wedding-jukebox-pi..."
+        docker rm -f wedding-jukebox-pi || true
+    fi
 
     print_status "Starting services with docker-compose.pi.yml..."
     $COMPOSE_CMD -f docker-compose.pi.yml up -d
