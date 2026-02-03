@@ -122,7 +122,7 @@
         <h1>Welcome!</h1>
         <div class="subtitle">You're connected to the Wedding Jukebox</div>
         
-        <a href="/user" class="jukebox-button">
+        <a id="requestLink" href="http://192.168.4.1:3000/user" class="jukebox-button">
             🎵 Request a Song
         </a>
         
@@ -138,6 +138,19 @@
     </div>
 
     <script>
+        const hotspotUrl = 'http://192.168.4.1:3000/user';
+        const origin = window.location.origin || '';
+        const hostname = window.location.hostname || '';
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        const isHotspot = hostname === '192.168.4.1';
+        const targetUrl = (!isLocalhost && origin && !isHotspot)
+            ? `${origin}/user`
+            : hotspotUrl;
+        const requestLink = document.getElementById('requestLink');
+        if (requestLink) {
+            requestLink.setAttribute('href', targetUrl);
+        }
+
         // Auto-redirect to user page after 5 seconds
         let countdown = 5;
         const countdownElement = document.getElementById('countdown');
@@ -148,14 +161,14 @@
             
             if (countdown <= 0) {
                 clearInterval(timer);
-                window.location.href = '/user';
+                window.location.href = targetUrl;
             }
         }, 1000);
         
         // If user clicks anywhere, redirect immediately
         document.addEventListener('click', () => {
             clearInterval(timer);
-            window.location.href = '/user';
+            window.location.href = targetUrl;
         });
     </script>
 </body>
