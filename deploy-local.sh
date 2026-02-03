@@ -24,6 +24,23 @@ echo -e "${PURPLE}🎵 Virtual Jukebox - Local Docker Deployment${NC}"
 echo -e "${PURPLE}================================================${NC}"
 echo ""
 
+# Function to print status messages
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 # If running on a Raspberry Pi and docker-compose.pi.yml exists, use that.
 if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.yml" ]]; then
     print_status "Raspberry Pi detected - using docker-compose.pi.yml"
@@ -53,23 +70,6 @@ if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.
     echo ""
     exit 0
 fi
-
-# Function to print status messages
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
 
 # Check if Docker is installed and running
 print_status "Checking Docker installation..."
