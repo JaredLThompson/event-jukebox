@@ -15,7 +15,8 @@ class JukeboxSettings {
             appleMusicEnabled: false,
             showServiceIcons: true,
             compactQueue: false,
-            fadeDurationMs: 2000
+            fadeDurationMs: 2000,
+            volumePercent: 50
         };
         
         const saved = localStorage.getItem('jukeboxSettings');
@@ -162,6 +163,15 @@ class VirtualJukebox {
                 fadeDurationInput.value = duration;
             }
         }
+
+        const savedVolume = parseInt(jukeboxSettings.get('volumePercent'), 10);
+        if (!Number.isNaN(savedVolume)) {
+            if (this.volumeSlider) {
+                this.volumeSlider.value = savedVolume;
+            }
+            this.updateVolumeValue(savedVolume);
+            this.setVolume(savedVolume);
+        }
     }
 
     initializeElements() {
@@ -199,6 +209,9 @@ class VirtualJukebox {
         this.volumeBtn = document.getElementById('volumeBtn');
         this.volumeControl = document.getElementById('volumeControl');
         this.volumeSlider = document.getElementById('volumeSlider');
+        this.volumeValue = document.getElementById('volumeValue');
+        this.volumePill = document.getElementById('volumePill');
+        this.volumePillValue = document.getElementById('volumePillValue');
         this.progressContainer = document.getElementById('progressContainer');
         this.progressBar = document.getElementById('progressBar');
         this.currentTime = document.getElementById('currentTime');
@@ -1570,6 +1583,9 @@ class VirtualJukebox {
         const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
         const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
 
+        this.updateVolumeValue(clamped);
+        jukeboxSettings.set('volumePercent', clamped);
+
         if (isHeadless || !this.player || !this.isPlayerReady) {
             const normalized = clamped / 100;
             console.log('🔊 Sending volume command to audio service:', normalized);
@@ -1578,6 +1594,18 @@ class VirtualJukebox {
         }
 
         this.player.setVolume(clamped);
+    }
+
+    updateVolumeValue(volume) {
+        if (this.volumeValue) {
+            this.volumeValue.textContent = `${volume}%`;
+        }
+        if (this.volumePillValue) {
+            this.volumePillValue.textContent = `${volume}%`;
+        }
+        if (this.volumePill) {
+            this.volumePill.classList.remove('hidden');
+        }
     }
     
     async testAudio() {

@@ -179,11 +179,17 @@
                     <button id="volumeBtn" class="player-btn bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors hidden">
                         <i class="fas fa-volume-up"></i>
                     </button>
+                    <div id="volumePill" class="hidden px-3 py-2 rounded-full bg-gray-700 text-xs text-gray-200 border border-gray-600">
+                        Volume: <span id="volumePillValue">50%</span>
+                    </div>
                 </div>
                 
                 <!-- Volume Control -->
                 <div id="volumeControl" class="mt-4 hidden">
-                    <input type="range" id="volumeSlider" min="0" max="100" value="50" class="volume-slider w-full">
+                    <div class="flex items-center gap-3">
+                        <input type="range" id="volumeSlider" min="0" max="100" value="50" class="volume-slider w-full">
+                        <span id="volumeValue" class="text-sm text-gray-200 w-16 text-right">50%</span>
+                    </div>
                 </div>
                 
                 <!-- Buffering Status -->
