@@ -68,6 +68,24 @@ function renderNetworks(networks) {
         return;
     }
 
+    const bandLabel = (network) => {
+        if (network.band) {
+            if (network.band === 'a') return '5 GHz';
+            if (network.band === 'bg') return '2.4 GHz';
+            if (network.band === 'ax') return '6 GHz';
+        }
+        if (network.freq) {
+            if (network.freq >= 5955) return '6 GHz';
+            if (network.freq >= 4900) return '5 GHz';
+            if (network.freq >= 2400) return '2.4 GHz';
+        }
+        if (network.channel) {
+            if (network.channel >= 1 && network.channel <= 14) return '2.4 GHz';
+            if (network.channel >= 36 && network.channel <= 196) return '5 GHz';
+        }
+        return 'Unknown band';
+    };
+
     networksList.innerHTML = networks.map((network) => {
         const secure = network.security && network.security !== '--';
         const inUse = network.inUse ? '<span class="badge badge-on">connected</span>' : '';
@@ -75,7 +93,7 @@ function renderNetworks(networks) {
             <div class="network-item p-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <div class="text-lg font-semibold">${escapeHtml(network.ssid)}</div>
-                    <div class="text-xs text-gray-300">Signal: ${network.signal}% ${secure ? '• Secured' : '• Open'}</div>
+                    <div class="text-xs text-gray-300">Signal: ${network.signal}% ${secure ? '• Secured' : '• Open'} • ${bandLabel(network)}</div>
                 </div>
                 <div class="flex items-center gap-3">
                     ${inUse}

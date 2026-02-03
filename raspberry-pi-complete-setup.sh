@@ -35,6 +35,9 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Determine the app user for services and permissions
+APP_USER="${SUDO_USER:-$(whoami)}"
+
 # Check if running on Raspberry Pi
 if ! grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
     print_warning "This script is designed for Raspberry Pi, but continuing anyway..."
@@ -71,6 +74,29 @@ sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
 # Install additional tools
 print_status "Installing additional tools..."
 sudo apt install -y htop curl wget nano
+
+# Ensure NetworkManager (nmcli) is available for WiFi scanning
+print_status "Ensuring NetworkManager tools are installed..."
+if ! command -v nmcli &> /dev/null; then
+    print_warning "nmcli not found - installing network-manager..."
+    sudo apt install -y network-manager
+fi
+sudo systemctl enable --now NetworkManager 2>/dev/null || true
+
+# Allow WiFi scan/connect for the app user via PolicyKit
+print_status "Configuring PolicyKit for WiFi scan/connect..."
+sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+polkit.addRule(function(action, subject) {
+  if (subject.user === "$APP_USER") {
+    if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
+        action.id === "org.freedesktop.NetworkManager.network-control" ||
+        action.id === "org.freedesktop.NetworkManager.settings.modify.system") {
+      return polkit.Result.YES;
+    }
+  }
+});
+EOF
+sudo systemctl restart polkit || true
 
 # Create application directory
 APP_DIR="/home/pi/wedding-jukebox"

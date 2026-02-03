@@ -100,6 +100,9 @@ print_status "Cloning Wedding Jukebox repository..."
 git clone https://github.com/JaredLThompson/wedding-jukebox.git "$APP_DIR"
 cd "$APP_DIR"
 
+# Determine the app user for services and permissions
+APP_USER="${SUDO_USER:-$(whoami)}"
+
 # Ensure NetworkManager (nmcli) is available for host WiFi API
 print_status "Ensuring NetworkManager tools are installed..."
 if ! command -v nmcli &> /dev/null; then
@@ -107,6 +110,21 @@ if ! command -v nmcli &> /dev/null; then
     sudo apt install -y network-manager
 fi
 sudo systemctl enable --now NetworkManager 2>/dev/null || true
+
+# Allow WiFi scan/connect for the app user via PolicyKit
+print_status "Configuring PolicyKit for WiFi scan/connect..."
+sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+polkit.addRule(function(action, subject) {
+  if (subject.user === "$APP_USER") {
+    if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
+        action.id === "org.freedesktop.NetworkManager.network-control" ||
+        action.id === "org.freedesktop.NetworkManager.settings.modify.system") {
+      return polkit.Result.YES;
+    }
+  }
+});
+EOF
+sudo systemctl restart polkit || true
 
 # Prefer stable host gateway mapping for container -> host API calls
 WIFI_API_URL_VALUE="http://host.docker.internal:8787"
@@ -228,7 +246,6 @@ sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils nodejs npm
 
 # Setup headless audio service
 print_status "Setting up headless audio service..."
-APP_USER="${SUDO_USER:-$(whoami)}"
 sudo tee /etc/systemd/system/wedding-jukebox-audio.service > /dev/null <<EOF
 [Unit]
 Description=Wedding Jukebox Audio Service

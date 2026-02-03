@@ -308,7 +308,7 @@ app.get('/api/wifi/scan', async (req, res) => {
     const { stdout } = await runNmcli([
       '-t',
       '-f',
-      'SSID,SIGNAL,SECURITY,IN-USE,DEVICE',
+      'SSID,SIGNAL,SECURITY,IN-USE,DEVICE,FREQ,CHAN,BAND',
       'dev',
       'wifi',
       'list',
@@ -318,7 +318,7 @@ app.get('/api/wifi/scan', async (req, res) => {
 
     const networksBySsid = new Map();
     stdout.trim().split('\n').filter(Boolean).forEach((line) => {
-      const [ssidRaw, signalRaw, securityRaw, inUseRaw, deviceRaw] = splitNmcliLine(line);
+      const [ssidRaw, signalRaw, securityRaw, inUseRaw, deviceRaw, freqRaw, chanRaw, bandRaw] = splitNmcliLine(line);
       if (deviceRaw && deviceRaw !== iface) return;
       const ssid = ssidRaw || '';
       if (!ssid) return;
@@ -326,10 +326,13 @@ app.get('/api/wifi/scan', async (req, res) => {
       const signal = Number(signalRaw) || 0;
       const security = (securityRaw || '').trim();
       const inUse = (inUseRaw || '').trim() === '*';
+      const freq = Number(freqRaw) || null;
+      const channel = Number(chanRaw) || null;
+      const band = (bandRaw || '').trim();
 
       const existing = networksBySsid.get(ssid);
       if (!existing) {
-        networksBySsid.set(ssid, { ssid, signal, security, inUse });
+        networksBySsid.set(ssid, { ssid, signal, security, inUse, freq, channel, band });
         return;
       }
 
@@ -340,6 +343,9 @@ app.get('/api/wifi/scan', async (req, res) => {
           : security;
       }
       existing.inUse = existing.inUse || inUse;
+      existing.freq = existing.freq || freq;
+      existing.channel = existing.channel || channel;
+      existing.band = existing.band || band;
     });
 
     const networks = Array.from(networksBySsid.values()).sort((a, b) => b.signal - a.signal);
@@ -373,16 +379,21 @@ app.get('/api/wifi/status', async (req, res) => {
 
     const info = {};
     stdout.trim().split('\n').filter(Boolean).forEach((line) => {
-      const [key, value] = line.split(':');
+      const separatorIndex = line.indexOf(':');
+      if (separatorIndex === -1) return;
+      const key = line.slice(0, separatorIndex);
+      const value = line.slice(separatorIndex + 1);
       if (!key) return;
-      if (info[key]) {
-        if (Array.isArray(info[key])) {
-          info[key].push(value);
+
+      const baseKey = key.replace(/\[\d+\]$/, '');
+      if (info[baseKey]) {
+        if (Array.isArray(info[baseKey])) {
+          info[baseKey].push(value);
         } else {
-          info[key] = [info[key], value];
+          info[baseKey] = [info[baseKey], value];
         }
       } else {
-        info[key] = value;
+        info[baseKey] = value;
       }
     });
 
@@ -409,7 +420,7 @@ app.get('/api/wifi/status', async (req, res) => {
       connected,
       ssid: activeSsid,
       connection: info['GENERAL.CONNECTION'] || '',
-      ip: info['IP4.ADDRESS'] || '',
+      ip: Array.isArray(info['IP4.ADDRESS']) ? info['IP4.ADDRESS'][0] : (info['IP4.ADDRESS'] || ''),
       gateway: info['IP4.GATEWAY'] || '',
       dns: info['IP4.DNS'] || []
     });
