@@ -360,9 +360,9 @@ class AudioIntegration {
         try {
             let nextSong = null;
             
-            if (this.currentQueue.length > 1) {
-                // Next song in queue
-                nextSong = this.currentQueue[1];
+            if (this.currentQueue.length > 0) {
+                // Next song in queue (queue does not include currently playing)
+                nextSong = this.currentQueue[0];
                 console.log('📦 Pre-buffering next queued song:', nextSong.title);
             } else {
                 // Queue is empty or has only current song, get resolved fallback song
