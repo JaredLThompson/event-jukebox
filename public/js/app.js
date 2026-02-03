@@ -270,6 +270,8 @@ class VirtualJukebox {
         this.fullPlaylist = [];
         this.currentPlaylistIndex = 0;
         this.playlistDetailedView = false; // New: toggle for detailed playlist view
+        this.preferredPlaylist = localStorage.getItem('jukeboxPreferredPlaylist');
+        this.appliedPreferredPlaylist = false;
         this.suppressedSongs = new Set(); // Track suppressed songs
         
         // Initialize drag and drop
@@ -558,6 +560,12 @@ class VirtualJukebox {
             
             // Update active playlist button styling
             this.updatePlaylistButtonStyles(data.activePlaylist);
+
+            // Apply preferred playlist once per page load
+            if (!this.appliedPreferredPlaylist && this.preferredPlaylist && data.activePlaylist && this.preferredPlaylist !== data.activePlaylist) {
+                this.appliedPreferredPlaylist = true;
+                this.switchPlaylist(this.preferredPlaylist);
+            }
         } catch (error) {
             console.error('Failed to load playlist status:', error);
         }
@@ -592,6 +600,8 @@ class VirtualJukebox {
             if (response.ok) {
                 const data = await response.json();
                 this.showToast(data.message, 'success');
+                localStorage.setItem('jukeboxPreferredPlaylist', playlist);
+                this.preferredPlaylist = playlist;
                 
                 // Update status after switching
                 setTimeout(() => this.updatePlaylistStatus(), 500);

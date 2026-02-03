@@ -67,13 +67,18 @@
             margin-top: 12px;
         }
 
-        select,
-        option {
+        .select-contrast {
+            color: #0f172a;
+            background-color: #e2e8f0;
+            border: 1px solid rgba(148, 163, 184, 0.6);
+        }
+
+        .select-contrast option {
             color: #0f172a;
             background-color: #e2e8f0;
         }
 
-        select:focus {
+        .select-contrast:focus {
             outline: 2px solid rgba(129, 140, 248, 0.7);
             outline-offset: 2px;
         }
@@ -145,7 +150,7 @@
                     <p class="text-gray-300 text-sm">Pick the venue WiFi to connect the uplink.</p>
                 </div>
                 <div class="flex items-center gap-3">
-                    <select id="ifaceSelect" class="bg-slate-700 text-white rounded px-3 py-2 text-sm">
+                    <select id="ifaceSelect" class="select-contrast rounded px-3 py-2 text-sm">
                         <option value="wlan0">wlan0 (recommended)</option>
                         <option value="wlan1">wlan1</option>
                     </select>
