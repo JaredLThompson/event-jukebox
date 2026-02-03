@@ -8,6 +8,9 @@ set -e  # Exit on any error
 echo "🥧 Wedding Jukebox - Raspberry Pi Setup"
 echo "========================================"
 echo ""
+print_warning "This is the native (non-Docker) setup script."
+print_warning "If you want Docker-based setup, use: raspberry-pi-docker-setup.sh"
+echo ""
 
 # Colors for output
 RED='\033[0;31m'
@@ -35,6 +38,15 @@ print_error() {
 # Check if running on Raspberry Pi
 if ! grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null; then
     print_warning "This script is designed for Raspberry Pi, but continuing anyway..."
+fi
+
+# Warn if Docker is installed or running (native install may conflict on port 3000)
+if command -v docker &> /dev/null; then
+    print_warning "Docker is installed on this system."
+    if docker info &> /dev/null; then
+        print_warning "Docker daemon appears to be running."
+    fi
+    print_warning "Native service uses port 3000 and may conflict with Docker-based setup."
 fi
 
 # Update system

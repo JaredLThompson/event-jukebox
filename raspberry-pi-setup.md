@@ -70,7 +70,10 @@ cd /home/pi/wedding-jukebox
 
 # Install audio dependencies
 sudo apt update
-sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils nodejs npm
+
+# Install Node dependencies for the audio service
+npm ci --omit=dev
 
 # Copy audio service files
 sudo cp wedding-jukebox-audio.service /etc/systemd/system/

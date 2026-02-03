@@ -103,8 +103,6 @@ cd "$APP_DIR"
 # Create docker-compose.yml for Pi
 print_status "Creating Pi-optimized docker-compose.yml..."
 tee docker-compose.pi.yml > /dev/null <<EOF
-version: '3.8'
-
 services:
   wedding-jukebox:
     image: ghcr.io/jaredlthompson/wedding-jukebox:latest
@@ -158,9 +156,11 @@ print_status "Creating systemd service..."
 if docker compose version &> /dev/null; then
     COMPOSE_CMD="docker compose"
     COMPOSE_PATH="/usr/bin/docker"
+    COMPOSE_UNIT_PREFIX="compose"
 elif command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
     COMPOSE_PATH="/usr/bin/docker-compose"
+    COMPOSE_UNIT_PREFIX=""
 else
     print_error "No Docker Compose found!"
     exit 1
@@ -178,8 +178,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$APP_DIR
-ExecStart=$COMPOSE_PATH compose -f docker-compose.pi.yml up -d
-ExecStop=$COMPOSE_PATH compose -f docker-compose.pi.yml down
+ExecStart=$COMPOSE_PATH ${COMPOSE_UNIT_PREFIX} -f docker-compose.pi.yml up -d
+ExecStop=$COMPOSE_PATH ${COMPOSE_UNIT_PREFIX} -f docker-compose.pi.yml down
 TimeoutStartSec=0
 
 [Install]
@@ -205,18 +205,45 @@ sudo chown -R pi:pi "$APP_DIR"
 # Install audio dependencies for headless audio system
 print_status "Installing audio dependencies for headless audio system..."
 sudo apt update
-sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
+sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils nodejs npm
 
 # Setup headless audio service
 print_status "Setting up headless audio service..."
-if [ -f "$APP_DIR/wedding-jukebox-audio.service" ]; then
-    sudo cp "$APP_DIR/wedding-jukebox-audio.service" /etc/systemd/system/
-    sudo systemctl daemon-reload
-    sudo systemctl enable wedding-jukebox-audio
-    print_success "Audio service configured and enabled"
+APP_USER="${SUDO_USER:-$(whoami)}"
+sudo tee /etc/systemd/system/wedding-jukebox-audio.service > /dev/null <<EOF
+[Unit]
+Description=Wedding Jukebox Audio Service
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/env node audio-integration.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable wedding-jukebox-audio
+print_success "Audio service configured and enabled"
+
+# Install Node dependencies for host audio service
+print_status "Installing Node dependencies for audio service..."
+cd "$APP_DIR"
+if [ -f package-lock.json ]; then
+    npm ci --omit=dev
 else
-    print_warning "wedding-jukebox-audio.service file not found - audio service not configured"
-    print_warning "You may need to set up the audio service manually after cloning the latest code"
+    npm install --omit=dev
 fi
 
 # Configure firewall (if ufw is installed)
@@ -287,16 +314,26 @@ chmod +x "$APP_DIR/setup-youtube-auth.sh"
 # Update script
 tee "$APP_DIR/update.sh" > /dev/null <<'EOF'
 #!/bin/bash
-cd /home/pi/wedding-jukebox
+cd "$(dirname "$0")"
 
 echo "🔄 Updating Wedding Jukebox Docker..."
 
 # Backup first
 ./backup.sh
 
+# Compose command detection
+if docker compose version &> /dev/null; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "Docker Compose not found. Install docker-compose or the docker compose plugin."
+  exit 1
+fi
+
 # Pull latest image and restart
-docker-compose -f docker-compose.pi.yml pull
-docker-compose -f docker-compose.pi.yml up -d
+$COMPOSE_CMD -f docker-compose.pi.yml pull
+$COMPOSE_CMD -f docker-compose.pi.yml up -d
 
 echo "✅ Update complete!"
 EOF
@@ -304,14 +341,25 @@ EOF
 # Status script
 tee "$APP_DIR/status.sh" > /dev/null <<'EOF'
 #!/bin/bash
+cd "$(dirname "$0")"
 
 echo "🥧 Wedding Jukebox Docker Status"
 echo "================================"
 echo ""
 
+# Compose command detection
+if docker compose version &> /dev/null; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "Docker Compose not found. Install docker-compose or the docker compose plugin."
+  exit 1
+fi
+
 # Container status
 echo "📊 Container Status:"
-docker-compose -f docker-compose.pi.yml ps
+$COMPOSE_CMD -f docker-compose.pi.yml ps
 
 echo ""
 echo "🎵 Audio Service Status:"
@@ -329,7 +377,7 @@ hostname -I | awk '{print "IP Address: " $1}'
 
 echo ""
 echo "📝 Container Logs (last 10 lines):"
-docker-compose -f docker-compose.pi.yml logs --tail=10
+$COMPOSE_CMD -f docker-compose.pi.yml logs --tail=10
 
 echo ""
 echo "🎵 Audio Service Logs (last 10 lines):"
@@ -410,7 +458,7 @@ echo "==================="
 echo "Status:    $APP_DIR/status.sh"
 echo "Update:    $APP_DIR/update.sh"
 echo "Backup:    $APP_DIR/backup.sh"
-echo "Logs:      docker-compose -f docker-compose.pi.yml logs -f"
+echo "Logs:      docker compose -f docker-compose.pi.yml logs -f"
 echo "Audio Logs: sudo journalctl -u wedding-jukebox-audio -f"
 echo "Restart:   sudo systemctl restart wedding-jukebox-docker"
 echo "           sudo systemctl restart wedding-jukebox-audio"
