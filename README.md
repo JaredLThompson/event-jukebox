@@ -69,6 +69,11 @@ Common devices:
 - `hw:CARD=vc4hdmi0,DEV=0` (HDMI 0)
 - `hw:CARD=vc4hdmi1,DEV=0` (HDMI 1)
 
+## Event Branding
+You can brand the UI for any event (wedding, dojo, house party, etc.) by editing `event-config.json`.
+
+For Pi deployments, you can override it at `/app/data/event-config.json` (inside the Docker volume).
+
 ## Useful Commands (Pi)
 ```bash
 # Restart services (Docker + audio)
@@ -91,4 +96,3 @@ Environment variables (optional):
 - `DEPLOYMENT.md` - Full deployment guide
 - `raspberry-pi-setup.md` - Detailed Pi setup
 - `DOCKER_DEPLOYMENT_GUIDE.md` - Docker scripts and workflows
-

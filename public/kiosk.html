@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="Music Kiosk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -182,7 +182,7 @@
         <!-- Welcome Banner -->
         <div class="welcome-banner text-center py-6 rounded-2xl mb-8">
             <h1 class="text-4xl md:text-6xl font-bold mb-2">
-                🎵 Wedding Jukebox 🎵
+                🎵 <span data-event-text="appName">Wedding Jukebox</span> 🎵
             </h1>
             <p class="text-xl md:text-2xl">Help us create the perfect playlist!</p>
         </div>
@@ -251,8 +251,8 @@
                     <h4 class="font-bold mb-3 text-gray-800 text-sm">Connect to WiFi</h4>
                     <img id="wifiQrCode" class="qr-code mx-auto mb-3" style="max-width: 120px;" alt="WiFi QR Code" />
                     <div class="text-xs text-gray-600">
-                        <strong>Network:</strong> Wedding-Jukebox<br>
-                        <strong>Password:</strong> WeddingMusic2026
+                        <strong>Network:</strong> <span data-event-text="wifiSsid">Wedding-Jukebox</span><br>
+                        <strong>Password:</strong> <span data-event-text="wifiPassword">WeddingMusic2026</span>
                     </div>
                 </div>
                 
@@ -285,12 +285,13 @@
         <!-- Footer -->
         <div class="text-center mt-8 text-gray-300">
             <p class="text-lg">🎉 Thank you for making our wedding special! 🎉</p>
-            <p class="text-sm mt-2">Powered by Wedding Jukebox</p>
+            <p class="text-sm mt-2">Powered by <span data-event-text="appName">Wedding Jukebox</span></p>
         </div>
     </div>
 
     <!-- Socket.IO for real-time updates -->
     <script src="/socket.io/socket.io.js"></script>
+    <script src="js/event-config.js"></script>
     <script>
         class WeddingKiosk {
             constructor() {
@@ -442,7 +443,9 @@
                     const networkInfo = await response.json();
                     
                     // Generate WiFi QR Code
-                    const wifiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:Wedding-Jukebox;P:WeddingMusic2026;H:false;;`;
+                    const wifiSsid = window.eventConfig?.wifi?.ssid || 'Wedding-Jukebox';
+                    const wifiPassword = window.eventConfig?.wifi?.password || 'WeddingMusic2026';
+                    const wifiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:${wifiSsid};P:${wifiPassword};H:false;;`;
                     this.wifiQrCodeEl.src = wifiQrUrl;
                     
                     // Generate Jukebox QR Code
@@ -453,7 +456,7 @@
                 } catch (error) {
                     console.error('Failed to generate QR codes:', error);
                     // Fallback QR codes
-                    this.wifiQrCodeEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:Wedding-Jukebox;P:WeddingMusic2026;H:false;;';
+                    this.wifiQrCodeEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:${wifiSsid};P:${wifiPassword};H:false;;`;
                     this.jukeboxQrCodeEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/user';
                 }
             }

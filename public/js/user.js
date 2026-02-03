@@ -263,7 +263,9 @@ class UserJukebox {
 
         const isFallback = song.source === 'fallback';
         const icon = isFallback ? 'fas fa-magic text-yellow-400' : 'fas fa-play-circle text-green-400';
-        const addedBy = isFallback ? '🎵 Wedding DJ' : song.addedBy;
+        const eventConfig = window.eventConfig || {};
+        const fallbackLabel = eventConfig.playlists?.primary?.addedBy || '🎵 Wedding DJ';
+        const addedBy = isFallback ? fallbackLabel : song.addedBy;
 
         this.nowPlayingPreview.innerHTML = `
             <div class="flex items-center space-x-3">

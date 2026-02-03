@@ -58,6 +58,12 @@ class JukeboxSettings {
 
 // Initialize settings
 const jukeboxSettings = new JukeboxSettings();
+const getEventConfig = () => window.eventConfig || {};
+const getPlaylistText = (key, field, fallback) => {
+    const playlists = getEventConfig().playlists || {};
+    const playlist = key === 'secondary' ? playlists.secondary : playlists.primary;
+    return playlist && playlist[field] ? playlist[field] : fallback;
+};
 
 class VirtualJukebox {
     constructor() {
@@ -938,7 +944,7 @@ class VirtualJukebox {
         const icon = isFallback ? 'fas fa-magic' : 
                     isSpotify ? 'fab fa-spotify' : 
                     'fas fa-play-circle';
-        const serviceLabel = isFallback ? '🎵 Wedding DJ Auto-Play' :
+        const serviceLabel = isFallback ? (getEventConfig().playlists?.autoPlayLabel || '🎵 Wedding DJ Auto-Play') :
                            isSpotify ? '🎵 Spotify' :
                            '🎵 YouTube Music';
         
@@ -2030,7 +2036,8 @@ class VirtualJukebox {
             });
 
             if (response.ok) {
-                this.showToast('Wedding playlist reset to beginning!', 'success');
+                const label = getPlaylistText('primary', 'label', 'Wedding Playlist');
+                this.showToast(`${label} reset to beginning!`, 'success');
             } else {
                 throw new Error('Failed to reset playlist');
             }
@@ -2786,7 +2793,9 @@ Check browser console (F12) for detailed video IDs`);
             
             if (data.success) {
                 this.editablePlaylist = [...data.playlist];
-                this.editingPlaylistName.textContent = playlistName === 'wedding' ? 'Wedding Party' : 'Bride\'s Elegant';
+                this.editingPlaylistName.textContent = playlistName === 'wedding'
+                    ? getPlaylistText('primary', 'shortName', 'Wedding Party')
+                    : getPlaylistText('secondary', 'shortName', 'Bride\'s Elegant');
                 
                 // Hide browser, show editor
                 this.playlistBrowser.classList.add('hidden');

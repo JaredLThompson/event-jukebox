@@ -45,6 +45,9 @@ docker exec -it wedding-jukebox-pi aplay -l
 
 Select the output in Settings (e.g., `hw:CARD=Set,DEV=0`).
 
+## Event Branding
+Edit `event-config.json` for titles, labels, and WiFi info. On the Pi, store an override at `/app/data/event-config.json` to persist across container rebuilds.
+
 ## Troubleshooting
 
 ### Port 3000 already in use

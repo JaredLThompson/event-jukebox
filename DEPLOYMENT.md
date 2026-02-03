@@ -96,6 +96,10 @@ Example device IDs:
 - `hw:CARD=Set,DEV=0` (USB)
 - `hw:CARD=vc4hdmi0,DEV=0` (HDMI 0)
 
+## Event Branding
+Edit `event-config.json` to change the event name, playlist labels, and UI text.
+On the Pi, place an override at `/app/data/event-config.json` so updates survive container rebuilds.
+
 ---
 
 ## Troubleshooting
@@ -128,4 +132,3 @@ sudo journalctl -u wedding-jukebox-audio -n 50
 sudo journalctl -u wedding-jukebox-audio -f
 sudo systemctl status wedding-jukebox-docker
 ```
-

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="DJ Interface">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Jukebox</title>
+    <title>Wedding Jukebox</title>
     
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -90,7 +90,7 @@
         <!-- Header -->
         <header class="text-center mb-8">
             <h1 class="text-5xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-                <i class="fas fa-music mr-3"></i>Virtual Jukebox
+                <i class="fas fa-music mr-3"></i><span data-event-text="appName">Wedding Jukebox</span>
             </h1>
             <p class="text-xl text-gray-300">Share the music, share the vibe</p>
             <div class="mt-4 flex justify-center items-center space-x-4">
@@ -317,12 +317,12 @@
                 </div>
             </h2>
             
-            <!-- Wedding Playlist Status -->
+            <!-- Playlist Status -->
             <div id="playlistStatus" class="mb-4 p-3 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-lg hidden">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center">
                         <i class="fas fa-magic mr-2 text-yellow-200"></i>
-                        <span class="font-semibold text-yellow-100" id="playlistName">Wedding Playlist:</span>
+                        <span class="font-semibold text-yellow-100" id="playlistName" data-event-text="playlistPrimaryLabel">Wedding Playlist</span>
                         <span id="playlistPosition" class="ml-2 text-yellow-200">Song 1 of 50</span>
                     </div>
                     <div class="flex items-center space-x-2">
@@ -342,19 +342,19 @@
                 <div class="mt-3 flex items-center justify-center space-x-2">
                     <span class="text-xs text-yellow-200">Switch Playlist:</span>
                     <button id="switchToWeddingBtn" class="playlist-switch-btn bg-yellow-700 hover:bg-yellow-800 px-3 py-1 rounded text-xs transition-colors" data-playlist="wedding">
-                        🎉 Party
+                        🎉 <span data-event-text="playlistPrimaryShort">Party</span>
                     </button>
                     <button id="switchToBrideBtn" class="playlist-switch-btn bg-yellow-700 hover:bg-yellow-800 px-3 py-1 rounded text-xs transition-colors" data-playlist="bride">
-                        ✨ Elegant
+                        ✨ <span data-event-text="playlistSecondaryShort">Elegant</span>
                     </button>
                 </div>
             </div>
             
-            <!-- Expandable Wedding Playlist Browser -->
+            <!-- Expandable Playlist Browser -->
             <div id="playlistBrowser" class="mb-4 bg-gradient-to-r from-amber-700 to-orange-700 rounded-lg p-4 hidden">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-lg font-semibold text-amber-100">
-                        <i class="fas fa-heart mr-2"></i>Wedding Playlist Browser
+                        <i class="fas fa-heart mr-2"></i><span data-event-text="playlistPrimaryLabel">Wedding Playlist</span> Browser
                     </h3>
                     <div class="flex space-x-2">
                         <button id="editPlaylistBtn" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors">
@@ -375,7 +375,7 @@
                         <input type="text" id="playlistSearchInput" 
                                class="flex-1 px-3 py-2 bg-gray-100 border border-amber-600 rounded-lg focus:border-amber-400 focus:outline-none focus:bg-white" 
                                style="color: #1f2937 !important; background-color: #f3f4f6 !important;"
-                               placeholder="Search wedding playlist... (e.g., 'Duran', 'dance', 'romantic')">
+                               placeholder="Search playlist... (e.g., 'Duran', 'dance', 'romantic')">
                         <button id="clearPlaylistSearchBtn" class="bg-amber-800 hover:bg-amber-900 px-3 py-2 rounded-lg transition-colors">
                             <i class="fas fa-times"></i>
                         </button>
@@ -417,7 +417,7 @@
             <div id="playlistEditor" class="mb-4 bg-gradient-to-r from-purple-700 to-indigo-700 rounded-lg p-4 hidden">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-lg font-semibold text-purple-100">
-                        <i class="fas fa-edit mr-2"></i>Playlist Editor - <span id="editingPlaylistName">Wedding Party</span>
+                        <i class="fas fa-edit mr-2"></i>Playlist Editor - <span id="editingPlaylistName" data-event-text="playlistPrimaryShort">Wedding Party</span>
                     </h3>
                     <div class="flex space-x-2">
                         <button id="addSongToPlaylistBtn" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors">
@@ -479,7 +479,7 @@
             <div id="historyModal" class="mb-4 bg-gradient-to-r from-green-700 to-emerald-700 rounded-lg p-4 hidden">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-lg font-semibold text-green-100">
-                        <i class="fas fa-history mr-2"></i>Wedding Play History
+                        <i class="fas fa-history mr-2"></i><span data-event-text="eventName">Wedding</span> Play History
                     </h3>
                     <div class="flex items-center space-x-2">
                         <button id="exportHistoryBtn" class="bg-green-800 hover:bg-green-900 px-3 py-1 rounded text-sm transition-colors">
@@ -543,6 +543,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="js/event-config.js"></script>
     <!-- YouTube iframe API no longer needed - using server-side audio -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="js/app.js"></script>

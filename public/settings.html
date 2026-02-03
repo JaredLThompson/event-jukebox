@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="Settings">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -113,7 +113,7 @@
         <!-- Header -->
         <header class="text-center mb-8">
             <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-                <i class="fas fa-cog mr-3"></i>Wedding Jukebox Settings
+                <i class="fas fa-cog mr-3"></i><span data-event-text="appName">Wedding Jukebox</span> Settings
             </h1>
             <p class="text-xl text-gray-300">Customize your music experience</p>
             <div class="mt-4">
@@ -224,6 +224,51 @@
                         <select id="audioOutputDevice" class="w-full md:w-96 bg-gray-700 text-white rounded px-3 py-2">
                             <option value="default">Default (system)</option>
                         </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Event Branding -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-palette mr-3 text-pink-300"></i>
+                    Event Branding
+                </h2>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Preset Theme</h3>
+                            <p class="text-gray-300 text-sm">Quickly swap the UI for a different event</p>
+                        </div>
+                        <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                            <select id="eventPreset" class="w-full md:w-72 bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="">Custom</option>
+                                <option value="wedding">Wedding</option>
+                                <option value="dojo">Dojo</option>
+                                <option value="house">House Party</option>
+                                <option value="studio">Training Studio</option>
+                            </select>
+                            <button id="applyPresetBtn" class="bg-pink-600 hover:bg-pink-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                                Apply Preset
+                            </button>
+                        </div>
+                    </div>
+                    <div id="presetCards" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4"></div>
+                </div>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Save As Custom</h3>
+                            <p class="text-gray-300 text-sm">Save the current branding so you can re-use it later</p>
+                        </div>
+                        <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                            <input id="customPresetName" type="text" class="w-full md:w-72 bg-gray-700 text-white rounded px-3 py-2" placeholder="Custom preset name">
+                            <button id="savePresetBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                                Save Custom
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -357,10 +402,13 @@
         </div>
     </div>
 
+    <script src="js/event-config.js"></script>
     <script>
         class SettingsManager {
             constructor() {
                 this.settings = this.loadSettings();
+                this.eventConfig = null;
+                this.customPresets = {};
                 this.initializeUI();
                 this.bindEvents();
             }
@@ -426,6 +474,7 @@
                 
                 this.updateVisualizerSettingsVisibility();
                 this.loadAudioOutputs();
+                this.loadEventConfig();
             }
             
             bindEvents() {
@@ -461,6 +510,16 @@
                         await fetch('/api/cache/clear', { method: 'POST' });
                         this.showToast('Cache cleared', 'success');
                     });
+                }
+
+                const applyPresetBtn = document.getElementById('applyPresetBtn');
+                if (applyPresetBtn) {
+                    applyPresetBtn.addEventListener('click', () => this.applyPreset());
+                }
+
+                const savePresetBtn = document.getElementById('savePresetBtn');
+                if (savePresetBtn) {
+                    savePresetBtn.addEventListener('click', () => this.saveCustomPreset());
                 }
             }
             
@@ -508,6 +567,285 @@
                 } catch (error) {
                     // Ignore errors; device may not be available
                 }
+            }
+
+            async loadEventConfig() {
+                try {
+                    const response = await fetch('/api/event-config');
+                    if (!response.ok) return;
+                    this.eventConfig = await response.json();
+                    await this.loadCustomPresets();
+                    this.renderPresetCards();
+                } catch (error) {
+                    // Ignore
+                }
+            }
+
+            getEventPresets() {
+                return {
+                    wedding: {
+                        appName: 'Wedding Jukebox',
+                        eventName: 'Wedding',
+                        tagline: 'Add songs and keep the party going',
+                        theme: {
+                            primary: '#6d28d9',
+                            secondary: '#1f2937',
+                            accent: '#f59e0b',
+                            background: '#0f172a',
+                            card: '#1f2937'
+                        },
+                        wifi: {
+                            ssid: 'Wedding-Jukebox',
+                            password: 'WeddingMusic2026'
+                        },
+                        playlists: {
+                            primary: {
+                                key: 'wedding',
+                                name: 'Wedding Party Playlist',
+                                shortName: 'Wedding Party',
+                                label: 'Wedding Playlist',
+                                addedBy: '🎵 Wedding DJ'
+                            },
+                            secondary: {
+                                key: 'bride',
+                                name: \"Bride's Elegant Playlist\",
+                                shortName: \"Bride's Elegant\",
+                                label: \"Bride's Playlist\",
+                                addedBy: \"✨ Bride's Collection\"
+                            },
+                            autoPlayLabel: '🎵 Wedding DJ Auto-Play'
+                        }
+                    },
+                    dojo: {
+                        appName: 'Karate Jukebox',
+                        eventName: 'Dojo Night',
+                        tagline: 'Focus, energy, and music between rounds',
+                        theme: {
+                            primary: '#ef4444',
+                            secondary: '#111827',
+                            accent: '#f97316',
+                            background: '#0b0f1a',
+                            card: '#1f2937'
+                        },
+                        wifi: {
+                            ssid: 'Karate-Jukebox',
+                            password: 'DojoMusic2026'
+                        },
+                        playlists: {
+                            primary: {
+                                key: 'wedding',
+                                name: 'Dojo Hype Playlist',
+                                shortName: 'Dojo Hype',
+                                label: 'Dojo Playlist',
+                                addedBy: '🥋 Dojo DJ'
+                            },
+                            secondary: {
+                                key: 'bride',
+                                name: 'Recovery & Focus',
+                                shortName: 'Recovery',
+                                label: 'Focus Playlist',
+                                addedBy: '🧘 Dojo Crew'
+                            },
+                            autoPlayLabel: '🥋 Dojo Auto-Play'
+                        }
+                    },
+                    house: {
+                        appName: 'House Party Jukebox',
+                        eventName: 'House Party',
+                        tagline: 'Queue the bangers and keep it moving',
+                        theme: {
+                            primary: '#22c55e',
+                            secondary: '#0f172a',
+                            accent: '#38bdf8',
+                            background: '#0b1325',
+                            card: '#1e293b'
+                        },
+                        wifi: {
+                            ssid: 'House-Party-Jukebox',
+                            password: 'PartyTime2026'
+                        },
+                        playlists: {
+                            primary: {
+                                key: 'wedding',
+                                name: 'Party Starters',
+                                shortName: 'Starters',
+                                label: 'Party Playlist',
+                                addedBy: '🎉 Party Host'
+                            },
+                            secondary: {
+                                key: 'bride',
+                                name: 'Late Night Chill',
+                                shortName: 'Chill',
+                                label: 'After Hours',
+                                addedBy: '🌙 Chill Crew'
+                            },
+                            autoPlayLabel: '🎉 Party Auto-Play'
+                        }
+                    },
+                    studio: {
+                        appName: 'Training Studio Jukebox',
+                        eventName: 'Training Session',
+                        tagline: 'Keep the energy up between sets',
+                        theme: {
+                            primary: '#3b82f6',
+                            secondary: '#111827',
+                            accent: '#a855f7',
+                            background: '#0b1020',
+                            card: '#1f2937'
+                        },
+                        wifi: {
+                            ssid: 'Training-Jukebox',
+                            password: 'StudioMix2026'
+                        },
+                        playlists: {
+                            primary: {
+                                key: 'wedding',
+                                name: 'Studio Pump',
+                                shortName: 'Pump',
+                                label: 'Training Playlist',
+                                addedBy: '🏋️ Studio DJ'
+                            },
+                            secondary: {
+                                key: 'bride',
+                                name: 'Cooldown & Stretch',
+                                shortName: 'Cooldown',
+                                label: 'Recovery Playlist',
+                                addedBy: '🧊 Studio Crew'
+                            },
+                            autoPlayLabel: '🏋️ Studio Auto-Play'
+                        }
+                    }
+                };
+            }
+
+            getCustomPresets() {
+                return this.customPresets || {};
+            }
+
+            saveCustomPresets(presets) {
+                this.customPresets = presets || {};
+            }
+
+            async loadCustomPresets() {
+                try {
+                    const response = await fetch('/api/event-presets');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    this.customPresets = data.presets || {};
+                } catch (error) {
+                    this.customPresets = {};
+                }
+            }
+
+            renderPresetCards() {
+                const container = document.getElementById('presetCards');
+                if (!container) return;
+                const presets = { ...this.getEventPresets(), ...this.getCustomPresets() };
+                const entries = Object.entries(presets);
+                if (!entries.length) {
+                    container.innerHTML = '';
+                    return;
+                }
+                container.innerHTML = entries.map(([key, preset]) => `
+                    <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 flex flex-col gap-2">
+                        <div class="text-sm uppercase tracking-wide text-gray-400">Preset</div>
+                        <div class="text-lg font-semibold text-white">${preset.appName || key}</div>
+                        <div class="text-sm text-gray-300">${preset.tagline || 'Custom event setup'}</div>
+                        <div class="text-xs text-gray-400">WiFi: ${preset.wifi?.ssid || 'Not set'}</div>
+                        <button data-preset-key="${key}" class="preset-apply-btn mt-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded text-sm font-semibold">
+                            Apply
+                        </button>
+                    </div>
+                `).join('');
+
+                container.querySelectorAll('.preset-apply-btn').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const select = document.getElementById('eventPreset');
+                        if (select) {
+                            select.value = btn.getAttribute('data-preset-key');
+                        }
+                        this.applyPreset();
+                    });
+                });
+            }
+
+            async applyPreset() {
+                const select = document.getElementById('eventPreset');
+                if (!select) return;
+                const presetKey = select.value;
+                if (!presetKey) {
+                    this.showToast('Select a preset to apply', 'error');
+                    return;
+                }
+                const presets = { ...this.getEventPresets(), ...this.getCustomPresets() };
+                const preset = presets[presetKey];
+                if (!preset) return;
+
+                try {
+                    const response = await fetch('/api/event-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(preset)
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save preset');
+                    }
+                    if (window.applyEventConfig) {
+                        window.applyEventConfig(preset);
+                    }
+                    this.showToast('Event preset applied', 'success');
+                } catch (error) {
+                    this.showToast('Failed to apply preset', 'error');
+                }
+            }
+
+            async saveCustomPreset() {
+                const nameInput = document.getElementById('customPresetName');
+                if (!nameInput) return;
+                const name = nameInput.value.trim();
+                if (!name) {
+                    this.showToast('Enter a name for the preset', 'error');
+                    return;
+                }
+                if (!this.eventConfig) {
+                    await this.loadEventConfig();
+                }
+                const configToSave = this.eventConfig || {};
+                if (!configToSave.appName || !configToSave.eventName) {
+                    this.showToast('Current event config is incomplete', 'error');
+                    return;
+                }
+                const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                const presetPayload = { ...configToSave, appName: name };
+                try {
+                    const response = await fetch('/api/event-presets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key, preset: presetPayload })
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save preset');
+                    }
+                    const presets = this.getCustomPresets();
+                    presets[key] = presetPayload;
+                    this.saveCustomPresets(presets);
+                } catch (error) {
+                    this.showToast('Failed to save preset', 'error');
+                    return;
+                }
+                nameInput.value = '';
+                const select = document.getElementById('eventPreset');
+                if (select) {
+                    if (!Array.from(select.options).some((opt) => opt.value === key)) {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    }
+                    select.value = key;
+                }
+                this.renderPresetCards();
+                this.showToast('Custom preset saved', 'success');
             }
             
             resetToDefaults() {

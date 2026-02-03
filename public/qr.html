@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="Add Your Songs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -292,7 +292,7 @@
     <div class="container">
         <div class="music-notes floating">🎵 🎶 🎵</div>
         
-        <h1 class="title">Wedding Jukebox</h1>
+        <h1 class="title" data-event-text="appName">Wedding Jukebox</h1>
         <p class="subtitle">Help us create the perfect playlist!</p>
         
         <!-- WiFi Connection Section - Now at the top! -->
@@ -309,11 +309,11 @@
             <div class="wifi-info">
                 <div class="wifi-item">
                     <span class="wifi-label">Network:</span>
-                    <span class="wifi-value">Wedding-Jukebox</span>
+                    <span class="wifi-value" data-event-text="wifiSsid">Wedding-Jukebox</span>
                 </div>
                 <div class="wifi-item">
                     <span class="wifi-label">Password:</span>
-                    <span class="wifi-value">WeddingMusic2026</span>
+                    <span class="wifi-value" data-event-text="wifiPassword">WeddingMusic2026</span>
                 </div>
             </div>
         </div>
@@ -351,12 +351,13 @@
         <div class="music-notes floating" style="animation-delay: 1s;">🎼 ♪ ♫</div>
     </div>
     
+    <script src="js/event-config.js"></script>
     <script>
         // Wait for DOM to be ready
         document.addEventListener('DOMContentLoaded', function() {
             // Generate WiFi QR Code
-            const wifiSSID = 'Wedding-Jukebox';
-            const wifiPassword = 'WeddingMusic2026';
+            const wifiSSID = window.eventConfig?.wifi?.ssid || 'Wedding-Jukebox';
+            const wifiPassword = window.eventConfig?.wifi?.password || 'WeddingMusic2026';
             const wifiSecurity = 'WPA'; // WPA/WEP/nopass
             
             // WiFi QR code format: WIFI:T:WPA;S:SSID;P:password;H:false;;

@@ -41,6 +41,12 @@ let suppressedSongs = new Set(); // New: track suppressed playlist songs by inde
 // Playlist persistence
 const PLAYLIST_STATE_FILE = path.join(__dirname, 'playlist-state.json');
 
+// Event configuration
+const EVENT_CONFIG_FILE = path.join(__dirname, 'event-config.json');
+const EVENT_CONFIG_OVERRIDE = path.join(__dirname, 'data', 'event-config.json');
+const EVENT_PRESETS_FILE = path.join(__dirname, 'data', 'event-presets.json');
+let eventConfig = null;
+
 // Audio output settings
 const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
 let audioOutputDevice = null;
@@ -96,6 +102,103 @@ function savePlaylistState(playlist) {
   } catch (error) {
     console.error('Failed to save playlist state:', error.message);
   }
+}
+
+function loadEventConfig() {
+  const readConfig = (filepath) => {
+    if (!fs.existsSync(filepath)) return null;
+    const data = fs.readFileSync(filepath, 'utf8');
+    return JSON.parse(data);
+  };
+
+  try {
+    const overrideConfig = readConfig(EVENT_CONFIG_OVERRIDE);
+    if (overrideConfig) return overrideConfig;
+  } catch (error) {
+    console.error('Failed to load event config override:', error.message);
+  }
+
+  try {
+    const baseConfig = readConfig(EVENT_CONFIG_FILE);
+    if (baseConfig) return baseConfig;
+  } catch (error) {
+    console.error('Failed to load event config:', error.message);
+  }
+
+  return {
+    appName: 'Wedding Jukebox',
+    eventName: 'Wedding',
+    playlists: {
+      primary: {
+        key: 'wedding',
+        name: 'Wedding Party Playlist',
+        shortName: 'Wedding Party',
+        label: 'Wedding Playlist',
+        addedBy: '🎵 Wedding DJ'
+      },
+      secondary: {
+        key: 'bride',
+        name: "Bride's Elegant Playlist",
+        shortName: "Bride's Elegant",
+        label: "Bride's Playlist",
+        addedBy: "✨ Bride's Collection"
+      },
+      autoPlayLabel: '🎵 Wedding DJ Auto-Play'
+    }
+  };
+}
+
+function getEventConfig() {
+  eventConfig = loadEventConfig();
+  return eventConfig;
+}
+
+function saveEventConfig(config) {
+  try {
+    fs.mkdirSync(path.dirname(EVENT_CONFIG_OVERRIDE), { recursive: true });
+    fs.writeFileSync(EVENT_CONFIG_OVERRIDE, JSON.stringify(config, null, 2));
+    eventConfig = config;
+    return true;
+  } catch (error) {
+    console.error('Failed to save event config:', error.message);
+    return false;
+  }
+}
+
+function loadEventPresets() {
+  if (!fs.existsSync(EVENT_PRESETS_FILE)) return {};
+  try {
+    const data = fs.readFileSync(EVENT_PRESETS_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.error('Failed to load event presets:', error.message);
+    return {};
+  }
+}
+
+function saveEventPresets(presets) {
+  try {
+    fs.mkdirSync(path.dirname(EVENT_PRESETS_FILE), { recursive: true });
+    fs.writeFileSync(EVENT_PRESETS_FILE, JSON.stringify(presets, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Failed to save event presets:', error.message);
+    return false;
+  }
+}
+
+function getPlaylistConfig(key) {
+  const config = getEventConfig();
+  if (config.playlists?.primary?.key === key) return config.playlists.primary;
+  if (config.playlists?.secondary?.key === key) return config.playlists.secondary;
+  return config.playlists?.primary || {
+    key: 'wedding',
+    name: 'Wedding Party Playlist',
+    shortName: 'Wedding Party',
+    label: 'Wedding Playlist',
+    addedBy: '🎵 Wedding DJ'
+  };
 }
 
 function loadAudioOutput() {
@@ -183,6 +286,7 @@ const persistedPlaylist = loadPlaylistState();
 if (persistedPlaylist) {
   activePlaylist = persistedPlaylist;
 }
+eventConfig = loadEventConfig();
 
 // Load existing play history if it exists
 function loadPlayHistory() {
@@ -268,6 +372,45 @@ app.get('/user', (req, res) => {
 
 app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+});
+
+app.get('/api/event-config', (req, res) => {
+  res.json(getEventConfig());
+});
+
+app.post('/api/event-config', (req, res) => {
+  const config = req.body;
+  if (!config || typeof config !== 'object') {
+    return res.status(400).json({ error: 'Invalid event config' });
+  }
+  if (!config.appName || !config.eventName) {
+    return res.status(400).json({ error: 'Event config must include appName and eventName' });
+  }
+  const saved = saveEventConfig(config);
+  if (!saved) {
+    return res.status(500).json({ error: 'Failed to save event config' });
+  }
+  io.emit('eventConfigUpdated', config);
+  res.json({ success: true });
+});
+
+app.get('/api/event-presets', (req, res) => {
+  const presets = loadEventPresets();
+  res.json({ presets });
+});
+
+app.post('/api/event-presets', (req, res) => {
+  const { key, preset } = req.body || {};
+  if (!key || typeof key !== 'string' || !preset || typeof preset !== 'object') {
+    return res.status(400).json({ error: 'Invalid preset payload' });
+  }
+  const presets = loadEventPresets();
+  presets[key] = preset;
+  const saved = saveEventPresets(presets);
+  if (!saved) {
+    return res.status(500).json({ error: 'Failed to save preset' });
+  }
+  res.json({ success: true });
 });
 
 app.get('/api/audio/output', async (req, res) => {
@@ -1175,15 +1318,16 @@ app.delete('/api/queue/:id', (req, res) => {
 app.post('/api/playlist/reset', (req, res) => {
   fallbackPlaylistIndex = 0;
   currentFallbackIndex = -1; // Reset current playing index too
+  const activeConfig = getPlaylistConfig(activePlaylist);
   
   io.emit('playlistReset', { 
-    message: 'Wedding playlist reset to beginning',
+    message: `${activeConfig.label} reset to beginning`,
     index: fallbackPlaylistIndex 
   });
   
   res.json({ 
     success: true, 
-    message: 'Wedding playlist reset to beginning',
+    message: `${activeConfig.label} reset to beginning`,
     index: fallbackPlaylistIndex 
   });
 });
@@ -1243,7 +1387,7 @@ app.get('/api/playlist/next-resolved', async (req, res) => {
         duration: song.duration_text,
         albumArt: song.thumbnail,
         album: song.album,
-        addedBy: activePlaylist === 'wedding' ? '🎵 Wedding DJ' : '✨ Bride\'s Collection',
+        addedBy: getPlaylistConfig(activePlaylist).addedBy,
         addedAt: new Date().toISOString(),
         source: 'fallback',
         type: playlistItem.type,
@@ -1801,7 +1945,7 @@ function getCurrentPlaylist() {
 }
 
 function getPlaylistName() {
-  return activePlaylist === 'wedding' ? 'Wedding Party Playlist' : 'Bride\'s Elegant Playlist';
+  return getPlaylistConfig(activePlaylist).name;
 }
 
 async function getNextFallbackSong() {
@@ -1832,7 +1976,7 @@ async function getNextFallbackSong() {
             duration: song.duration_text,
             albumArt: song.thumbnail,
             album: song.album,
-            addedBy: activePlaylist === 'wedding' ? '🎵 Wedding DJ' : '✨ Bride\'s Collection',
+            addedBy: getPlaylistConfig(activePlaylist).addedBy,
             addedAt: new Date().toISOString(),
             source: 'fallback',
             type: playlistItem.type,

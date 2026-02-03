@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="Welcome">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to the Wedding!</title>
+    <title>Welcome to the Event!</title>
     
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -118,18 +118,18 @@
     <div class="music-notes note4">🎶</div>
     
     <div class="container">
-        <div class="wedding-icon">💒</div>
+        <div class="wedding-icon">🎉</div>
         <h1>Welcome!</h1>
-        <div class="subtitle">You're connected to the Wedding Jukebox</div>
+        <div class="subtitle">You're connected to <span data-event-text="appName">Wedding Jukebox</span></div>
         
         <a id="requestLink" href="http://192.168.4.1:3000/user" class="jukebox-button">
             🎵 Request a Song
         </a>
         
         <div class="info">
-            <p>🎉 Help us celebrate by adding your favorite songs to the playlist!</p>
-            <p>🎧 The DJ will play your requests throughout the reception</p>
-            <p>💃 Let's make this night unforgettable!</p>
+            <p>🎉 Help us celebrate the <span data-event-text="eventName">Wedding</span> by adding your favorite songs!</p>
+            <p>🎧 The DJ will play your requests throughout the event</p>
+            <p>💃 Let's make this moment unforgettable!</p>
         </div>
         
         <div class="countdown" id="redirect-info">
@@ -137,6 +137,7 @@
         </div>
     </div>
 
+    <script src="js/event-config.js"></script>
     <script>
         const hotspotUrl = 'http://192.168.4.1:3000/user';
         const origin = window.location.origin || '';

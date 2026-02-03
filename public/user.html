@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-title-suffix="Add Music">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Music - Virtual Jukebox</title>
+    <title>Wedding Jukebox - Add Music</title>
     
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -22,7 +22,7 @@
             <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
                 <i class="fas fa-headphones mr-3"></i>Add Your Music
             </h1>
-            <p class="text-xl text-gray-300">Search and add songs to the jukebox</p>
+            <p class="text-xl text-gray-300">Search and add songs to <span data-event-text="appName">Wedding Jukebox</span></p>
             <div class="mt-4 flex justify-center space-x-4">
                 <span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm">
                     <i class="fas fa-users mr-1"></i>
@@ -137,6 +137,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="js/event-config.js"></script>
     <script src="js/user.js"></script>
 </body>
 </html>

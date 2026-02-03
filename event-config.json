@@ -1,0 +1,33 @@
+{
+  "appName": "Wedding Jukebox",
+  "eventName": "Wedding",
+  "tagline": "Add songs and keep the party going",
+  "theme": {
+    "primary": "#6d28d9",
+    "secondary": "#1f2937",
+    "accent": "#f59e0b",
+    "background": "#0f172a",
+    "card": "#1f2937"
+  },
+  "wifi": {
+    "ssid": "Wedding-Jukebox",
+    "password": "WeddingMusic2026"
+  },
+  "playlists": {
+    "primary": {
+      "key": "wedding",
+      "name": "Wedding Party Playlist",
+      "shortName": "Wedding Party",
+      "label": "Wedding Playlist",
+      "addedBy": "🎵 Wedding DJ"
+    },
+    "secondary": {
+      "key": "bride",
+      "name": "Bride's Elegant Playlist",
+      "shortName": "Bride's Elegant",
+      "label": "Bride's Playlist",
+      "addedBy": "✨ Bride's Collection"
+    },
+    "autoPlayLabel": "🎵 Wedding DJ Auto-Play"
+  }
+}
