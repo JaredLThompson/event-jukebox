@@ -301,6 +301,21 @@ if systemctl is-active --quiet NetworkManager; then
 
     run_cmd nmcli con up "Wedding-Jukebox-Hotspot"
 
+    echo "🧰 Ensuring forwarding + NAT rules exist..."
+    if ! sudo iptables -S FORWARD 2>/dev/null | grep -q "$HOTSPOT_INTERFACE"; then
+        run_cmd sudo iptables -A FORWARD -i "$HOTSPOT_INTERFACE" -o "$VENUE_INTERFACE" -j ACCEPT
+        run_cmd sudo iptables -A FORWARD -i "$VENUE_INTERFACE" -o "$HOTSPOT_INTERFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT
+    fi
+    if ! sudo iptables -t nat -S POSTROUTING 2>/dev/null | grep -q "$VENUE_INTERFACE"; then
+        run_cmd sudo iptables -t nat -A POSTROUTING -o "$VENUE_INTERFACE" -j MASQUERADE
+    fi
+    if [[ -d /etc/iptables ]]; then
+        run_cmd sudo sh -c "iptables-save > /etc/iptables/rules.v4"
+    else
+        run_cmd sudo apt install -y iptables-persistent
+        run_cmd sudo sh -c "iptables-save > /etc/iptables/rules.v4"
+    fi
+
     echo ""
     echo "✅ Dual WiFi setup complete (NetworkManager)!"
     echo ""

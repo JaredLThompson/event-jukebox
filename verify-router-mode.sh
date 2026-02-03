@@ -30,23 +30,28 @@ else
 fi
 
 # 2) NAT / masquerade
+iptables_nat_ok=0
 if sudo iptables -t nat -S 2>/dev/null | grep -q "MASQUERADE"; then
-  pass "NAT masquerade rule present"
+  pass "NAT masquerade rule present (iptables)"
+  iptables_nat_ok=1
 else
-  fail "No NAT masquerade rule found"
+  warn "No NAT masquerade rule found in iptables"
 fi
 
 # 3) Forward rules
+iptables_forward_ok=0
 if sudo iptables -S FORWARD 2>/dev/null | grep -q "$HOTSPOT_IFACE"; then
-  pass "Forward rules reference $HOTSPOT_IFACE"
+  pass "Forward rules reference $HOTSPOT_IFACE (iptables)"
+  iptables_forward_ok=1
 else
-  warn "No FORWARD rules reference $HOTSPOT_IFACE"
+  warn "No FORWARD rules reference $HOTSPOT_IFACE in iptables"
 fi
 
 if sudo iptables -S FORWARD 2>/dev/null | grep -q "$VENUE_IFACE"; then
-  pass "Forward rules reference $VENUE_IFACE"
+  pass "Forward rules reference $VENUE_IFACE (iptables)"
+  iptables_forward_ok=1
 else
-  warn "No FORWARD rules reference $VENUE_IFACE"
+  warn "No FORWARD rules reference $VENUE_IFACE in iptables"
 fi
 
 # 4) Hotspot IP
@@ -76,14 +81,39 @@ else
 fi
 
 # 5b) nftables NAT/forward rules (if iptables rules are missing)
+nft_nat_ok=0
+nft_forward_ok=0
 if command -v nft >/dev/null 2>&1; then
   if sudo nft list ruleset 2>/dev/null | grep -q "masquerade"; then
     pass "nftables masquerade rule present"
+    nft_nat_ok=1
   else
     warn "No nftables masquerade rule found"
   fi
+
+  if sudo nft list ruleset 2>/dev/null | grep -q "forward" && \
+     sudo nft list ruleset 2>/dev/null | grep -q "$HOTSPOT_IFACE" && \
+     sudo nft list ruleset 2>/dev/null | grep -q "$VENUE_IFACE"; then
+    pass "nftables forward rules reference $HOTSPOT_IFACE and $VENUE_IFACE"
+    nft_forward_ok=1
+  else
+    warn "No nftables forward rules referencing $HOTSPOT_IFACE/$VENUE_IFACE found"
+  fi
 else
   info "nft not installed; skipping nftables checks"
+fi
+
+# 8) Summary: NAT + forwarding present via either backend
+if [[ "$iptables_nat_ok" -eq 1 || "$nft_nat_ok" -eq 1 ]]; then
+  pass "NAT appears configured"
+else
+  fail "NAT appears missing"
+fi
+
+if [[ "$iptables_forward_ok" -eq 1 || "$nft_forward_ok" -eq 1 ]]; then
+  pass "Forwarding rules appear configured"
+else
+  fail "Forwarding rules appear missing"
 fi
 
 # 6) dnsmasq (if using hostapd/dnsmasq path)
