@@ -67,6 +67,7 @@ class VirtualJukebox {
         this.currentSong = null;
         this.isPlaying = false;
         this.isFading = false;
+        this.volumeToastTimer = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -1623,10 +1624,21 @@ class VirtualJukebox {
             const normalized = clamped / 100;
             console.log('🔊 Sending volume command to audio service:', normalized);
             this.socket.emit('volumeCommand', { volume: normalized });
+            this.scheduleVolumeToast(clamped);
             return;
         }
 
         this.player.setVolume(clamped);
+        this.scheduleVolumeToast(clamped);
+    }
+
+    scheduleVolumeToast(volume) {
+        if (this.volumeToastTimer) {
+            clearTimeout(this.volumeToastTimer);
+        }
+        this.volumeToastTimer = setTimeout(() => {
+            this.showToast(`Volume set to ${volume}%`, 'info');
+        }, 300);
     }
 
     updateVolumeValue(volume) {
