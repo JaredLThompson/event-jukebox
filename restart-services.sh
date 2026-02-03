@@ -7,7 +7,7 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 SERVICES=(
-  "wedding-jukebox"
+  # "wedding-jukebox" # Local (non-Docker) service - keep commented to avoid port 3000 conflicts
   "wedding-jukebox-docker"
   "wedding-jukebox-audio"
   "wedding-jukebox-wifi-api"
