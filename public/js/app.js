@@ -351,8 +351,9 @@ class VirtualJukebox {
         
         // Playlist switcher
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('playlist-switch-btn')) {
-                const playlist = e.target.dataset.playlist;
+            const button = e.target.closest('.playlist-switch-btn');
+            if (button) {
+                const playlist = button.dataset.playlist;
                 this.switchPlaylist(playlist);
             }
         });

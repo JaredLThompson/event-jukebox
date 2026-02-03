@@ -57,12 +57,3 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64,linux/arm64
-
-    - name: Ensure GHCR package is public
-      if: github.event_name != 'pull_request'
-      run: |
-        gh api -X PATCH \
-          /user/packages/container/wedding-jukebox/visibility \
-          -f visibility=public
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,20 @@
+module.exports = [
+  { search: 'Survivor Eye of the Tiger', type: 'hype' },
+  { search: 'Eminem Lose Yourself', type: 'hype' },
+  { search: 'The White Stripes Seven Nation Army', type: 'hype' },
+  { search: 'Kanye West Stronger', type: 'hype' },
+  { search: 'Fort Minor Remember the Name', type: 'hype' },
+  { search: 'Led Zeppelin Immigrant Song', type: 'hype' },
+  { search: 'ACDC Thunderstruck', type: 'hype' },
+  { search: 'Imagine Dragons Believer', type: 'hype' },
+  { search: 'Linkin Park Bleed It Out', type: 'hype' },
+  { search: 'Queens of the Stone Age No One Knows', type: 'hype' },
+  { search: 'DMX X Gon Give It To Ya', type: 'hype' },
+  { search: 'Missy Elliott Get Ur Freak On', type: 'hype' },
+  { search: 'Beastie Boys Sabotage', type: 'hype' },
+  { search: 'Eve Let Me Blow Ya Mind', type: 'hype' },
+  { search: 'Macklemore Can t Hold Us', type: 'hype' },
+  { search: 'Metallica Enter Sandman', type: 'hype' },
+  { search: 'Kendrick Lamar HUMBLE', type: 'hype' },
+  { search: 'Rage Against the Machine Bulls on Parade', type: 'hype' }
+];

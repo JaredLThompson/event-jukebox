@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
+const multer = require('multer');
 const https = require('https');
 const httpClient = require('http');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
@@ -46,6 +47,7 @@ const EVENT_CONFIG_FILE = path.join(__dirname, 'event-config.json');
 const EVENT_CONFIG_OVERRIDE = path.join(__dirname, 'data', 'event-config.json');
 const EVENT_PRESETS_FILE = path.join(__dirname, 'data', 'event-presets.json');
 let eventConfig = null;
+const PLAYLISTS_DIR = path.join(__dirname, 'playlists');
 
 // Audio output settings
 const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
@@ -188,6 +190,41 @@ function saveEventPresets(presets) {
   }
 }
 
+function listPlaylistFiles() {
+  if (!fs.existsSync(PLAYLISTS_DIR)) return [];
+  try {
+    const files = fs.readdirSync(PLAYLISTS_DIR);
+    return files.filter(file => file.endsWith('.js') || file.endsWith('.json'));
+  } catch (error) {
+    console.error('Failed to read playlists directory:', error.message);
+    return [];
+  }
+}
+
+function sanitizePlaylistFilename(name) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+const playlistUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(PLAYLISTS_DIR, { recursive: true });
+      cb(null, PLAYLISTS_DIR);
+    },
+    filename: (req, file, cb) => {
+      cb(null, sanitizePlaylistFilename(file.originalname));
+    }
+  }),
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.endsWith('.js') || file.originalname.endsWith('.json')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .js or .json playlists are allowed'));
+    }
+  },
+  limits: { fileSize: 2 * 1024 * 1024 }
+});
+
 function getPlaylistConfig(key) {
   const config = getEventConfig();
   if (config.playlists?.primary?.key === key) return config.playlists.primary;
@@ -199,6 +236,40 @@ function getPlaylistConfig(key) {
     label: 'Wedding Playlist',
     addedBy: '🎵 Wedding DJ'
   };
+}
+
+function resolvePlaylistFile(playlistConfig, fallbackFile) {
+  const file = playlistConfig?.file || fallbackFile;
+  if (!file) return null;
+  const candidates = [
+    path.join(__dirname, file),
+    path.join(__dirname, 'playlists', file),
+    path.join(__dirname, 'playlists', path.basename(file))
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function loadPlaylistFromFile(filepath) {
+  if (!filepath) return null;
+  try {
+    if (filepath.endsWith('.json')) {
+      const raw = fs.readFileSync(filepath, 'utf8');
+      return JSON.parse(raw);
+    }
+    if (filepath.endsWith('.js')) {
+      const resolved = require.resolve(filepath);
+      delete require.cache[resolved];
+      return require(resolved);
+    }
+  } catch (error) {
+    console.error('Failed to load playlist file:', filepath, error.message);
+  }
+  return null;
 }
 
 function loadAudioOutput() {
@@ -411,6 +482,23 @@ app.post('/api/event-presets', (req, res) => {
     return res.status(500).json({ error: 'Failed to save preset' });
   }
   res.json({ success: true });
+});
+
+app.get('/api/playlists/files', (req, res) => {
+  const files = listPlaylistFiles();
+  res.json({ files });
+});
+
+app.post('/api/playlists/upload', (req, res) => {
+  playlistUpload.single('playlist')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    res.json({ success: true, filename: req.file.filename });
+  });
 });
 
 app.get('/api/audio/output', async (req, res) => {
@@ -1941,7 +2029,13 @@ server.listen(PORT, () => {
 
 // Fallback playlist functionality
 function getCurrentPlaylist() {
-  return activePlaylist === 'wedding' ? WEDDING_PLAYLIST : BRIDE_PLAYLIST;
+  const primaryConfig = getPlaylistConfig('wedding');
+  const secondaryConfig = getPlaylistConfig('bride');
+  const primaryFile = resolvePlaylistFile(primaryConfig, 'wedding-playlist.js');
+  const secondaryFile = resolvePlaylistFile(secondaryConfig, 'bride-playlist.js');
+  const primaryPlaylist = loadPlaylistFromFile(primaryFile) || WEDDING_PLAYLIST;
+  const secondaryPlaylist = loadPlaylistFromFile(secondaryFile) || BRIDE_PLAYLIST;
+  return activePlaylist === 'wedding' ? primaryPlaylist : secondaryPlaylist;
 }
 
 function getPlaylistName() {

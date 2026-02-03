@@ -273,6 +273,41 @@
                 </div>
             </section>
 
+            <!-- Playlist Files -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-folder-open mr-3 text-amber-300"></i>
+                    Playlist Files
+                </h2>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Primary Playlist File</label>
+                            <select id="primaryPlaylistFile" class="w-full bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="">Default (wedding-playlist.js)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Secondary Playlist File</label>
+                            <select id="secondaryPlaylistFile" class="w-full bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="">Default (bride-playlist.js)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex flex-col md:flex-row gap-2">
+                        <input id="playlistUploadInput" type="file" accept=".js,.json" class="w-full md:w-72 bg-gray-700 text-white rounded px-3 py-2">
+                        <button id="uploadPlaylistBtn" class="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                            Upload Playlist
+                        </button>
+                        <button id="savePlaylistFilesBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                            Save Playlist Selection
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Files are stored in `/app/playlists` and persist across Docker rebuilds.</p>
+                </div>
+            </section>
+
             <!-- Music Services Settings -->
             <section class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -409,6 +444,7 @@
                 this.settings = this.loadSettings();
                 this.eventConfig = null;
                 this.customPresets = {};
+                this.playlistFiles = [];
                 this.initializeUI();
                 this.bindEvents();
             }
@@ -475,6 +511,7 @@
                 this.updateVisualizerSettingsVisibility();
                 this.loadAudioOutputs();
                 this.loadEventConfig();
+                this.loadPlaylistFiles();
             }
             
             bindEvents() {
@@ -520,6 +557,16 @@
                 const savePresetBtn = document.getElementById('savePresetBtn');
                 if (savePresetBtn) {
                     savePresetBtn.addEventListener('click', () => this.saveCustomPreset());
+                }
+
+                const uploadPlaylistBtn = document.getElementById('uploadPlaylistBtn');
+                if (uploadPlaylistBtn) {
+                    uploadPlaylistBtn.addEventListener('click', () => this.uploadPlaylistFile());
+                }
+
+                const savePlaylistFilesBtn = document.getElementById('savePlaylistFilesBtn');
+                if (savePlaylistFilesBtn) {
+                    savePlaylistFilesBtn.addEventListener('click', () => this.savePlaylistFiles());
                 }
             }
             
@@ -576,8 +623,100 @@
                     this.eventConfig = await response.json();
                     await this.loadCustomPresets();
                     this.renderPresetCards();
+                    this.syncPlaylistFileSelectors();
                 } catch (error) {
                     // Ignore
+                }
+            }
+
+            async loadPlaylistFiles() {
+                try {
+                    const response = await fetch('/api/playlists/files');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    this.playlistFiles = Array.isArray(data.files) ? data.files : [];
+                    this.renderPlaylistFileOptions();
+                } catch (error) {
+                    this.playlistFiles = [];
+                }
+            }
+
+            renderPlaylistFileOptions() {
+                const primarySelect = document.getElementById('primaryPlaylistFile');
+                const secondarySelect = document.getElementById('secondaryPlaylistFile');
+                if (!primarySelect || !secondarySelect) return;
+
+                const options = this.playlistFiles.map(file => `<option value="${file}">${file}</option>`).join('');
+                primarySelect.innerHTML = `<option value="">Default (wedding-playlist.js)</option>${options}`;
+                secondarySelect.innerHTML = `<option value="">Default (bride-playlist.js)</option>${options}`;
+                this.syncPlaylistFileSelectors();
+            }
+
+            syncPlaylistFileSelectors() {
+                const primarySelect = document.getElementById('primaryPlaylistFile');
+                const secondarySelect = document.getElementById('secondaryPlaylistFile');
+                if (!primarySelect || !secondarySelect || !this.eventConfig) return;
+                const normalize = (value) => value ? value.split('/').pop() : '';
+                primarySelect.value = normalize(this.eventConfig.playlists?.primary?.file || '');
+                secondarySelect.value = normalize(this.eventConfig.playlists?.secondary?.file || '');
+            }
+
+            async uploadPlaylistFile() {
+                const input = document.getElementById('playlistUploadInput');
+                if (!input || !input.files || !input.files[0]) {
+                    this.showToast('Choose a playlist file to upload', 'error');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('playlist', input.files[0]);
+                try {
+                    const response = await fetch('/api/playlists/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    const data = await response.json();
+                    this.showToast(`Uploaded ${data.filename}`, 'success');
+                    input.value = '';
+                    await this.loadPlaylistFiles();
+                } catch (error) {
+                    this.showToast('Failed to upload playlist', 'error');
+                }
+            }
+
+            async savePlaylistFiles() {
+                if (!this.eventConfig) {
+                    await this.loadEventConfig();
+                }
+                const primarySelect = document.getElementById('primaryPlaylistFile');
+                const secondarySelect = document.getElementById('secondaryPlaylistFile');
+                if (!primarySelect || !secondarySelect || !this.eventConfig) return;
+
+                const updatedConfig = JSON.parse(JSON.stringify(this.eventConfig));
+                updatedConfig.playlists = updatedConfig.playlists || {};
+                updatedConfig.playlists.primary = updatedConfig.playlists.primary || {};
+                updatedConfig.playlists.secondary = updatedConfig.playlists.secondary || {};
+                updatedConfig.playlists.primary.file = primarySelect.value || '';
+                updatedConfig.playlists.secondary.file = secondarySelect.value || '';
+
+                try {
+                    const response = await fetch('/api/event-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedConfig)
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save playlist files');
+                    }
+                    this.eventConfig = updatedConfig;
+                    if (window.applyEventConfig) {
+                        window.applyEventConfig(updatedConfig);
+                    }
+                    this.showToast('Playlist files updated', 'success');
+                } catch (error) {
+                    this.showToast('Failed to update playlist files', 'error');
                 }
             }
 
@@ -601,6 +740,7 @@
                         playlists: {
                             primary: {
                                 key: 'wedding',
+                                file: 'wedding-playlist.js',
                                 name: 'Wedding Party Playlist',
                                 shortName: 'Wedding Party',
                                 label: 'Wedding Playlist',
@@ -608,6 +748,7 @@
                             },
                             secondary: {
                                 key: 'bride',
+                                file: 'bride-playlist.js',
                                 name: "Bride's Elegant Playlist",
                                 shortName: "Bride's Elegant",
                                 label: "Bride's Playlist",
@@ -634,6 +775,7 @@
                         playlists: {
                             primary: {
                                 key: 'wedding',
+                                file: 'playlists/dojo-playlist.js',
                                 name: 'Dojo Hype Playlist',
                                 shortName: 'Dojo Hype',
                                 label: 'Dojo Playlist',
@@ -641,6 +783,7 @@
                             },
                             secondary: {
                                 key: 'bride',
+                                file: 'playlists/recovery-playlist.js',
                                 name: 'Recovery & Focus',
                                 shortName: 'Recovery',
                                 label: 'Focus Playlist',
@@ -667,6 +810,7 @@
                         playlists: {
                             primary: {
                                 key: 'wedding',
+                                file: 'wedding-playlist.js',
                                 name: 'Party Starters',
                                 shortName: 'Starters',
                                 label: 'Party Playlist',
@@ -674,6 +818,7 @@
                             },
                             secondary: {
                                 key: 'bride',
+                                file: 'bride-playlist.js',
                                 name: 'Late Night Chill',
                                 shortName: 'Chill',
                                 label: 'After Hours',
@@ -700,6 +845,7 @@
                         playlists: {
                             primary: {
                                 key: 'wedding',
+                                file: 'wedding-playlist.js',
                                 name: 'Studio Pump',
                                 shortName: 'Pump',
                                 label: 'Training Playlist',
@@ -707,6 +853,7 @@
                             },
                             secondary: {
                                 key: 'bride',
+                                file: 'bride-playlist.js',
                                 name: 'Cooldown & Stretch',
                                 shortName: 'Cooldown',
                                 label: 'Recovery Playlist',

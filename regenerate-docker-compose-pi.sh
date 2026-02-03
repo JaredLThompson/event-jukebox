@@ -31,6 +31,8 @@ services:
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
       - ./wedding-play-history.json:/app/wedding-play-history.json
+      # Custom playlists
+      - ./playlists:/app/playlists
       # Host audio cache (headless playback)
       - ./audio-cache:/app/audio-cache
       # Audio device access
