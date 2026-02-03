@@ -81,6 +81,10 @@ class VirtualJukebox {
         
         // Warn before leaving page if music is playing
         window.addEventListener('beforeunload', (e) => {
+            const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+            if (isHeadless) {
+                return;
+            }
             const isPlaying = this.isPlaying || (this.currentPreviewAudio && !this.currentPreviewAudio.paused);
             const hasQueue = this.currentQueue && this.currentQueue.length > 0;
             const hasCurrentSong = this.currentSong && this.currentSong.title;
