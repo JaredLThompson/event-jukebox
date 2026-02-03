@@ -108,20 +108,9 @@ if ! command -v nmcli &> /dev/null; then
 fi
 sudo systemctl enable --now NetworkManager 2>/dev/null || true
 
-# Detect host IP for container -> host API calls
-HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
-if [[ -z "$HOST_IP" ]]; then
-    HOST_IP=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+' | grep -v '^127\\.' | grep -v '^172\\.17\\.' | grep -v '^172\\.18\\.' | head -n 1)
-fi
-
-WIFI_API_URL_VALUE=""
-if [[ -n "$HOST_IP" ]]; then
-    WIFI_API_URL_VALUE="http://$HOST_IP:8787"
-    print_success "Detected host IP: $HOST_IP"
-else
-    print_warning "Could not determine host IP automatically."
-    print_warning "WiFi scanning will require manual WIFI_API_URL configuration."
-fi
+# Prefer stable host gateway mapping for container -> host API calls
+WIFI_API_URL_VALUE="http://host.docker.internal:8787"
+print_status "Using host.docker.internal for WiFi API access"
 
 # Create docker-compose.yml for Pi
 print_status "Creating Pi-optimized docker-compose.yml..."
@@ -149,6 +138,8 @@ services:
       - PORT=3000
       - PULSE_RUNTIME_PATH=/run/user/1000/pulse
       - WIFI_API_URL=${WIFI_API_URL_VALUE}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - jukebox-network

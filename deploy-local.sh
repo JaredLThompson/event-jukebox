@@ -24,6 +24,36 @@ echo -e "${PURPLE}🎵 Virtual Jukebox - Local Docker Deployment${NC}"
 echo -e "${PURPLE}================================================${NC}"
 echo ""
 
+# If running on a Raspberry Pi and docker-compose.pi.yml exists, use that.
+if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.yml" ]]; then
+    print_status "Raspberry Pi detected - using docker-compose.pi.yml"
+
+    # Determine compose command
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        print_error "Docker Compose not found. Install docker-compose or the docker compose plugin."
+        exit 1
+    fi
+
+    # Ensure host WiFi API is running if available
+    if systemctl is-enabled wedding-jukebox-wifi-api &> /dev/null; then
+        print_status "Starting WiFi API service..."
+        sudo systemctl start wedding-jukebox-wifi-api || true
+    fi
+
+    # Use compose for Pi deployment
+    print_status "Starting services with docker-compose.pi.yml..."
+    $COMPOSE_CMD -f docker-compose.pi.yml up -d
+
+    echo ""
+    print_success "Deployment complete (Docker Compose)."
+    echo ""
+    exit 0
+fi
+
 # Function to print status messages
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
