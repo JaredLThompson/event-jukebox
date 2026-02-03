@@ -33,6 +33,28 @@ function runNmcli(args) {
   });
 }
 
+function runIp(args) {
+  const env = {
+    ...process.env,
+    PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  };
+  return new Promise((resolve, reject) => {
+    execFile('ip', args, { timeout: 10000, env }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        return reject(error);
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function parseIpFromIpAddr(output) {
+  const match = output.match(/inet\s+([0-9.]+\/\d+)/);
+  return match ? match[1] : '';
+}
+
 function splitNmcliLine(line) {
   const fields = [];
   let current = '';
@@ -116,6 +138,7 @@ app.get('/api/wifi/scan', async (req, res) => {
 
 app.get('/api/wifi/status', async (req, res) => {
   const iface = req.query.iface || 'wlan0';
+  const debug = req.query.debug === '1';
   if (!/^(wlan|wlx)[\w-]+$/.test(iface)) {
     return res.status(400).json({ error: 'Invalid interface name.' });
   }
@@ -167,16 +190,36 @@ app.get('/api/wifi/status', async (req, res) => {
 
     const state = info['GENERAL.STATE'] || '';
     const connected = state.startsWith('100') || state.toLowerCase().includes('connected');
+    let ipAddress = Array.isArray(info['IP4.ADDRESS']) ? info['IP4.ADDRESS'][0] : (info['IP4.ADDRESS'] || '');
+    let ipAddrOutput = '';
+    if (!ipAddress) {
+      try {
+        const ipResult = await runIp(['-4', 'addr', 'show', 'dev', iface]);
+        ipAddrOutput = ipResult.stdout || '';
+        ipAddress = parseIpFromIpAddr(ipResult.stdout);
+      } catch (error) {
+        ipAddress = '';
+      }
+    }
 
-    return res.json({
+    const payload = {
       iface,
       connected,
       ssid: activeSsid,
       connection: info['GENERAL.CONNECTION'] || '',
-      ip: Array.isArray(info['IP4.ADDRESS']) ? info['IP4.ADDRESS'][0] : (info['IP4.ADDRESS'] || ''),
+      ip: ipAddress,
       gateway: info['IP4.GATEWAY'] || '',
       dns: info['IP4.DNS'] || []
-    });
+    };
+
+    if (debug) {
+      payload.debug = {
+        nmcli: stdout || '',
+        ipAddr: ipAddrOutput
+      };
+    }
+
+    return res.json(payload);
   } catch (error) {
     return res.status(500).json({
       error: 'Failed to load WiFi status.',
