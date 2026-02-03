@@ -257,12 +257,14 @@ Type=simple
 User=$APP_USER
 Group=$APP_USER
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/env node audio-integration.js
+ExecStart=/usr/bin/node $APP_DIR/audio-integration.js
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=NODE_ENV=production
+Environment=JUKEBOX_STATUS_LOG=0
+SyslogIdentifier=jukebox-audio
 LimitNOFILE=65536
 
 [Install]

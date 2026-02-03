@@ -9,7 +9,8 @@ const io = require('socket.io-client');
 class AudioIntegration {
     constructor(jukeboxUrl = 'http://localhost:3000') {
         this.audioService = new AudioService();
-        this.socket = io(jukeboxUrl);
+        this.jukeboxUrl = process.env.JUKEBOX_URL || jukeboxUrl;
+        this.socket = io(this.jukeboxUrl);
         this.currentQueue = [];
         this.isProcessingQueue = false;
         this.lastPlayedSongId = null; // Track last played song to prevent duplicates
@@ -18,7 +19,23 @@ class AudioIntegration {
         this.enableStatusLogs = process.env.JUKEBOX_STATUS_LOG === '1';
         
         this.setupSocketListeners();
-        console.log('🔗 Audio Integration connected to:', jukeboxUrl);
+        console.log('🔗 Audio Integration connected to:', this.jukeboxUrl);
+    }
+
+    async postToApi(path, body) {
+        const url = new URL(path, this.jukeboxUrl).toString();
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        return response;
+    }
+
+    async getFromApi(path) {
+        const url = new URL(path, this.jukeboxUrl).toString();
+        const response = await fetch(url);
+        return response;
     }
     
     setupSocketListeners() {
@@ -172,9 +189,7 @@ class AudioIntegration {
             // Always call the server to advance to the next song (handles both queue and fallback)
             console.log('🔄 Calling server to advance to next song...');
             
-            fetch('http://localhost:3000/api/queue/next', {
-                method: 'POST'
-            }).then(response => {
+            this.postToApi('/api/queue/next').then(response => {
                 if (response.ok) {
                     console.log('✅ Server advanced to next song');
                 } else {
@@ -209,7 +224,7 @@ class AudioIntegration {
                 }
 
                 console.log('🔄 Calling server to advance to next song after fade...');
-                await fetch('http://localhost:3000/api/queue/next', { method: 'POST' });
+                await this.postToApi('/api/queue/next');
             } catch (error) {
                 console.log('❌ Fade command error:', error.message);
             } finally {
@@ -314,14 +329,13 @@ class AudioIntegration {
                 
                 // Call server to properly update queue and now playing
                 try {
-                    const response = await fetch('http://localhost:3000/api/queue/next', {
-                        method: 'POST'
-                    });
+                    const response = await this.postToApi('/api/queue/next');
                     
                     if (response.ok) {
                         console.log('✅ Server queue updated successfully');
                     } else {
-                        console.log('⚠️ Server queue update failed, but song is playing');
+                        const body = await response.text().catch(() => '');
+                        console.log('⚠️ Server queue update failed:', response.status, body);
                     }
                 } catch (error) {
                     console.log('⚠️ Could not update server queue:', error.message);
@@ -354,7 +368,7 @@ class AudioIntegration {
                 // Queue is empty or has only current song, get resolved fallback song
                 try {
                     console.log('🔍 Fetching next resolved fallback song...');
-                    const response = await fetch('http://localhost:3000/api/playlist/next-resolved');
+                    const response = await this.getFromApi('/api/playlist/next-resolved');
                     
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

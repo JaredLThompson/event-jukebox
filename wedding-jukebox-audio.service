@@ -8,7 +8,7 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/wedding-jukebox
-ExecStart=/usr/bin/env node audio-integration.js
+ExecStart=/usr/bin/node /home/pi/wedding-jukebox/audio-integration.js
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -16,6 +16,8 @@ StandardError=journal
 
 # Environment variables
 Environment=NODE_ENV=production
+Environment=JUKEBOX_STATUS_LOG=0
+SyslogIdentifier=jukebox-audio
 
 # Resource limits
 LimitNOFILE=65536
