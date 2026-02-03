@@ -39,32 +39,46 @@
         </header>
 
         <div class="panel p-4">
-            <div class="flex flex-col gap-4 mb-3">
-                <div class="text-sm text-gray-300">
-                    <span id="cacheCount">0</span> files
-                    <span class="mx-2 text-gray-500">•</span>
-                    <span id="cacheTotalSize">0 MB</span>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-3">
+                <div class="w-full panel p-3">
+                    <div class="flex items-center gap-2 text-xs uppercase text-gray-400 mb-2">
+                        <span>Search & Sort</span>
+                        <span class="flex-1 h-px bg-gray-700"></span>
+                        <span class="text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 rounded-full px-3 py-1 whitespace-nowrap">
+                            <span id="cacheCount">0</span> files
+                            <span class="mx-2 text-gray-500">•</span>
+                            <span id="cacheTotalSize">0 MB</span>
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input id="searchInput" type="text" placeholder="Search title, artist, or filename..."
+                               class="bg-gray-700 text-white text-sm rounded px-3 py-2 flex-1 min-w-[240px]">
+                        <select id="sortSelect" class="bg-gray-700 text-white text-sm rounded px-2 py-2">
+                            <option value="modified_desc">Newest</option>
+                            <option value="modified_asc">Oldest</option>
+                            <option value="name_asc">Name A–Z</option>
+                            <option value="name_desc">Name Z–A</option>
+                            <option value="size_desc">Largest</option>
+                            <option value="size_asc">Smallest</option>
+                        </select>
+                        <button id="refreshBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">Refresh</button>
+                    </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <input id="searchInput" type="text" placeholder="Search filename..."
-                           class="bg-gray-700 text-white text-sm rounded px-3 py-2 w-64">
-                    <select id="sortSelect" class="bg-gray-700 text-white text-sm rounded px-2 py-2">
-                        <option value="modified_desc">Newest</option>
-                        <option value="modified_asc">Oldest</option>
-                        <option value="name_asc">Name A–Z</option>
-                        <option value="name_desc">Name Z–A</option>
-                        <option value="size_desc">Largest</option>
-                        <option value="size_asc">Smallest</option>
-                    </select>
-                    <button id="refreshBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">Refresh</button>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button id="rebuildBtn" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded text-sm">Rebuild Metadata</button>
-                    <div class="flex items-center gap-2">
-                        <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
-                               class="bg-gray-700 text-white text-sm rounded px-2 py-2 w-20">
-                        <button id="clearOlderBtn" class="bg-red-700 hover:bg-red-600 px-3 py-2 rounded text-sm">Delete Older</button>
-                        <button id="clearBtn" class="bg-red-600 hover:bg-red-500 px-3 py-2 rounded text-sm">Clear All</button>
+                <div class="w-full panel p-3">
+                    <div class="flex items-center gap-2 text-xs uppercase text-gray-400 mb-2">
+                        <span>Maintenance</span>
+                        <span class="flex-1 h-px bg-gray-700"></span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="rebuildBtn" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-sm font-semibold shadow-md border border-indigo-400/60">Rebuild Metadata</button>
+                        <div class="flex items-center gap-2 bg-gray-800/60 border border-gray-700 rounded px-2 py-1">
+                            <span class="text-xs text-gray-400">Delete older than</span>
+                            <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
+                                   class="bg-gray-700 text-white text-sm rounded px-2 py-1 w-20">
+                            <span class="text-xs text-gray-400">days</span>
+                            <button id="clearOlderBtn" class="bg-red-700 hover:bg-red-600 px-4 py-2 rounded text-sm font-semibold shadow-md border border-red-400/60">Delete Older</button>
+                        </div>
+                        <button id="clearBtn" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded text-sm font-semibold shadow-sm">Clear All</button>
                     </div>
                 </div>
             </div>
@@ -107,7 +121,12 @@
             const query = searchInput.value.trim().toLowerCase();
             let files = currentFiles;
             if (query) {
-                files = files.filter(file => file.name.toLowerCase().includes(query));
+                files = files.filter(file => {
+                    const name = file.name?.toLowerCase() || '';
+                    const title = file.title?.toLowerCase() || '';
+                    const artist = file.artist?.toLowerCase() || '';
+                    return name.includes(query) || title.includes(query) || artist.includes(query);
+                });
             }
 
             switch (sortSelect.value) {
@@ -151,10 +170,10 @@
                         </div>
                         <div class="col-span-2 text-right text-gray-300">${formatBytes(file.sizeBytes)}</div>
                         <div class="col-span-2 text-right text-gray-400">${formatDate(file.modified)}</div>
-                        <div class="col-span-2 text-right flex justify-end gap-2">
-                            <a class="text-purple-300 hover:text-purple-200" href="/api/cache/file/${encodeURIComponent(file.name)}" target="_blank">▶</a>
-                            <a class="text-blue-300 hover:text-blue-200" href="/api/cache/file/${encodeURIComponent(file.name)}?download=1" download>⬇</a>
-                            <button class="text-red-300 hover:text-red-200" data-delete="${encodeURIComponent(file.name)}">✕</button>
+                        <div class="col-span-2 text-right flex justify-end gap-3">
+                            <a class="text-purple-300 hover:text-purple-200 px-2" title="Play" aria-label="Play cached file" href="/api/cache/file/${encodeURIComponent(file.name)}" target="_blank">▶</a>
+                            <a class="text-blue-300 hover:text-blue-200 px-2" title="Download" aria-label="Download cached file" href="/api/cache/file/${encodeURIComponent(file.name)}?download=1" download>⬇</a>
+                            <button class="text-red-300 hover:text-red-200 px-2" title="Delete" aria-label="Delete cached file" data-delete="${encodeURIComponent(file.name)}">✕</button>
                         </div>
                     </div>
                 `;

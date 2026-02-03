@@ -263,7 +263,20 @@ app.get('/api/cache/file/:name', (req, res) => {
   }
 
   if (req.query.download === '1') {
-    return res.download(fullPath, name);
+    const manifest = loadCacheManifest();
+    const youtubeId = name.replace('.mp3', '');
+    const meta = manifest[youtubeId] || Object.values(manifest).find(entry => entry.filename === name) || null;
+    const safe = (value, fallback) => {
+      const text = (value || fallback || '').toString().trim();
+      const cleaned = text.replace(/[^\w\s.-]+/g, '').replace(/\s+/g, ' ').trim();
+      return cleaned || fallback || 'unknown';
+    };
+    const title = safe(meta?.title, 'unknown-title');
+    const artist = safe(meta?.artist, 'unknown-artist');
+    const source = safe(meta?.source, 'unknown-source');
+    const id = safe(meta?.youtubeId || youtubeId, 'unknown-id');
+    const downloadName = `${artist} - ${title} (${source}) [${id}].mp3`;
+    return res.download(fullPath, downloadName);
   }
 
   res.sendFile(fullPath);

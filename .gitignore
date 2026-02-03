@@ -18,6 +18,7 @@ wedding-play-history.json
 wedding-playlist-*.txt
 wedding-memory-playlist-*.js
 wedding-spotify-list-*.txt
+audio-cache/
 
 # Generated QR codes
 qr-*.png
