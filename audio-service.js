@@ -5,7 +5,7 @@
  * Handles server-side audio playback through Pi speakers
  */
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -655,8 +655,28 @@ class AudioService {
         this.volume = Math.max(0, Math.min(1, volume));
         console.log('🔊 Volume set to:', Math.round(this.volume * 100) + '%');
         
-        // Use amixer to set system volume
-        spawn('amixer', ['set', 'Master', Math.round(this.volume * 100) + '%']);
+        // Use amixer to set system volume (try common controls or override via env)
+        this.applySystemVolume(Math.round(this.volume * 100));
+    }
+
+    applySystemVolume(percent) {
+        const control = process.env.AMIXER_CONTROL;
+        const device = process.env.AMIXER_DEVICE;
+        const controlsToTry = control
+            ? [control]
+            : ['Master', 'PCM', 'Speaker', 'Headphone'];
+
+        for (const ctl of controlsToTry) {
+            const args = [];
+            if (device) {
+                args.push('-D', device);
+            }
+            args.push('sset', ctl, `${percent}%`);
+            const result = spawnSync('amixer', args, { stdio: 'ignore' });
+            if (result && result.status === 0) {
+                return;
+            }
+        }
     }
 
     /**
