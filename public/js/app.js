@@ -210,8 +210,7 @@ class VirtualJukebox {
         this.volumeControl = document.getElementById('volumeControl');
         this.volumeSlider = document.getElementById('volumeSlider');
         this.volumeValue = document.getElementById('volumeValue');
-        this.volumePill = document.getElementById('volumePill');
-        this.volumePillValue = document.getElementById('volumePillValue');
+        this.volumeBtnValue = document.getElementById('volumeBtnValue');
         this.progressContainer = document.getElementById('progressContainer');
         this.progressBar = document.getElementById('progressBar');
         this.currentTime = document.getElementById('currentTime');
@@ -1600,11 +1599,8 @@ class VirtualJukebox {
         if (this.volumeValue) {
             this.volumeValue.textContent = `${volume}%`;
         }
-        if (this.volumePillValue) {
-            this.volumePillValue.textContent = `${volume}%`;
-        }
-        if (this.volumePill) {
-            this.volumePill.classList.remove('hidden');
+        if (this.volumeBtnValue) {
+            this.volumeBtnValue.textContent = `${volume}%`;
         }
     }
     
