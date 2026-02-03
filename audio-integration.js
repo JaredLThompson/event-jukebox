@@ -15,6 +15,7 @@ class AudioIntegration {
         this.lastPlayedSongId = null; // Track last played song to prevent duplicates
         this.wasPlaying = false; // Track previous playing state to detect song ends
         this.isFading = false;
+        this.enableStatusLogs = process.env.JUKEBOX_STATUS_LOG === '1';
         
         this.setupSocketListeners();
         console.log('🔗 Audio Integration connected to:', jukeboxUrl);
@@ -443,15 +444,17 @@ class AudioIntegration {
         
         this.wasPlaying = status.isPlaying;
         
-        console.log('📊 Emitting status:', {
-            isPlaying: status.isPlaying,
-            isPaused: status.isPaused,
-            position: status.position,
-            duration: status.duration,
-            currentSong: status.currentSong?.title,
-            isBuffering: status.isBuffering,
-            bufferingProgress: status.bufferingProgress
-        });
+        if (this.enableStatusLogs) {
+            console.log('📊 Emitting status:', {
+                isPlaying: status.isPlaying,
+                isPaused: status.isPaused,
+                position: status.position,
+                duration: status.duration,
+                currentSong: status.currentSong?.title,
+                isBuffering: status.isBuffering,
+                bufferingProgress: status.bufferingProgress
+            });
+        }
         this.socket.emit('audioServiceStatus', {
             ...status,
             service: 'headless-audio',
