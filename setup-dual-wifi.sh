@@ -6,9 +6,57 @@
 
 set -e
 
+DRY_RUN=0
+VENUE_SSID_FLAG=""
+VENUE_PASSWORD_FLAG=""
+HOTSPOT_SSID_FLAG=""
+HOTSPOT_PASSWORD_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --venue-ssid)
+            VENUE_SSID_FLAG="${2:-}"
+            shift 2
+            ;;
+        --venue-pass)
+            VENUE_PASSWORD_FLAG="${2:-}"
+            shift 2
+            ;;
+        --hotspot-ssid)
+            HOTSPOT_SSID_FLAG="${2:-}"
+            shift 2
+            ;;
+        --hotspot-pass)
+            HOTSPOT_PASSWORD_FLAG="${2:-}"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: ./setup-dual-wifi.sh [--dry-run] [--venue-ssid SSID] [--venue-pass PASS] [--hotspot-ssid SSID] [--hotspot-pass PASS]"
+            exit 1
+            ;;
+    esac
+done
+
+run_cmd() {
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "[dry-run] $*"
+        return 0
+    fi
+    "$@"
+}
+
 echo "🎵 Wedding Jukebox Dual WiFi Setup"
 echo "=================================="
 echo ""
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "🧪 Dry-run mode enabled: commands will be printed but not executed."
+    echo ""
+fi
 
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
@@ -19,6 +67,11 @@ fi
 
 # Check if USB WiFi adapter is connected
 echo "🔍 Checking for WiFi interfaces..."
+
+# Ensure iw is installed (for capability checks)
+echo "🔧 Ensuring required tools are installed..."
+run_cmd sudo apt update
+run_cmd sudo apt install -y iw
 
 # Find all wireless interfaces (wlan* and wlx*)
 WIFI_INTERFACES=($(ls /sys/class/net/ | grep -E '^(wlan|wlx)'))
@@ -57,12 +110,10 @@ fi
 VENUE_INTERFACE=""
 HOTSPOT_INTERFACE=""
 
-# Look for built-in WiFi (usually wlan0)
+# Default: prefer wlan0 as venue, others as hotspot
 if [[ " ${WIFI_INTERFACES[*]} " =~ " wlan0 " ]]; then
     VENUE_INTERFACE="wlan0"
 fi
-
-# Look for USB WiFi adapter (wlan1 or wlx*)
 for iface in "${WIFI_INTERFACES[@]}"; do
     if [[ "$iface" != "$VENUE_INTERFACE" ]]; then
         HOTSPOT_INTERFACE="$iface"
@@ -70,12 +121,44 @@ for iface in "${WIFI_INTERFACES[@]}"; do
     fi
 done
 
-# If we don't have wlan0, use the first available interface for venue
+# If wlan0 is not present, pick first as venue and second as hotspot
 if [[ -z "$VENUE_INTERFACE" && ${#WIFI_INTERFACES[@]} -gt 0 ]]; then
     VENUE_INTERFACE="${WIFI_INTERFACES[0]}"
-    # And use the second for hotspot if available
     if [[ ${#WIFI_INTERFACES[@]} -gt 1 ]]; then
         HOTSPOT_INTERFACE="${WIFI_INTERFACES[1]}"
+    fi
+fi
+
+# Offer explicit selection when multiple interfaces are present
+if [[ ${#WIFI_INTERFACES[@]} -ge 2 ]]; then
+    echo "🧭 Select which interface should connect to venue WiFi:"
+    select venue_choice in "${WIFI_INTERFACES[@]}"; do
+        if [[ -n "$venue_choice" ]]; then
+            VENUE_INTERFACE="$venue_choice"
+            break
+        fi
+        echo "Invalid selection. Try again."
+    done
+
+    echo "🧭 Select which interface should run the guest hotspot:"
+    for iface in "${WIFI_INTERFACES[@]}"; do
+        if [[ "$iface" != "$VENUE_INTERFACE" ]]; then
+            HOTSPOT_INTERFACE="$iface"
+            break
+        fi
+    done
+    if [[ -n "$HOTSPOT_INTERFACE" ]]; then
+        echo "Default hotspot interface: $HOTSPOT_INTERFACE"
+        read -p "Use this for hotspot? (Y/n): " -r
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            select hotspot_choice in "${WIFI_INTERFACES[@]}"; do
+                if [[ -n "$hotspot_choice" && "$hotspot_choice" != "$VENUE_INTERFACE" ]]; then
+                    HOTSPOT_INTERFACE="$hotspot_choice"
+                    break
+                fi
+                echo "Invalid selection. Try again."
+            done
+        fi
     fi
 fi
 
@@ -85,24 +168,67 @@ echo "   Venue WiFi: $VENUE_INTERFACE"
 echo "   Guest Hotspot: $HOTSPOT_INTERFACE"
 echo ""
 
+# Guard against missing hotspot interface
+if [[ -z "$HOTSPOT_INTERFACE" ]]; then
+    echo "❌ Hotspot interface not found."
+    echo "   You need two WiFi interfaces to run dual WiFi."
+    echo "   Detected: ${WIFI_INTERFACES[*]}"
+    exit 1
+fi
+
+# Helper: replace a managed block in a file (idempotent)
+replace_managed_block() {
+    local file="$1"
+    local start_marker="$2"
+    local end_marker="$3"
+    local content="$4"
+
+    sudo touch "$file"
+    sudo awk -v start="$start_marker" -v end="$end_marker" '
+        $0 == start {in_block=1; next}
+        $0 == end {in_block=0; next}
+        !in_block {print}
+    ' "$file" | sudo tee "${file}.tmp" > /dev/null
+
+    {
+        echo "$start_marker"
+        echo "$content"
+        echo "$end_marker"
+    } | sudo tee -a "${file}.tmp" > /dev/null
+
+    sudo mv "${file}.tmp" "$file"
+}
+
 # Get venue WiFi credentials
 echo ""
 echo "📶 Venue WiFi Configuration"
 echo "=========================="
-read -p "Enter venue WiFi network name (SSID): " VENUE_SSID
-read -s -p "Enter venue WiFi password: " VENUE_PASSWORD
-echo ""
+VENUE_SSID="${VENUE_SSID_FLAG}"
+VENUE_PASSWORD="${VENUE_PASSWORD_FLAG}"
+while [[ -z "$VENUE_SSID" ]]; do
+    read -p "Enter venue WiFi network name (SSID): " VENUE_SSID
+done
+while [[ -z "$VENUE_PASSWORD" ]]; do
+    read -s -p "Enter venue WiFi password: " VENUE_PASSWORD
+    echo ""
+done
 
 # Get hotspot configuration
 echo ""
 echo "📡 Guest Hotspot Configuration"
 echo "============================="
-read -p "Enter hotspot name [Wedding-Jukebox]: " HOTSPOT_SSID
-HOTSPOT_SSID=${HOTSPOT_SSID:-Wedding-Jukebox}
+HOTSPOT_SSID="${HOTSPOT_SSID_FLAG}"
+HOTSPOT_PASSWORD="${HOTSPOT_PASSWORD_FLAG}"
+if [[ -z "$HOTSPOT_SSID" ]]; then
+    read -p "Enter hotspot name [Wedding-Jukebox]: " HOTSPOT_SSID
+    HOTSPOT_SSID=${HOTSPOT_SSID:-Wedding-Jukebox}
+fi
 
-read -s -p "Enter hotspot password [WeddingMusic2026]: " HOTSPOT_PASSWORD
-HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2026}
-echo ""
+if [[ -z "$HOTSPOT_PASSWORD" ]]; then
+    read -s -p "Enter hotspot password [WeddingMusic2026]: " HOTSPOT_PASSWORD
+    HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2026}
+    echo ""
+fi
 
 # If NetworkManager is active, use nmcli workflow (Debian 13 / Trixie default)
 if systemctl is-active --quiet NetworkManager; then
@@ -112,37 +238,47 @@ if systemctl is-active --quiet NetworkManager; then
     echo ""
 
     echo "🔧 Ensuring wpa_supplicant is installed..."
-    sudo apt update
-    sudo apt install -y wpasupplicant
-    sudo systemctl enable --now wpa_supplicant
+    run_cmd sudo apt update
+    run_cmd sudo apt install -y wpasupplicant
+    run_cmd sudo systemctl enable --now wpa_supplicant
 
     echo "🔄 Restarting NetworkManager..."
-    sudo systemctl restart NetworkManager
+    run_cmd sudo systemctl restart NetworkManager
 
     echo "🧹 Cleaning existing connections..."
     # Remove any existing hotspot connection to avoid IP conflicts
-    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Hotspot"{print $1}' | xargs -r nmcli con delete
-    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r nmcli con delete
+    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
+    nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
 
     # Remove existing venue connection by SSID to avoid stale DHCP leases
     nmcli -t -f NAME,TYPE,802-11-wireless.ssid con show | \
         awk -F: -v ssid="$VENUE_SSID" '$2=="802-11-wireless" && $3==ssid {print $1}' | \
-        xargs -r nmcli con delete
+        xargs -r -I{} run_cmd nmcli con delete "{}"
 
     echo "📶 Connecting to venue WiFi on $VENUE_INTERFACE..."
-    nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"
+    run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"
 
     echo "📡 Creating guest hotspot on $HOTSPOT_INTERFACE..."
-    nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "Wedding-Jukebox-Hotspot" ssid "$HOTSPOT_SSID"
-    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless.mode ap 802-11-wireless.band bg
-    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.key-mgmt wpa-psk
-    nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.psk "$HOTSPOT_PASSWORD"
-    nmcli con modify "Wedding-Jukebox-Hotspot" ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore
+    run_cmd nmcli con add type wifi ifname "$HOTSPOT_INTERFACE" con-name "Wedding-Jukebox-Hotspot" ssid "$HOTSPOT_SSID"
+    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless.mode ap 802-11-wireless.band bg
+    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.key-mgmt wpa-psk
+    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" 802-11-wireless-security.psk "$HOTSPOT_PASSWORD"
+    run_cmd nmcli con modify "Wedding-Jukebox-Hotspot" ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore
+
+    echo "📈 Setting route metrics (prefer WiFi over Ethernet if both are up)..."
+    VENUE_CONN_NAME=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$VENUE_INTERFACE" '$2==dev {print $1}' | head -n 1)
+    ETH_CONN_NAME=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: '$2=="eth0" {print $1}' | head -n 1)
+    if [[ -n "$VENUE_CONN_NAME" ]]; then
+        run_cmd nmcli connection modify "$VENUE_CONN_NAME" ipv4.route-metric 50
+    fi
+    if [[ -n "$ETH_CONN_NAME" ]]; then
+        run_cmd nmcli connection modify "$ETH_CONN_NAME" ipv4.route-metric 600
+    fi
 
     # Stop dnsmasq so NetworkManager can manage shared mode cleanly
-    sudo systemctl stop dnsmasq 2>/dev/null || true
+    run_cmd sudo systemctl stop dnsmasq 2>/dev/null || true
 
-    nmcli con up "Wedding-Jukebox-Hotspot"
+    run_cmd nmcli con up "Wedding-Jukebox-Hotspot"
 
     echo ""
     echo "✅ Dual WiFi setup complete (NetworkManager)!"
@@ -162,14 +298,14 @@ fi
 
 echo ""
 echo "🔧 Installing required packages..."
-sudo apt update
-sudo apt install -y hostapd dnsmasq iptables-persistent
+run_cmd sudo apt update
+run_cmd sudo apt install -y hostapd dnsmasq iptables-persistent
 
 echo "🔌 Bringing up WiFi interfaces..."
 # Bring up all WiFi interfaces
 for iface in $(ls /sys/class/net/ | grep -E '^(wlan|wlx)'); do
     echo "  Bringing up $iface..."
-    sudo ip link set "$iface" up 2>/dev/null || echo "    Failed to bring up $iface (may be normal)"
+    run_cmd sudo ip link set "$iface" up 2>/dev/null || echo "    Failed to bring up $iface (may be normal)"
 done
 
 # Re-scan for interfaces after bringing them up
@@ -179,13 +315,13 @@ WIFI_COUNT=${#WIFI_INTERFACES[@]}
 echo "Found WiFi interfaces after bringing up: ${WIFI_INTERFACES[*]}"
 
 echo "⏹️  Stopping services for configuration..."
-sudo systemctl stop hostapd
-sudo systemctl stop dnsmasq
+run_cmd sudo systemctl stop hostapd
+run_cmd sudo systemctl stop dnsmasq
 
 echo "🌐 Configuring network interfaces..."
 
 # Check if this is Ubuntu (uses netplan) or Raspberry Pi OS (uses dhcpcd)
-if [ -f /etc/netplan/*.yaml ] || [ -d /etc/netplan ]; then
+    if compgen -G "/etc/netplan/*.yaml" > /dev/null || [ -d /etc/netplan ]; then
     echo "   Detected Ubuntu - configuring with netplan..."
     
     # Create netplan configuration for hotspot interface
@@ -201,30 +337,30 @@ network:
 EOF
     
     # Apply netplan configuration
-    sudo netplan apply
+    run_cmd sudo netplan apply
     
 elif [ -f /etc/dhcpcd.conf ]; then
     echo "   Detected Raspberry Pi OS - configuring with dhcpcd..."
     
     # Configure dhcpcd for static IP on hotspot interface
-    sudo tee -a /etc/dhcpcd.conf > /dev/null << EOF
-
-# Wedding Jukebox Hotspot Configuration
-interface $HOTSPOT_INTERFACE
+    replace_managed_block \
+        "/etc/dhcpcd.conf" \
+        "# BEGIN WEDDING-JUKEBOX HOTSPOT" \
+        "# END WEDDING-JUKEBOX HOTSPOT" \
+        "interface $HOTSPOT_INTERFACE
 static ip_address=192.168.4.1/24
-nohook wpa_supplicant
-EOF
+nohook wpa_supplicant"
     
 else
     echo "   Unknown network configuration system - using manual IP assignment..."
     # Fallback: manually assign IP
-    sudo ip addr add 192.168.4.1/24 dev $HOTSPOT_INTERFACE 2>/dev/null || true
+    run_cmd sudo ip addr add 192.168.4.1/24 dev "$HOTSPOT_INTERFACE" 2>/dev/null || true
 fi
 
 echo "📡 Configuring WiFi hotspot..."
 
 # Configure hostapd
-sudo tee /etc/hostapd/hostapd.conf > /dev/null << EOF
+run_cmd sudo tee /etc/hostapd/hostapd.conf > /dev/null << EOF
 # Wedding Jukebox Hotspot Configuration
 interface=$HOTSPOT_INTERFACE
 driver=nl80211
@@ -238,20 +374,19 @@ ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=$HOTSPOT_PASSWORD
 wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
-rsn_pairwise=CCMP
+    rsn_pairwise=CCMP
 EOF
 
 # Configure hostapd daemon
-sudo sed -i 's/#DAEMON_CONF=""/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/' /etc/default/hostapd
+run_cmd sudo sed -i 's/#DAEMON_CONF=""/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/' /etc/default/hostapd
 
 echo "🏠 Configuring DHCP for guests..."
 
 # Backup original dnsmasq config
-sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig 2>/dev/null || true
+run_cmd sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig 2>/dev/null || true
 
 # Configure dnsmasq
-sudo tee /etc/dnsmasq.conf > /dev/null << EOF
+run_cmd sudo tee /etc/dnsmasq.conf > /dev/null << EOF
 # Wedding Jukebox DHCP Configuration
 interface=$HOTSPOT_INTERFACE
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
@@ -268,53 +403,34 @@ EOF
 
 echo "🌍 Configuring venue WiFi connection..."
 
-# Add venue WiFi to wpa_supplicant
-sudo tee -a /etc/wpa_supplicant/wpa_supplicant.conf > /dev/null << EOF
-
-# Venue WiFi Network
-network={
-    ssid="$VENUE_SSID"
-    psk="$VENUE_PASSWORD"
+# Add venue WiFi to wpa_supplicant (idempotent)
+replace_managed_block \
+    "/etc/wpa_supplicant/wpa_supplicant.conf" \
+    "# BEGIN WEDDING-JUKEBOX VENUE WIFI" \
+    "# END WEDDING-JUKEBOX VENUE WIFI" \
+    "network={
+    ssid=\"$VENUE_SSID\"
+    psk=\"$VENUE_PASSWORD\"
     priority=1
-}
-EOF
+}"
 
 echo "🔀 Configuring internet sharing..."
 
-# Enable IP forwarding
-echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
-
-# Configure iptables for NAT
-sudo iptables -t nat -A POSTROUTING -o $VENUE_INTERFACE -j MASQUERADE
-sudo iptables -A FORWARD -i $VENUE_INTERFACE -o $HOTSPOT_INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
-sudo iptables -A FORWARD -i $HOTSPOT_INTERFACE -o $VENUE_INTERFACE -j ACCEPT
-
-# Save iptables rules
-sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
-
-# Create script to restore iptables on boot
-sudo tee /etc/rc.local > /dev/null << 'EOF'
-#!/bin/sh -e
-#
-# rc.local
-#
-# This script is executed at the end of each multiuser runlevel.
-# Make sure that the script will "exit 0" on success or any other
-# value on error.
-#
-# In order to enable or disable this script just change the execution
-# bits.
-
-# Restore iptables rules
-iptables-restore < /etc/iptables.ipv4.nat
-
-exit 0
+# Enable IP forwarding (idempotent)
+run_cmd sudo tee /etc/sysctl.d/99-wedding-jukebox.conf > /dev/null << EOF
+net.ipv4.ip_forward=1
 EOF
 
-sudo chmod +x /etc/rc.local
+# Configure iptables for NAT
+run_cmd sudo iptables -t nat -A POSTROUTING -o "$VENUE_INTERFACE" -j MASQUERADE
+run_cmd sudo iptables -A FORWARD -i "$VENUE_INTERFACE" -o "$HOTSPOT_INTERFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT
+run_cmd sudo iptables -A FORWARD -i "$HOTSPOT_INTERFACE" -o "$VENUE_INTERFACE" -j ACCEPT
+
+# Save iptables rules using iptables-persistent (safe + standard)
+run_cmd sudo sh -c "iptables-save > /etc/iptables/rules.v4"
 
 # Create systemd service to ensure hotspot IP is set on boot
-sudo tee /etc/systemd/system/wedding-jukebox-hotspot.service > /dev/null << EOF
+run_cmd sudo tee /etc/systemd/system/wedding-jukebox-hotspot.service > /dev/null << EOF
 [Unit]
 Description=Wedding Jukebox Hotspot IP Configuration
 After=network.target
@@ -330,13 +446,13 @@ ExecStart=/bin/sleep 2
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl enable wedding-jukebox-hotspot
+run_cmd sudo systemctl enable wedding-jukebox-hotspot
 
 echo "🚀 Enabling services..."
 # Unmask hostapd service (it gets masked during installation)
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd
-sudo systemctl enable dnsmasq
+run_cmd sudo systemctl unmask hostapd
+run_cmd sudo systemctl enable hostapd
+run_cmd sudo systemctl enable dnsmasq
 
 echo ""
 echo "✅ Dual WiFi setup complete!"
@@ -357,11 +473,16 @@ echo "   4. They'll be redirected to the jukebox!"
 echo ""
 
 # Countdown
-for i in {10..1}; do
-    echo -ne "\rRebooting in $i seconds... (Ctrl+C to cancel)"
-    sleep 1
-done
+if [[ "$DRY_RUN" -eq 0 ]]; then
+    for i in {10..1}; do
+        echo -ne "\rRebooting in $i seconds... (Ctrl+C to cancel)"
+        sleep 1
+    done
 
-echo ""
-echo "🔄 Rebooting now..."
-sudo reboot
+    echo ""
+    echo "🔄 Rebooting now..."
+    sudo reboot
+else
+    echo ""
+    echo "Dry-run complete. No changes were made."
+fi
