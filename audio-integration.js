@@ -46,6 +46,7 @@ class AudioIntegration {
                 service: 'headless-audio',
                 capabilities: ['play', 'pause', 'stop', 'volume', 'fade']
             });
+            this.fetchAndApplyOutputDevice();
         });
         
         this.socket.on('disconnect', () => {
@@ -241,6 +242,26 @@ class AudioIntegration {
             console.log('🧪 Test audio command received');
             this.handleTestAudio();
         });
+
+        this.socket.on('audioOutputCommand', (data = {}) => {
+            const device = data.device;
+            console.log('🔈 Audio output command received:', device || 'default');
+            this.audioService.setOutputDevice(device || null);
+        });
+    }
+
+    async fetchAndApplyOutputDevice() {
+        try {
+            const response = await this.getFromApi('/api/audio/output');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && data.device) {
+                console.log('🔈 Applying saved audio output device:', data.device);
+                this.audioService.setOutputDevice(data.device);
+            }
+        } catch (error) {
+            console.log('⚠️ Could not fetch saved audio output device:', error.message);
+        }
     }
     
     async handlePlayCommand(data) {

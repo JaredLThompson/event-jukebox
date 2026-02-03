@@ -17,6 +17,7 @@ class AudioService {
         this.isPlaying = false;
         this.currentSong = null;
         this.volume = 0.7;
+        this.outputDevice = process.env.ALSA_DEVICE || null;
         this.position = 0;
         this.duration = 0;
         this.isBuffering = false;
@@ -39,6 +40,9 @@ class AudioService {
         
         console.log('🎵 Audio Service initialized');
         console.log('📁 Cache directory:', this.cacheDir);
+        if (this.outputDevice) {
+            console.log('🔈 Audio output device set to:', this.outputDevice);
+        }
     }
 
     loadCacheManifest() {
@@ -363,7 +367,12 @@ class AudioService {
                 }
                 
                 // Use mpg123 as primary player with better error handling
-                this.currentProcess = spawn('mpg123', ['-q', '--gain', '50', filepath]);
+                const args = ['-q', '--gain', '50'];
+                if (this.outputDevice && this.outputDevice !== 'default') {
+                    args.push('-a', this.outputDevice);
+                }
+                args.push(filepath);
+                this.currentProcess = spawn('mpg123', args);
                 
                 this.isPlaying = true;
                 
@@ -405,7 +414,12 @@ class AudioService {
                 this.duration = 0;
                 this.position = 0;
                 
-                this.currentProcess = spawn('mpg123', ['-q', '--gain', '50', filepath]);
+                const args = ['-q', '--gain', '50'];
+                if (this.outputDevice && this.outputDevice !== 'default') {
+                    args.push('-a', this.outputDevice);
+                }
+                args.push(filepath);
+                this.currentProcess = spawn('mpg123', args);
                 this.isPlaying = true;
                 
                 this.currentProcess.on('close', (code) => {
@@ -663,6 +677,9 @@ class AudioService {
             
             // Use mpg123 with seek option to start from specific position
             const args = ['-q', '--gain', '50'];
+            if (this.outputDevice && this.outputDevice !== 'default') {
+                args.push('-a', this.outputDevice);
+            }
             if (startPosition > 0) {
                 // Convert to frame position (mpg123 uses frames, roughly 38.28 frames per second for MP3)
                 const framePosition = Math.floor(startPosition * 38.28);
@@ -711,7 +728,7 @@ class AudioService {
 
     applySystemVolume(percent) {
         const control = process.env.AMIXER_CONTROL;
-        const device = process.env.AMIXER_DEVICE;
+        const device = process.env.AMIXER_DEVICE || this.outputDevice;
         const controlsToTry = control
             ? [control]
             : ['Master', 'PCM', 'Speaker', 'Headphone'];
@@ -727,6 +744,17 @@ class AudioService {
                 return;
             }
         }
+    }
+
+    setOutputDevice(device) {
+        if (device === undefined) return;
+        if (!device || device === 'default') {
+            this.outputDevice = null;
+            console.log('🔈 Audio output device reset to default');
+            return;
+        }
+        this.outputDevice = device;
+        console.log('🔈 Audio output device set to:', device);
     }
 
     /**

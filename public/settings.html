@@ -214,6 +214,18 @@
                                class="w-40 bg-gray-700 text-white rounded px-3 py-2" value="2000">
                     </div>
                 </div>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Audio Output</h3>
+                            <p class="text-gray-300 text-sm">Choose which speaker/device to play through</p>
+                        </div>
+                        <select id="audioOutputDevice" class="w-full md:w-96 bg-gray-700 text-white rounded px-3 py-2">
+                            <option value="default">Default (system)</option>
+                        </select>
+                    </div>
+                </div>
             </section>
 
             <!-- Music Services Settings -->
@@ -364,7 +376,8 @@
                     appleMusicEnabled: false,
                     showServiceIcons: true,
                     compactQueue: false,
-                    fadeDurationMs: 2000
+                    fadeDurationMs: 2000,
+                    audioOutputDevice: 'default'
                 };
                 
                 const saved = localStorage.getItem('jukeboxSettings');
@@ -377,6 +390,7 @@
                 
                 // Try to apply settings to main window if it exists
                 this.applyToMainWindow();
+                this.applyAudioOutput();
             }
             
             saveAndReturn() {
@@ -411,6 +425,7 @@
                 });
                 
                 this.updateVisualizerSettingsVisibility();
+                this.loadAudioOutputs();
             }
             
             bindEvents() {
@@ -422,11 +437,14 @@
                 
                 // All other settings
                 ['defaultVisualizerType', 'autoShowBehavior', 'youtubeEnabled', 'spotifyEnabled', 
-                 'soundcloudEnabled', 'appleMusicEnabled', 'showServiceIcons', 'compactQueue', 'fadeDurationMs'].forEach(id => {
+                 'soundcloudEnabled', 'appleMusicEnabled', 'showServiceIcons', 'compactQueue', 'fadeDurationMs', 'audioOutputDevice'].forEach(id => {
                     const element = document.getElementById(id);
                     if (element) {
                         element.addEventListener('change', (e) => {
                             this.settings[id] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+                            if (id === 'audioOutputDevice') {
+                                this.applyAudioOutput();
+                            }
                         });
                     }
                 });
@@ -452,6 +470,43 @@
                     visualizerSettings.style.display = 'block';
                 } else {
                     visualizerSettings.style.display = 'none';
+                }
+            }
+
+            async loadAudioOutputs() {
+                const select = document.getElementById('audioOutputDevice');
+                if (!select) return;
+                try {
+                    const response = await fetch('/api/audio/output');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    const outputs = Array.isArray(data.outputs) ? data.outputs : [];
+                    select.innerHTML = '';
+                    outputs.forEach(output => {
+                        const option = document.createElement('option');
+                        option.value = output.id;
+                        option.textContent = output.description
+                            ? `${output.name} - ${output.description}`
+                            : output.name;
+                        select.appendChild(option);
+                    });
+                    const selected = data.device || this.settings.audioOutputDevice || 'default';
+                    select.value = outputs.some(output => output.id === selected) ? selected : 'default';
+                    this.settings.audioOutputDevice = select.value;
+                } catch (error) {
+                    // Ignore output enumeration errors
+                }
+            }
+
+            async applyAudioOutput() {
+                try {
+                    await fetch('/api/audio/output', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device: this.settings.audioOutputDevice })
+                    });
+                } catch (error) {
+                    // Ignore errors; device may not be available
                 }
             }
             

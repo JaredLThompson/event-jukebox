@@ -38,6 +38,10 @@ let activePlaylist = 'bride'; // 'wedding' or 'bride'
 let queueParked = false; // New: park user submissions instead of blocking them
 let suppressedSongs = new Set(); // New: track suppressed playlist songs by index
 
+// Audio output settings
+const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
+let audioOutputDevice = null;
+
 // Initialize Spotify service
 const spotifyService = new SpotifyService();
 
@@ -66,6 +70,63 @@ function saveCacheManifest(manifest) {
   }
 }
 
+function loadAudioOutput() {
+  if (!fs.existsSync(AUDIO_OUTPUT_FILE)) return null;
+  try {
+    const data = fs.readFileSync(AUDIO_OUTPUT_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    if (parsed && parsed.device && parsed.device !== 'default') {
+      return parsed.device;
+    }
+  } catch (error) {
+    console.error('Failed to load audio output settings:', error.message);
+  }
+  return null;
+}
+
+function saveAudioOutput(device) {
+  try {
+    const payload = {
+      device: device && device !== 'default' ? device : null,
+      savedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(AUDIO_OUTPUT_FILE, JSON.stringify(payload, null, 2));
+  } catch (error) {
+    console.error('Failed to save audio output settings:', error.message);
+  }
+}
+
+function listAudioOutputs() {
+  return new Promise((resolve) => {
+    execFile('aplay', ['-L'], (error, stdout) => {
+      if (error || !stdout) {
+        return resolve([
+          { id: 'default', name: 'Default', description: 'System default output' }
+        ]);
+      }
+
+      const lines = stdout.split('\n');
+      const outputs = [];
+      let current = null;
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (!line.startsWith(' ')) {
+          if (current) outputs.push(current);
+          current = { id: line.trim(), name: line.trim(), description: '' };
+        } else if (current && !current.description) {
+          current.description = line.trim();
+        }
+      }
+      if (current) outputs.push(current);
+
+      const normalized = outputs.filter(item => item.id !== 'null');
+      normalized.unshift({ id: 'default', name: 'Default', description: 'System default output' });
+      resolve(normalized);
+    });
+  });
+}
+
 function fetchYouTubeOEmbed(youtubeId) {
   return new Promise((resolve) => {
     const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeId}&format=json`;
@@ -86,6 +147,9 @@ function fetchYouTubeOEmbed(youtubeId) {
     }).on('error', () => resolve(null));
   });
 }
+
+// Load persisted audio output selection
+audioOutputDevice = loadAudioOutput();
 
 // Load existing play history if it exists
 function loadPlayHistory() {
@@ -171,6 +235,22 @@ app.get('/user', (req, res) => {
 
 app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+});
+
+app.get('/api/audio/output', async (req, res) => {
+  const outputs = await listAudioOutputs();
+  res.json({
+    device: audioOutputDevice || 'default',
+    outputs
+  });
+});
+
+app.post('/api/audio/output', (req, res) => {
+  const device = typeof req.body?.device === 'string' ? req.body.device.trim() : '';
+  audioOutputDevice = device && device !== 'default' ? device : null;
+  saveAudioOutput(audioOutputDevice);
+  io.emit('audioOutputCommand', { device: audioOutputDevice || 'default' });
+  res.json({ success: true, device: audioOutputDevice || 'default' });
 });
 
 app.get('/venue', (req, res) => {
