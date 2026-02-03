@@ -1174,6 +1174,11 @@ io.on('connection', (socket) => {
     io.emit('skipCommand');
   });
 
+  socket.on('volumeCommand', (data) => {
+    console.log('🔊 Volume command received from web interface, forwarding to audio service');
+    io.emit('volumeCommand', data);
+  });
+
   socket.on('fadeCommand', (data = {}) => {
     console.log('🎚️ Fade command received from web interface, forwarding to audio service');
     io.emit('fadeCommand', data);
