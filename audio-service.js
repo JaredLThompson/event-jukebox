@@ -768,11 +768,17 @@ class AudioService {
         try {
             console.log('🧪 Playing test audio...');
             
-            const testFile = path.join(this.cacheDir, 'test-speakers.mp3');
+            const cacheTestFile = path.join(this.cacheDir, 'test-speakers.mp3');
+            const repoTestFile = path.join(__dirname, 'audio', 'stereo-test.mp3');
+            const testFile = fs.existsSync(cacheTestFile)
+                ? cacheTestFile
+                : repoTestFile;
             
             if (!fs.existsSync(testFile)) {
                 throw new Error('Test audio file not found');
             }
+            
+            console.log('🔎 Using test audio file:', testFile);
             
             // Stop current playback
             this.stop();
