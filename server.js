@@ -188,9 +188,24 @@ app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
 });
 
+function resolveNmcliPath() {
+  if (process.env.NMCLI_PATH) return process.env.NMCLI_PATH;
+  const candidates = ['/usr/bin/nmcli', '/usr/sbin/nmcli', '/bin/nmcli', '/sbin/nmcli'];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'nmcli';
+}
+
 function runNmcli(args) {
+  const nmcliPath = resolveNmcliPath();
+  const env = {
+    ...process.env,
+    PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  };
+
   return new Promise((resolve, reject) => {
-    execFile('nmcli', args, { timeout: 15000 }, (error, stdout, stderr) => {
+    execFile(nmcliPath, args, { timeout: 15000, env }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
