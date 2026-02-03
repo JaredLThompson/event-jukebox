@@ -39,7 +39,7 @@
         </header>
 
         <div class="panel p-4">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+            <div class="flex flex-col gap-4 mb-3">
                 <div class="text-sm text-gray-300">
                     <span id="cacheCount">0</span> files
                     <span class="mx-2 text-gray-500">•</span>
@@ -47,7 +47,7 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <input id="searchInput" type="text" placeholder="Search filename..."
-                           class="bg-gray-700 text-white text-sm rounded px-3 py-2 w-48">
+                           class="bg-gray-700 text-white text-sm rounded px-3 py-2 w-64">
                     <select id="sortSelect" class="bg-gray-700 text-white text-sm rounded px-2 py-2">
                         <option value="modified_desc">Newest</option>
                         <option value="modified_asc">Oldest</option>
@@ -57,6 +57,8 @@
                         <option value="size_asc">Smallest</option>
                     </select>
                     <button id="refreshBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">Refresh</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
                     <button id="rebuildBtn" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded text-sm">Rebuild Metadata</button>
                     <div class="flex items-center gap-2">
                         <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
