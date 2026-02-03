@@ -1573,8 +1573,22 @@ class VirtualJukebox {
         
         // If no song is currently playing, try to start the queue
         if (!this.currentSong && !this.isPlaying) {
-            console.log('🚀 No song playing, sending manual play command to audio service...');
-            this.socket.emit('manualPlayCommand');
+            console.log('🚀 No song playing, advancing queue via server...');
+            fetch('/api/queue/next', { method: 'POST' })
+                .then(async (response) => {
+                    if (response.ok) {
+                        this.showToast('Starting queue...', 'success');
+                        setTimeout(() => this.updatePlaylistStatus(), 500);
+                    } else {
+                        const body = await response.text().catch(() => '');
+                        console.log('⚠️ Failed to advance queue:', response.status, body);
+                        this.showToast('Failed to start queue', 'error');
+                    }
+                })
+                .catch((error) => {
+                    console.log('❌ Error advancing queue:', error.message);
+                    this.showToast('Failed to start queue', 'error');
+                });
             return;
         }
         
