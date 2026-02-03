@@ -37,12 +37,15 @@ class AudioService {
 
         this.cacheManifestPath = path.join(this.cacheDir, 'cache-manifest.json');
         this.cacheManifest = this.loadCacheManifest();
+        this.prebufferDedupEnabled = process.env.PREBUFFER_DEDUP !== '0';
+        this.prebufferInFlight = new Map();
         
         console.log('🎵 Audio Service initialized');
         console.log('📁 Cache directory:', this.cacheDir);
         if (this.outputDevice) {
             console.log('🔈 Audio output device set to:', this.outputDevice);
         }
+        console.log('🧰 Pre-buffer deduplication:', this.prebufferDedupEnabled ? 'enabled' : 'disabled');
     }
 
     loadCacheManifest() {
@@ -833,6 +836,15 @@ class AudioService {
             
             if (song.videoId || song.youtubeId) {
                 const youtubeId = song.videoId || song.youtubeId;
+                
+                if (this.prebufferDedupEnabled && this.prebufferInFlight.has(youtubeId)) {
+                    console.log('⏳ Pre-buffer already in progress for:', youtubeId);
+                    try {
+                        await this.prebufferInFlight.get(youtubeId);
+                    } catch (error) {
+                        // fall through to let the next attempt try again
+                    }
+                }
                 const filename = `${youtubeId}.mp3`;
                 const filepath = path.join(this.cacheDir, filename);
                 
@@ -851,11 +863,21 @@ class AudioService {
                 }
                 
                 // Download in background
-                await this.extractYouTubeAudio(youtubeId);
+                let downloadPromise = null;
+                if (this.prebufferDedupEnabled) {
+                    downloadPromise = this.extractYouTubeAudio(youtubeId);
+                    this.prebufferInFlight.set(youtubeId, downloadPromise);
+                    await downloadPromise;
+                } else {
+                    await this.extractYouTubeAudio(youtubeId);
+                }
                 this.recordCacheEntry(youtubeId, song, filepath);
                 console.log('✅ Pre-buffered:', song.title);
                 this.isBuffering = false;
                 this.bufferingProgress = null;
+                if (this.prebufferDedupEnabled) {
+                    this.prebufferInFlight.delete(youtubeId);
+                }
                 return { success: true, cached: false };
             }
             
@@ -866,6 +888,12 @@ class AudioService {
             console.log('⚠️ Pre-buffer failed:', error.message);
             this.isBuffering = false;
             this.bufferingProgress = null;
+            if (song && (song.videoId || song.youtubeId)) {
+                const youtubeId = song.videoId || song.youtubeId;
+                if (this.prebufferDedupEnabled) {
+                    this.prebufferInFlight.delete(youtubeId);
+                }
+            }
             return { success: false, error: error.message };
         }
     }

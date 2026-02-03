@@ -38,6 +38,9 @@ let activePlaylist = 'bride'; // 'wedding' or 'bride'
 let queueParked = false; // New: park user submissions instead of blocking them
 let suppressedSongs = new Set(); // New: track suppressed playlist songs by index
 
+// Playlist persistence
+const PLAYLIST_STATE_FILE = path.join(__dirname, 'playlist-state.json');
+
 // Audio output settings
 const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
 let audioOutputDevice = null;
@@ -67,6 +70,31 @@ function saveCacheManifest(manifest) {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   } catch (error) {
     console.error('Failed to save cache manifest:', error.message);
+  }
+}
+
+function loadPlaylistState() {
+  if (!fs.existsSync(PLAYLIST_STATE_FILE)) return null;
+  try {
+    const data = fs.readFileSync(PLAYLIST_STATE_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    if (parsed && (parsed.activePlaylist === 'wedding' || parsed.activePlaylist === 'bride')) {
+      return parsed.activePlaylist;
+    }
+  } catch (error) {
+    console.error('Failed to load playlist state:', error.message);
+  }
+  return null;
+}
+
+function savePlaylistState(playlist) {
+  try {
+    fs.writeFileSync(PLAYLIST_STATE_FILE, JSON.stringify({
+      activePlaylist: playlist,
+      savedAt: new Date().toISOString()
+    }, null, 2));
+  } catch (error) {
+    console.error('Failed to save playlist state:', error.message);
   }
 }
 
@@ -150,6 +178,10 @@ function fetchYouTubeOEmbed(youtubeId) {
 
 // Load persisted audio output selection
 audioOutputDevice = loadAudioOutput();
+const persistedPlaylist = loadPlaylistState();
+if (persistedPlaylist) {
+  activePlaylist = persistedPlaylist;
+}
 
 // Load existing play history if it exists
 function loadPlayHistory() {
@@ -1275,6 +1307,7 @@ app.post('/api/playlist/switch', (req, res) => {
   currentFallbackIndex = -1;
   // Clear suppressed songs when switching playlists
   suppressedSongs.clear();
+  savePlaylistState(activePlaylist);
   
   const playlistName = getPlaylistName();
   
