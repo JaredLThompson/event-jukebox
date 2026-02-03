@@ -158,6 +158,7 @@ DOCKER_RUN_CMD="docker run -d \
     -p ${HOST_PORT}:${PORT} \
     -e HOST_IP=${HOST_IP} \
     -v wedding-jukebox-data:/app/data \
+    -v $(pwd)/audio-cache:/app/audio-cache \
     -v $(pwd)/wedding-play-history.json:/app/wedding-play-history.json \
     -v $(pwd)/wedding-playlist.js:/app/wedding-playlist.js \
     -v $(pwd)/bride-playlist.js:/app/bride-playlist.js"

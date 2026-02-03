@@ -41,6 +41,7 @@ const spotifyService = new SpotifyService();
 
 // Play history tracking
 const PLAY_HISTORY_FILE = 'wedding-play-history.json';
+const AUDIO_CACHE_DIR = path.join(__dirname, 'audio-cache');
 let playHistory = [];
 
 // Load existing play history if it exists
@@ -129,6 +130,10 @@ app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
+app.get('/cache', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'cache.html'));
+});
+
 app.get('/kiosk', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'kiosk.html'));
 });
@@ -170,6 +175,102 @@ app.get('/api/network-info', (req, res) => {
     networkIP: networkIP,
     port: process.env.PORT || 3000
   });
+});
+
+app.get('/api/cache', (req, res) => {
+  try {
+    if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+      return res.json({ files: [] });
+    }
+
+    const files = fs.readdirSync(AUDIO_CACHE_DIR)
+      .filter(name => name.endsWith('.mp3'))
+      .map(name => {
+        const fullPath = path.join(AUDIO_CACHE_DIR, name);
+        const stats = fs.statSync(fullPath);
+        return {
+          name,
+          sizeBytes: stats.size,
+          modified: stats.mtime.toISOString()
+        };
+      })
+      .sort((a, b) => b.modified.localeCompare(a.modified));
+
+    res.json({ files });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read cache' });
+  }
+});
+
+app.get('/api/cache/file/:name', (req, res) => {
+  const name = req.params.name;
+  if (!name || name.includes('..') || name.includes('/')) {
+    return res.status(400).send('Invalid file name');
+  }
+
+  const fullPath = path.join(AUDIO_CACHE_DIR, name);
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).send('File not found');
+  }
+
+  if (req.query.download === '1') {
+    return res.download(fullPath, name);
+  }
+
+  res.sendFile(fullPath);
+});
+
+app.delete('/api/cache/file/:name', (req, res) => {
+  const name = req.params.name;
+  if (!name || name.includes('..') || name.includes('/')) {
+    return res.status(400).json({ error: 'Invalid file name' });
+  }
+
+  const fullPath = path.join(AUDIO_CACHE_DIR, name);
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  try {
+    fs.unlinkSync(fullPath);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+app.post('/api/cache/clear', (req, res) => {
+  try {
+    if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+      return res.json({ success: true, deleted: 0 });
+    }
+
+    const olderThanDays = Number(req.body?.olderThanDays);
+    const cutoffMs = Number.isFinite(olderThanDays) && olderThanDays > 0
+      ? Date.now() - olderThanDays * 24 * 60 * 60 * 1000
+      : null;
+
+    const files = fs.readdirSync(AUDIO_CACHE_DIR).filter(name => name.endsWith('.mp3'));
+    let deleted = 0;
+    for (const name of files) {
+      const fullPath = path.join(AUDIO_CACHE_DIR, name);
+      try {
+        if (cutoffMs !== null) {
+          const stats = fs.statSync(fullPath);
+          if (stats.mtimeMs > cutoffMs) {
+            continue;
+          }
+        }
+        fs.unlinkSync(fullPath);
+        deleted += 1;
+      } catch (error) {
+        // Continue deleting other files
+      }
+    }
+    res.json({ success: true, deleted });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
 });
 
 app.get('/api/queue', (req, res) => {

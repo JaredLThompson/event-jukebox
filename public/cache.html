@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Jukebox - Audio Cache</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+    <link href="css/output.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            min-height: 100vh;
+        }
+        .panel {
+            background: rgba(17,24,39,0.8);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+        }
+        .row {
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-3xl font-bold">Audio Cache</h1>
+                <p class="text-sm text-gray-300">Files cached on the Pi for headless playback</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="/settings" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm">Settings</a>
+                <a href="/" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm">Back to DJ</a>
+            </div>
+        </header>
+
+        <div class="panel p-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                <div class="text-sm text-gray-300">
+                    <span id="cacheCount">0</span> files
+                    <span class="mx-2 text-gray-500">•</span>
+                    <span id="cacheTotalSize">0 MB</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input id="searchInput" type="text" placeholder="Search filename..."
+                           class="bg-gray-700 text-white text-sm rounded px-3 py-2 w-48">
+                    <select id="sortSelect" class="bg-gray-700 text-white text-sm rounded px-2 py-2">
+                        <option value="modified_desc">Newest</option>
+                        <option value="modified_asc">Oldest</option>
+                        <option value="name_asc">Name A–Z</option>
+                        <option value="name_desc">Name Z–A</option>
+                        <option value="size_desc">Largest</option>
+                        <option value="size_asc">Smallest</option>
+                    </select>
+                    <button id="refreshBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">Refresh</button>
+                    <div class="flex items-center gap-2">
+                        <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
+                               class="bg-gray-700 text-white text-sm rounded px-2 py-2 w-20">
+                        <button id="clearOlderBtn" class="bg-red-700 hover:bg-red-600 px-3 py-2 rounded text-sm">Delete Older</button>
+                        <button id="clearBtn" class="bg-red-600 hover:bg-red-500 px-3 py-2 rounded text-sm">Clear All</button>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-12 text-xs uppercase text-gray-400 pb-2">
+                <div class="col-span-5">File</div>
+                <div class="col-span-2 text-right">Size</div>
+                <div class="col-span-3 text-right">Modified</div>
+                <div class="col-span-2 text-right">Actions</div>
+            </div>
+            <div id="cacheList" class="text-sm"></div>
+        </div>
+    </div>
+
+    <script>
+        const cacheList = document.getElementById('cacheList');
+        const cacheCount = document.getElementById('cacheCount');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const clearOlderBtn = document.getElementById('clearOlderBtn');
+        const olderThanDaysInput = document.getElementById('olderThanDays');
+        const cacheTotalSize = document.getElementById('cacheTotalSize');
+        const searchInput = document.getElementById('searchInput');
+        const sortSelect = document.getElementById('sortSelect');
+        let currentFiles = [];
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            const kb = bytes / 1024;
+            if (kb < 1024) return `${kb.toFixed(1)} KB`;
+            return `${(kb / 1024).toFixed(1)} MB`;
+        }
+
+        function formatDate(iso) {
+            const date = new Date(iso);
+            return date.toLocaleString();
+        }
+
+        function applyFiltersAndRender() {
+            const query = searchInput.value.trim().toLowerCase();
+            let files = currentFiles;
+            if (query) {
+                files = files.filter(file => file.name.toLowerCase().includes(query));
+            }
+
+            switch (sortSelect.value) {
+                case 'name_asc':
+                    files = files.slice().sort((a, b) => a.name.localeCompare(b.name));
+                    break;
+                case 'name_desc':
+                    files = files.slice().sort((a, b) => b.name.localeCompare(a.name));
+                    break;
+                case 'size_asc':
+                    files = files.slice().sort((a, b) => a.sizeBytes - b.sizeBytes);
+                    break;
+                case 'size_desc':
+                    files = files.slice().sort((a, b) => b.sizeBytes - a.sizeBytes);
+                    break;
+                case 'modified_asc':
+                    files = files.slice().sort((a, b) => a.modified.localeCompare(b.modified));
+                    break;
+                case 'modified_desc':
+                default:
+                    files = files.slice().sort((a, b) => b.modified.localeCompare(a.modified));
+            }
+
+            cacheCount.textContent = files.length;
+            const totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+            cacheTotalSize.textContent = formatBytes(totalBytes);
+
+            if (files.length === 0) {
+                cacheList.innerHTML = '<div class="py-3 text-gray-400">No cached files.</div>';
+                return;
+            }
+
+            cacheList.innerHTML = files.map(file => `
+                <div class="grid grid-cols-12 items-center py-2 row">
+                    <div class="col-span-5 truncate" title="${file.name}">${file.name}</div>
+                    <div class="col-span-2 text-right text-gray-300">${formatBytes(file.sizeBytes)}</div>
+                    <div class="col-span-3 text-right text-gray-400">${formatDate(file.modified)}</div>
+                    <div class="col-span-2 text-right flex justify-end gap-2">
+                        <a class="text-purple-300 hover:text-purple-200" href="/api/cache/file/${encodeURIComponent(file.name)}" target="_blank">▶</a>
+                        <a class="text-blue-300 hover:text-blue-200" href="/api/cache/file/${encodeURIComponent(file.name)}?download=1" download>⬇</a>
+                        <button class="text-red-300 hover:text-red-200" data-delete="${encodeURIComponent(file.name)}">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadCache() {
+            cacheList.innerHTML = '<div class="py-3 text-gray-400">Loading...</div>';
+            const res = await fetch('/api/cache');
+            const data = await res.json();
+            currentFiles = data.files || [];
+            applyFiltersAndRender();
+        }
+
+        refreshBtn.addEventListener('click', loadCache);
+        searchInput.addEventListener('input', applyFiltersAndRender);
+        sortSelect.addEventListener('change', applyFiltersAndRender);
+        cacheList.addEventListener('click', async (event) => {
+            const btn = event.target.closest('button[data-delete]');
+            if (!btn) return;
+            const name = decodeURIComponent(btn.getAttribute('data-delete'));
+            if (!confirm(`Delete cached file "${name}"?`)) return;
+            await fetch(`/api/cache/file/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            await loadCache();
+        });
+        clearBtn.addEventListener('click', async () => {
+            if (!confirm('Clear all cached audio files?')) return;
+            await fetch('/api/cache/clear', { method: 'POST' });
+            await loadCache();
+        });
+        clearOlderBtn.addEventListener('click', async () => {
+            const days = parseInt(olderThanDaysInput.value, 10);
+            if (Number.isNaN(days) || days <= 0) {
+                alert('Enter a valid number of days.');
+                return;
+            }
+            if (!confirm(`Delete cached files older than ${days} days?`)) return;
+            await fetch('/api/cache/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ olderThanDays: days })
+            });
+            await loadCache();
+        });
+        loadCache();
+    </script>
+</body>
+</html>

@@ -115,6 +115,8 @@ services:
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
       - ./wedding-play-history.json:/app/wedding-play-history.json
+      # Host audio cache (headless playback)
+      - ./audio-cache:/app/audio-cache
       # Audio device access
       - /dev/snd:/dev/snd
     devices:
@@ -193,6 +195,7 @@ sudo systemctl enable wedding-jukebox-docker
 # Create data directories and files
 mkdir -p "$APP_DIR/data"
 mkdir -p "$APP_DIR/backups"
+mkdir -p "$APP_DIR/audio-cache"
 
 # Create required files if they don't exist (prevents Docker from creating them as directories)
 touch "$APP_DIR/oauth.json" "$APP_DIR/wedding-play-history.json"

@@ -123,7 +123,28 @@
             </div>
         </header>
 
-        <div class="settings-container p-8">
+            <div class="settings-container p-8">
+            <!-- Quick Tools -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-toolbox mr-3 text-yellow-300"></i>
+                    Quick Tools
+                </h2>
+                <div class="setting-item p-6 mb-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Audio Cache</h3>
+                        <p class="text-gray-300 text-sm">View cached audio files stored on the Pi</p>
+                    </div>
+                    <a href="/cache" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">View Cache</a>
+                </div>
+                <div class="setting-item p-6 mb-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Clear Audio Cache</h3>
+                        <p class="text-gray-300 text-sm">Remove all cached audio files from the Pi</p>
+                    </div>
+                    <button id="clearCacheBtn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm">Clear Cache</button>
+                </div>
+            </section>
             <!-- Audio Visualizer Settings -->
             <section class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -407,6 +428,15 @@
                 document.getElementById('saveSettings').addEventListener('click', () => this.saveSettings());
                 document.getElementById('saveAndReturn').addEventListener('click', () => this.saveAndReturn());
                 document.getElementById('resetSettings').addEventListener('click', () => this.resetToDefaults());
+
+                const clearCacheBtn = document.getElementById('clearCacheBtn');
+                if (clearCacheBtn) {
+                    clearCacheBtn.addEventListener('click', async () => {
+                        if (!confirm('Clear all cached audio files?')) return;
+                        await fetch('/api/cache/clear', { method: 'POST' });
+                        this.showToast('Cache cleared', 'success');
+                    });
+                }
             }
             
             updateVisualizerSettingsVisibility() {
