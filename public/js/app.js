@@ -1566,9 +1566,18 @@ class VirtualJukebox {
     }
 
     setVolume(volume) {
-        if (this.player && this.isPlayerReady) {
-            this.player.setVolume(volume);
+        const volumeInt = parseInt(volume, 10);
+        const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
+        const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+
+        if (isHeadless || !this.player || !this.isPlayerReady) {
+            const normalized = clamped / 100;
+            console.log('🔊 Sending volume command to audio service:', normalized);
+            this.socket.emit('volumeCommand', { volume: normalized });
+            return;
         }
+
+        this.player.setVolume(clamped);
     }
     
     async testAudio() {
