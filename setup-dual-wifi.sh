@@ -251,9 +251,16 @@ if systemctl is-active --quiet NetworkManager; then
     nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Wedding-Jukebox-Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
 
     # Remove existing venue connection by SSID to avoid stale DHCP leases
-    nmcli -g NAME,TYPE,802-11-wireless.ssid con show | \
-        awk -F: -v ssid="$VENUE_SSID" '$2=="802-11-wireless" && $3==ssid {print $1}' | \
-        xargs -r -I{} run_cmd nmcli con delete "{}"
+    # Older nmcli versions don't support 802-11-wireless.ssid in con show fields,
+    # so we look up SSID per connection.
+    while IFS=: read -r con_name con_type; do
+        if [[ "$con_type" == "wifi" || "$con_type" == "802-11-wireless" ]]; then
+            con_ssid=$(nmcli -g 802-11-wireless.ssid con show "$con_name" 2>/dev/null || true)
+            if [[ "$con_ssid" == "$VENUE_SSID" ]]; then
+                run_cmd nmcli con delete "$con_name"
+            fi
+        fi
+    done < <(nmcli -t -f NAME,TYPE con show)
 
     echo "📶 Connecting to venue WiFi on $VENUE_INTERFACE..."
     ACTIVE_SSID=$(nmcli -t -f ACTIVE,SSID,DEVICE dev wifi | awk -F: -v dev="$VENUE_INTERFACE" '$1=="yes" && $3==dev {print $2; exit}')
@@ -263,7 +270,12 @@ if systemctl is-active --quiet NetworkManager; then
         run_cmd nmcli dev wifi rescan ifname "$VENUE_INTERFACE" || true
         if ! run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE"; then
             echo "⚠️  SSID not found. Retrying with hidden network flag..."
-            run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE" hidden yes
+            if ! run_cmd nmcli dev wifi connect "$VENUE_SSID" password "$VENUE_PASSWORD" ifname "$VENUE_INTERFACE" hidden yes; then
+                echo "⚠️  Unable to connect via scan. Creating a connection profile..."
+                run_cmd nmcli con add type wifi ifname "$VENUE_INTERFACE" con-name "$VENUE_SSID" ssid "$VENUE_SSID"
+                run_cmd nmcli con modify "$VENUE_SSID" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$VENUE_PASSWORD"
+                run_cmd nmcli con up "$VENUE_SSID"
+            fi
         fi
     fi
 
