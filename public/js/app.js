@@ -518,6 +518,28 @@ class VirtualJukebox {
         this.socket.on('disconnect', () => {
             this.showToast('Disconnected from jukebox', 'error');
         });
+
+        this.socket.on('systemModeUpdated', (data) => {
+            if (data && data.mode) {
+                this.updateModeBadge(data.mode === 'headless');
+                this.systemMode = data.mode;
+            }
+        });
+
+        this.socket.on('eventConfigUpdated', () => {
+            this.loadEventSchedule();
+        });
+
+        this.socket.on('eventsUpdated', () => {
+            this.loadEventSchedule();
+        });
+
+        this.socket.on('eventSwitched', (data) => {
+            if (data && data.id) {
+                this.activeEventId = data.id;
+                this.loadEventSchedule();
+            }
+        });
         
         // Listen for audio service status updates (progress, etc.)
         this.socket.on('audioServiceStatus', (data) => {
@@ -541,12 +563,27 @@ class VirtualJukebox {
 
             // Load event schedule for selector
             this.loadEventSchedule();
+
+            // Load system mode
+            this.loadSystemMode();
             
             // Load history count
             this.loadHistoryCount();
         } catch (error) {
             console.error('Failed to load initial data:', error);
             this.showToast('Failed to load jukebox data', 'error');
+        }
+    }
+
+    async loadSystemMode() {
+        try {
+            const response = await fetch('/api/system-mode');
+            if (!response.ok) return;
+            const data = await response.json();
+            this.updateModeBadge(data.mode === 'headless');
+            this.systemMode = data.mode;
+        } catch (error) {
+            console.error('Failed to load system mode:', error);
         }
     }
 
@@ -981,7 +1018,9 @@ class VirtualJukebox {
     }
 
     confirmNavigation(url) {
-        const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+        const isHeadless = this.systemMode
+            ? this.systemMode === 'headless'
+            : this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
         if (isHeadless) {
             window.location.href = url;
             return;
@@ -1043,8 +1082,12 @@ class VirtualJukebox {
         const isNewSong = !this.currentSong || this.currentSong.id !== song.id;
         
         this.currentSong = song;
-        const isHeadless = song.source === 'headless-audio' || song.source === 'fallback';
-        this.updateModeBadge(isHeadless);
+        if (this.systemMode) {
+            this.updateModeBadge(this.systemMode === 'headless');
+        } else {
+            const isHeadless = song.source === 'headless-audio' || song.source === 'fallback';
+            this.updateModeBadge(isHeadless);
+        }
         
         // Handle mic breaks differently
         if (song.type === 'mic-break') {
@@ -1085,6 +1128,10 @@ class VirtualJukebox {
                 <i class="fas fa-play mr-1"></i>Preview
              </button>` : '';
         
+        const fallbackMessage = isFallback
+            ? `<div class="mt-3 text-center text-sm text-yellow-200">🎉 ${song.addedBy || serviceLabel} while queue is empty</div>`
+            : '';
+
         this.nowPlaying.innerHTML = `
             <div class="bg-gradient-to-br ${borderColor} rounded-lg p-6 mb-4 pulse-glow">
                 <div class="flex items-center space-x-4">
@@ -1104,7 +1151,7 @@ class VirtualJukebox {
                         <p class="text-sm text-purple-200">${song.duration}</p>
                     </div>
                 </div>
-                ${isFallback ? '<div class="mt-3 text-center text-sm text-yellow-200">🎉 Playing wedding favorites while queue is empty</div>' : ''}
+                ${fallbackMessage}
                 ${isSpotify && !song.videoId ? '<div class="mt-3 text-center text-sm text-green-200">🎵 Spotify track - use preview or open in Spotify app</div>' : ''}
             </div>
             ${this.renderNextUpHtml()}

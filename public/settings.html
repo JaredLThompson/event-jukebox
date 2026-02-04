@@ -117,8 +117,11 @@
             </h1>
             <p class="text-xl text-gray-300">Customize your music experience</p>
             <div class="mt-4">
-                <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-full transition-colors">
+                <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-full transition-colors mr-2">
                     <i class="fas fa-arrow-left mr-2"></i>Return to DJ Interface
+                </a>
+                <a href="/logout" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-full transition-colors">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Logout
                 </a>
             </div>
         </header>
@@ -223,6 +226,19 @@
                         </div>
                         <select id="audioOutputDevice" class="w-full md:w-96 bg-gray-700 text-white rounded px-3 py-2">
                             <option value="default">Default (system)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">System Mode</h3>
+                            <p class="text-gray-300 text-sm">Choose how audio plays: headless service or in-browser.</p>
+                        </div>
+                        <select id="systemMode" class="w-full md:w-72 bg-gray-700 text-white rounded px-3 py-2">
+                            <option value="headless">Headless (Audio Service)</option>
+                            <option value="browser">Browser (DJ Page)</option>
                         </select>
                     </div>
                 </div>
@@ -490,6 +506,7 @@
                 this.playlistFiles = [];
                 this.eventSchedule = [];
                 this.activeEventId = null;
+                this.systemMode = 'headless';
                 this.initializeUI();
                 this.bindEvents();
             }
@@ -555,6 +572,7 @@
                 
                 this.updateVisualizerSettingsVisibility();
                 this.loadAudioOutputs();
+                this.loadSystemMode();
                 this.loadEventConfig();
                 this.loadPlaylistFiles();
                 this.loadEventSchedule();
@@ -618,6 +636,14 @@
                 const createPlaylistBtn = document.getElementById('createPlaylistBtn');
                 if (createPlaylistBtn) {
                     createPlaylistBtn.addEventListener('click', () => this.createPlaylistFile());
+                }
+
+                const systemModeSelect = document.getElementById('systemMode');
+                if (systemModeSelect) {
+                    systemModeSelect.addEventListener('change', (event) => {
+                        this.systemMode = event.target.value;
+                        this.saveSystemMode();
+                    });
                 }
 
                 const addEventBtn = document.getElementById('addEventBtn');
@@ -695,6 +721,36 @@
                     fallbackSelect.addEventListener('change', (event) => {
                         this.fallbackPlaylistFile = event.target.value;
                     });
+                }
+            }
+
+            async loadSystemMode() {
+                const select = document.getElementById('systemMode');
+                if (!select) return;
+                try {
+                    const response = await fetch('/api/system-mode');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    this.systemMode = data.mode || 'headless';
+                    select.value = this.systemMode;
+                } catch (error) {
+                    // Ignore
+                }
+            }
+
+            async saveSystemMode() {
+                try {
+                    const response = await fetch('/api/system-mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mode: this.systemMode })
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save system mode');
+                    }
+                    this.showToast('System mode updated', 'success');
+                } catch (error) {
+                    this.showToast('Failed to update system mode', 'error');
                 }
             }
             
@@ -855,7 +911,7 @@
                             <div class="flex flex-wrap gap-2 text-xs text-gray-300">
                                 <label class="flex items-center gap-2">
                                     <input type="checkbox" class="event-inject" data-index="${index}" ${injectChecked}>
-                                    Inject users
+                                    Inject user songs
                                 </label>
                                 <label class="flex items-center gap-2">
                                     <input type="checkbox" class="event-dedupe" data-index="${index}" ${dedupeChecked}>

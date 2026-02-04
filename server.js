@@ -7,6 +7,7 @@ const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const multer = require('multer');
 const https = require('https');
+const crypto = require('crypto');
 const httpClient = require('http');
 const WEDDING_PLAYLIST = require('./wedding-playlist');
 const BRIDE_PLAYLIST = require('./bride-playlist');
@@ -25,6 +26,89 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+const AUTH_COOKIE = 'jukebox_auth';
+const AUTH_PASSCODE = process.env.DJ_PASSCODE || '';
+const authSessions = new Map();
+
+function parseCookies(req) {
+  const header = req.headers?.cookie;
+  if (!header) return {};
+  return header.split(';').reduce((acc, part) => {
+    const [key, ...rest] = part.trim().split('=');
+    if (!key) return acc;
+    acc[key] = decodeURIComponent(rest.join('='));
+    return acc;
+  }, {});
+}
+
+function isAuthEnabled() {
+  return Boolean(AUTH_PASSCODE && AUTH_PASSCODE.length >= 4);
+}
+
+function isAuthenticated(req) {
+  if (!isAuthEnabled()) return true;
+  const cookies = parseCookies(req);
+  const token = cookies[AUTH_COOKIE];
+  if (!token) return false;
+  return authSessions.has(token);
+}
+
+function requireAuthPage(req, res, next) {
+  if (isAuthenticated(req)) return next();
+  const nextUrl = encodeURIComponent(req.originalUrl || '/');
+  return res.redirect(`/login?next=${nextUrl}`);
+}
+
+function requireAuthApi(req, res, next) {
+  if (isAuthenticated(req)) return next();
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
+function isPublicApi(req) {
+  const path = req.path;
+  if (req.method === 'GET') {
+    return [
+      '/api/queue',
+      '/api/queue/status',
+      '/api/playlist/status',
+      '/api/playlist/next-resolved',
+      '/api/search',
+      '/api/spotify/recommendations',
+      '/api/music-services/status',
+      '/api/event-config',
+      '/api/audio/output',
+      '/api/system-mode'
+    ].includes(path);
+  }
+  if (req.method === 'POST') {
+    return [
+      '/api/queue/add'
+    ].includes(path);
+  }
+  return false;
+}
+
+app.use((req, res, next) => {
+  if (!isAuthEnabled()) return next();
+  const protectedPaths = new Set([
+    '/',
+    '/index.html',
+    '/settings',
+    '/settings.html',
+    '/playlist-editor',
+    '/playlist-editor.html'
+  ]);
+  if (protectedPaths.has(req.path)) {
+    return requireAuthPage(req, res, next);
+  }
+  if (req.path.startsWith('/api/') && !isPublicApi(req)) {
+    return requireAuthApi(req, res, next);
+  }
+  return next();
+});
+
 app.use(express.static('public'));
 
 // In-memory storage for demo (replace with database in production)
@@ -58,6 +142,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini-2024-07-18';
 // Audio output settings
 const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
 let audioOutputDevice = null;
+const SYSTEM_CONFIG_FILE = path.join(__dirname, 'data', 'system-config.json');
+let systemMode = 'headless';
 
 // Initialize Spotify service
 const spotifyService = new SpotifyService();
@@ -679,6 +765,32 @@ function saveAudioOutput(device) {
   }
 }
 
+function loadSystemConfig() {
+  if (!fs.existsSync(SYSTEM_CONFIG_FILE)) return { mode: 'headless' };
+  try {
+    const data = fs.readFileSync(SYSTEM_CONFIG_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    if (parsed && (parsed.mode === 'headless' || parsed.mode === 'browser')) {
+      return parsed;
+    }
+  } catch (error) {
+    console.error('Failed to load system config:', error.message);
+  }
+  return { mode: 'headless' };
+}
+
+function saveSystemConfig(mode) {
+  try {
+    fs.mkdirSync(path.dirname(SYSTEM_CONFIG_FILE), { recursive: true });
+    const payload = { mode, savedAt: new Date().toISOString() };
+    fs.writeFileSync(SYSTEM_CONFIG_FILE, JSON.stringify(payload, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Failed to save system config:', error.message);
+    return false;
+  }
+}
+
 function listAudioOutputs() {
   return new Promise((resolve) => {
     execFile('aplay', ['-l'], (error, stdout) => {
@@ -734,6 +846,8 @@ function fetchYouTubeOEmbed(youtubeId) {
 
 // Load persisted audio output selection
 audioOutputDevice = loadAudioOutput();
+const systemConfig = loadSystemConfig();
+systemMode = systemConfig.mode || 'headless';
 const persistedState = loadPlaylistState();
 if (persistedState) {
   if (persistedState.activePlaylist) {
@@ -802,6 +916,35 @@ loadPlayHistory();
 
 app.get('/captive-portal', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'captive-portal.html'));
+});
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/login', (req, res) => {
+  if (!isAuthEnabled()) {
+    return res.redirect('/');
+  }
+  const passcode = (req.body?.passcode || '').trim();
+  if (!passcode || passcode !== AUTH_PASSCODE) {
+    return res.redirect('/login?error=1');
+  }
+  const token = crypto.randomBytes(24).toString('hex');
+  authSessions.set(token, { createdAt: Date.now() });
+  const nextUrl = req.body?.next ? decodeURIComponent(req.body.next) : '/';
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`);
+  res.redirect(nextUrl || '/');
+});
+
+app.get('/logout', (req, res) => {
+  const cookies = parseCookies(req);
+  const token = cookies[AUTH_COOKIE];
+  if (token) {
+    authSessions.delete(token);
+  }
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  res.redirect('/login');
 });
 
 // Captive portal detection - redirect common captive portal requests
@@ -1070,6 +1213,24 @@ app.post('/api/audio/output', (req, res) => {
   saveAudioOutput(audioOutputDevice);
   io.emit('audioOutputCommand', { device: audioOutputDevice || 'default' });
   res.json({ success: true, device: audioOutputDevice || 'default' });
+});
+
+app.get('/api/system-mode', (req, res) => {
+  res.json({ mode: systemMode || 'headless' });
+});
+
+app.post('/api/system-mode', (req, res) => {
+  const { mode } = req.body || {};
+  if (mode !== 'headless' && mode !== 'browser') {
+    return res.status(400).json({ error: 'Invalid mode' });
+  }
+  systemMode = mode;
+  const saved = saveSystemConfig(mode);
+  if (!saved) {
+    return res.status(500).json({ error: 'Failed to save system mode' });
+  }
+  io.emit('systemModeUpdated', { mode });
+  res.json({ success: true, mode });
 });
 
 app.get('/venue', (req, res) => {

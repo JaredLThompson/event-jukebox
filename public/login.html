@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en" data-title-suffix="Login">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Jukebox - Login</title>
+    <link href="css/output.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+</head>
+<body class="min-h-screen text-white bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-4">
+    <div class="w-full max-w-md bg-slate-900/80 border border-slate-700 rounded-2xl p-8 shadow-2xl">
+        <div class="text-center mb-6">
+            <div class="text-4xl mb-3">🔐</div>
+            <h1 class="text-2xl font-bold">DJ Access</h1>
+            <p class="text-sm text-slate-300 mt-2">Enter the passcode to access the DJ tools.</p>
+        </div>
+        <form method="POST" action="/login" class="space-y-4">
+            <input type="hidden" id="nextInput" name="next" value="/">
+            <div>
+                <label class="block text-sm font-medium mb-2" for="passcode">Passcode</label>
+                <input id="passcode" name="passcode" type="password" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" required>
+            </div>
+            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-2 rounded-lg transition">
+                Sign In
+            </button>
+        </form>
+        <p id="errorMessage" class="text-sm text-red-300 mt-4 hidden">Invalid passcode. Please try again.</p>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get('next');
+        const error = params.get('error');
+        const nextInput = document.getElementById('nextInput');
+        if (nextInput && next) {
+            nextInput.value = next;
+        }
+        if (error) {
+            const msg = document.getElementById('errorMessage');
+            if (msg) msg.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
