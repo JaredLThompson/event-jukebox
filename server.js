@@ -48,6 +48,9 @@ const EVENT_CONFIG_OVERRIDE = path.join(__dirname, 'data', 'event-config.json');
 const EVENT_PRESETS_FILE = path.join(__dirname, 'data', 'event-presets.json');
 let eventConfig = null;
 const PLAYLISTS_DIR = path.join(__dirname, 'playlists');
+const TAG_CACHE_FILE = path.join(__dirname, 'data', 'tag-cache.json');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini-2024-07-18';
 
 // Audio output settings
 const AUDIO_OUTPUT_FILE = path.join(__dirname, 'audio-output.json');
@@ -188,6 +191,106 @@ function saveEventPresets(presets) {
     console.error('Failed to save event presets:', error.message);
     return false;
   }
+}
+
+function loadTagCache() {
+  if (!fs.existsSync(TAG_CACHE_FILE)) return {};
+  try {
+    const data = fs.readFileSync(TAG_CACHE_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.error('Failed to load tag cache:', error.message);
+    return {};
+  }
+}
+
+function saveTagCache(cache) {
+  try {
+    fs.mkdirSync(path.dirname(TAG_CACHE_FILE), { recursive: true });
+    fs.writeFileSync(TAG_CACHE_FILE, JSON.stringify(cache, null, 2));
+  } catch (error) {
+    console.error('Failed to save tag cache:', error.message);
+  }
+}
+
+function buildTagSchema() {
+  return {
+    name: 'tag_set',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['tags', 'confidence'],
+      properties: {
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        tags: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['energy', 'pace'],
+          properties: {
+            energy: { type: 'integer', minimum: 1, maximum: 5 },
+            pace: { type: 'string', enum: ['slow', 'medium', 'fast'] },
+            vibe: { type: 'array', items: { type: 'string', enum: ['chill', 'hype', 'romantic', 'emotional'] }, uniqueItems: true },
+            participation: { type: 'array', items: { type: 'string', enum: ['background', 'dance', 'sing-along', 'line-dance'] }, uniqueItems: true },
+            intent: { type: 'array', items: { type: 'string', enum: ['focus', 'celebration', 'transition', 'instructional', 'cool-down'] }, uniqueItems: true },
+            movement: { type: 'array', items: { type: 'string', enum: ['steady-tempo', 'rhythmic', 'explosive', 'flowing', 'marching', 'syncopated'] }, uniqueItems: true },
+            audience: { type: 'array', items: { type: 'string', enum: ['all-ages', 'kids', 'teens', 'adults', 'formal', 'informal'] }, uniqueItems: true },
+            time: { type: 'array', items: { type: 'string', enum: ['dinner', 'late-night'] }, uniqueItems: true },
+            function: { type: 'array', items: { type: 'string', enum: ['anthem', 'classic', 'nostalgia', 'crowd-hype', 'ceremonial'] }, uniqueItems: true },
+            bpm: { type: 'integer', minimum: 40, maximum: 250 },
+            key: { type: 'string' },
+            explicit: { type: 'boolean' }
+          }
+        }
+      }
+    }
+  };
+}
+
+async function tagTrackWithAI(payload) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY not set');
+  }
+
+  const schema = buildTagSchema();
+  const systemPrompt = [
+    'You are a music tagging assistant.',
+    'Return tags that match the provided schema exactly.',
+    'Use only the allowed enum values.',
+    'If uncertain, choose conservative defaults: energy=3, pace=medium, empty arrays.',
+    'Return valid JSON only.'
+  ].join(' ');
+
+  const userPrompt = `Track info:\\n${JSON.stringify(payload, null, 2)}`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_schema', json_schema: schema }
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`OpenAI error: ${response.status} ${errorBody}`);
+  }
+
+  const data = await response.json();
+  const output = data.choices?.[0]?.message?.content;
+  if (!output) {
+    throw new Error('OpenAI response missing content');
+  }
+  return JSON.parse(output);
 }
 
 function listPlaylistFiles() {
@@ -497,6 +600,47 @@ app.post('/api/event-presets', (req, res) => {
 app.get('/api/playlists/files', (req, res) => {
   const files = listPlaylistFiles();
   res.json({ files });
+});
+
+app.post('/api/ai/tag-track', async (req, res) => {
+  try {
+    const { videoId, title, artist, album, duration_sec, source, search, force } = req.body || {};
+    if (!title || !artist) {
+      return res.status(400).json({ error: 'title and artist are required' });
+    }
+
+    const cache = loadTagCache();
+    if (!force && videoId && cache[videoId]) {
+      return res.json({ ...cache[videoId], cached: true });
+    }
+
+    const payload = {
+      title,
+      artist,
+      album: album || null,
+      duration_sec: Number.isFinite(duration_sec) ? duration_sec : null,
+      source: source || { provider: 'youtube', uri: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null },
+      search: search || `${title} ${artist}`.trim()
+    };
+
+    const result = await tagTrackWithAI(payload);
+    const responsePayload = {
+      tags: result.tags,
+      confidence: result.confidence,
+      cached: false,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (videoId) {
+      cache[videoId] = responsePayload;
+      saveTagCache(cache);
+    }
+
+    res.json(responsePayload);
+  } catch (error) {
+    console.error('Tagging error:', error.message);
+    res.status(500).json({ error: 'Failed to tag track' });
+  }
 });
 
 app.get('/api/playlists/file', (req, res) => {

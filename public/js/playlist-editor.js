@@ -4,6 +4,7 @@ const searchResults = document.getElementById('searchResults');
 const playlistFileSelect = document.getElementById('playlistFileSelect');
 const loadPlaylistBtn = document.getElementById('loadPlaylistBtn');
 const savePlaylistBtn = document.getElementById('savePlaylistBtn');
+const tagMissingBtn = document.getElementById('tagMissingBtn');
 const playlistItems = document.getElementById('playlistItems');
 const previewPlayerEl = document.getElementById('previewPlayer');
 const previewTitle = document.getElementById('previewTitle');
@@ -22,6 +23,8 @@ let currentPlaylist = [];
 let previewPlayer = null;
 let previewTimer = null;
 let currentPreviewVideo = null;
+let tagQueue = new Map();
+let tagQueue = new Map();
 
 const showToast = (message, tone = 'info') => {
   const toast = document.createElement('div');
@@ -65,13 +68,24 @@ function renderPlaylist() {
   currentPlaylist.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'bg-slate-800 border border-slate-700 rounded-lg p-3 flex items-start gap-2';
+    const tagSummary = item.tags
+      ? `Energy ${item.tags.energy} · ${item.tags.pace}${item.tags.intent?.length ? ` · ${item.tags.intent.join(', ')}` : ''}`
+      : 'Tags not generated';
+    const tagsJson = item.tags ? JSON.stringify(item.tags, null, 2) : '';
     row.innerHTML = `
       <div class="text-xs text-slate-500 mt-1">${index + 1}</div>
       <div class="flex-1">
         <input data-index="${index}" class="playlist-search w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm" value="${item.search || ''}" />
         <input data-index="${index}" class="playlist-type w-full mt-2 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" value="${item.type || ''}" placeholder="Type (optional)" />
+        <div class="mt-2 text-xs text-slate-400">${tagSummary}</div>
+        <div class="mt-2 hidden" data-tags-panel="${index}">
+          <textarea data-index="${index}" class="playlist-tags w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs h-28" placeholder="Edit tags JSON">${tagsJson}</textarea>
+        </div>
       </div>
-      <button data-remove="${index}" class="text-red-300 hover:text-red-200 px-2">✕</button>
+      <div class="flex flex-col gap-2">
+        <button data-toggle-tags="${index}" class="text-slate-300 hover:text-slate-200 px-2 text-xs">Tags</button>
+        <button data-remove="${index}" class="text-red-300 hover:text-red-200 px-2">✕</button>
+      </div>
     `;
     playlistItems.appendChild(row);
   });
@@ -93,10 +107,23 @@ async function savePlaylist() {
     return;
   }
 
+  const sanitized = currentPlaylist.map(item => ({
+    search: item.search,
+    type: item.type || 'custom',
+    tags: item.tags,
+    confidence: item.confidence,
+    source: item.source,
+    title: item.title,
+    artist: item.artist,
+    album: item.album,
+    duration_sec: item.duration_sec,
+    videoId: item.videoId
+  }));
+
   const response = await fetch('/api/playlists/file', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, playlist: currentPlaylist })
+    body: JSON.stringify({ name, playlist: sanitized })
   });
 
   if (!response.ok) {
@@ -166,13 +193,24 @@ async function searchYouTube() {
     });
   });
 
-  searchResults.querySelectorAll('[data-add]').forEach(btn => {
+searchResults.querySelectorAll('[data-add]').forEach(btn => {
     btn.addEventListener('click', () => {
       const videoId = btn.getAttribute('data-add');
       const song = results.find(item => item.videoId === videoId);
       if (!song) return;
-      currentPlaylist.unshift({ search: formatSearch(song), type: 'custom' });
+      const newItem = {
+        search: formatSearch(song),
+        type: 'custom',
+        source: { provider: 'youtube', uri: `https://www.youtube.com/watch?v=${song.videoId}` },
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        duration_sec: song.duration ? Number(song.duration) : null,
+        videoId: song.videoId
+      };
+      currentPlaylist.unshift(newItem);
       renderPlaylist();
+      queueTagging(newItem, 0);
     });
   });
 }
@@ -187,9 +225,27 @@ playlistItems.addEventListener('input', (event) => {
   if (target.classList.contains('playlist-type')) {
     currentPlaylist[index].type = target.value;
   }
+  if (target.classList.contains('playlist-tags')) {
+    try {
+      const parsed = JSON.parse(target.value);
+      currentPlaylist[index].tags = parsed;
+      renderPlaylist();
+    } catch {
+      // Ignore invalid JSON while typing
+    }
+  }
 });
 
 playlistItems.addEventListener('click', (event) => {
+  const toggle = event.target.closest('button[data-toggle-tags]');
+  if (toggle) {
+    const idx = toggle.getAttribute('data-toggle-tags');
+    const panel = playlistItems.querySelector(`[data-tags-panel="${idx}"]`);
+    if (panel) {
+      panel.classList.toggle('hidden');
+    }
+    return;
+  }
   const button = event.target.closest('button[data-remove]');
   if (!button) return;
   const index = parseInt(button.getAttribute('data-remove'), 10);
@@ -205,6 +261,9 @@ searchInput.addEventListener('keydown', (e) => {
 });
 loadPlaylistBtn.addEventListener('click', loadPlaylist);
 savePlaylistBtn.addEventListener('click', savePlaylist);
+if (tagMissingBtn) {
+  tagMissingBtn.addEventListener('click', tagMissingSongs);
+}
 stopPreviewBtn.addEventListener('click', stopPreview);
 playPreviewBtn.addEventListener('click', () => previewPlayer && previewPlayer.playVideo());
 pausePreviewBtn.addEventListener('click', () => previewPlayer && previewPlayer.pauseVideo());
@@ -252,6 +311,63 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
   duplicatePlaylistName.value = '';
   showToast('Playlist duplicated', 'success');
 });
+
+async function queueTagging(item, index) {
+  if (!item || !item.videoId || tagQueue.has(item.videoId)) return;
+  tagQueue.set(item.videoId, true);
+  try {
+    const response = await fetch('/api/ai/tag-track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videoId: item.videoId,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        duration_sec: item.duration_sec,
+        source: item.source,
+        search: item.search
+      })
+    });
+    if (!response.ok) {
+      throw new Error('Tagging failed');
+    }
+    const data = await response.json();
+    currentPlaylist[index].tags = data.tags;
+    currentPlaylist[index].confidence = data.confidence;
+    renderPlaylist();
+  } catch (error) {
+    showToast('Failed to tag track', 'error');
+  } finally {
+    tagQueue.delete(item.videoId);
+  }
+}
+
+async function tagMissingSongs() {
+  const pending = currentPlaylist
+    .map((item, index) => ({ item, index }))
+    .filter(entry => entry.item && !entry.item.tags && entry.item.videoId);
+
+  if (!pending.length) {
+    showToast('All songs already tagged', 'info');
+    return;
+  }
+
+  if (tagMissingBtn) {
+    tagMissingBtn.disabled = true;
+    tagMissingBtn.textContent = `Tagging ${pending.length}...`;
+  }
+
+  for (const entry of pending) {
+    await queueTagging(entry.item, entry.index);
+  }
+
+  if (tagMissingBtn) {
+    tagMissingBtn.disabled = false;
+    tagMissingBtn.textContent = 'Tag Untagged Songs';
+  }
+  showToast('Tagging complete', 'success');
+}
 
 function formatTime(seconds) {
   const safe = Number.isFinite(seconds) ? Math.floor(seconds) : 0;
