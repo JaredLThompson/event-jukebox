@@ -248,6 +248,62 @@ function buildTagSchema() {
   };
 }
 
+function fallbackTags(payload) {
+  const title = (payload.title || '').toLowerCase();
+  const artist = (payload.artist || '').toLowerCase();
+  const text = `${title} ${artist}`;
+
+  const tags = {
+    energy: 3,
+    pace: 'medium',
+    vibe: [],
+    participation: [],
+    intent: [],
+    movement: [],
+    audience: ['all-ages'],
+    time: [],
+    function: [],
+    explicit: false
+  };
+
+  if (text.includes('shuffle') || text.includes('cha cha') || text.includes('electric slide')) {
+    tags.participation.push('line-dance');
+    tags.intent.push('instructional');
+    tags.vibe.push('hype');
+    tags.energy = 4;
+  }
+
+  if (text.includes('waltz') || text.includes('first dance') || text.includes('at last')) {
+    tags.vibe.push('romantic');
+    tags.intent.push('ceremonial');
+    tags.pace = 'slow';
+    tags.energy = 2;
+  }
+
+  if (text.includes('party') || text.includes('dance') || text.includes('club')) {
+    tags.participation.push('dance');
+    tags.vibe.push('hype');
+    tags.intent.push('celebration');
+    tags.energy = Math.max(tags.energy, 4);
+  }
+
+  if (text.includes('acoustic') || text.includes('piano') || text.includes('strings')) {
+    tags.vibe.push('emotional');
+    tags.pace = 'slow';
+    tags.energy = Math.min(tags.energy, 2);
+  }
+
+  if (!tags.intent.length) {
+    tags.intent.push('celebration');
+  }
+
+  if (!tags.participation.length) {
+    tags.participation.push('background');
+  }
+
+  return { tags, confidence: 0.2, fallback: true };
+}
+
 async function tagTrackWithAI(payload) {
   if (!OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY not set');
@@ -623,11 +679,19 @@ app.post('/api/ai/tag-track', async (req, res) => {
       search: search || `${title} ${artist}`.trim()
     };
 
-    const result = await tagTrackWithAI(payload);
+    let result;
+    try {
+      result = await tagTrackWithAI(payload);
+    } catch (error) {
+      console.error('Tagging error:', error.message);
+      result = fallbackTags(payload);
+    }
+
     const responsePayload = {
       tags: result.tags,
       confidence: result.confidence,
       cached: false,
+      fallback: !!result.fallback,
       updatedAt: new Date().toISOString()
     };
 
