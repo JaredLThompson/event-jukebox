@@ -24,7 +24,6 @@ let previewPlayer = null;
 let previewTimer = null;
 let currentPreviewVideo = null;
 let tagQueue = new Map();
-let tagQueue = new Map();
 
 const showToast = (message, tone = 'info') => {
   const toast = document.createElement('div');
