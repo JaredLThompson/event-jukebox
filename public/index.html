@@ -98,26 +98,43 @@
                     <i class="fas fa-users mr-1"></i>
                     <span id="userCount">0</span> users online
                 </span>
-                <a href="#" onclick="confirmNavigation('/user')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
-                    <i class="fas fa-headphones mr-1"></i>
-                    User Page
-                </a>
-                <a href="#" onclick="confirmNavigation('/settings')" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
-                    <i class="fas fa-cog mr-1"></i>
-                    Settings
-                </a>
-                <a href="/venue" target="_blank" rel="noopener" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-full text-sm transition-colors">
-                    <i class="fas fa-wifi mr-1"></i>
-                    Venue WiFi
-                </a>
-                <a href="/kiosk" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm transition-colors">
-                    <i class="fas fa-tv mr-1"></i>
-                    Kiosk Display
-                </a>
-                <a href="/qr" target="_blank" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-4 py-2 rounded-full text-sm transition-all transform hover:scale-105 shadow-lg">
-                    <i class="fas fa-qrcode mr-1"></i>
-                    QR Codes
-                </a>
+                <span id="modeBadge" class="bg-slate-800 text-slate-200 px-3 py-1 rounded-full text-sm border border-slate-600">
+                    <i class="fas fa-desktop mr-1"></i>
+                    Mode: Browser
+                </span>
+                <div class="relative" id="toolsMenu">
+                    <button id="toolsButton" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-full text-sm transition-colors flex items-center gap-2">
+                        <i class="fas fa-toolbox"></i>
+                        Tools
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </button>
+                    <div id="toolsDropdown" class="hidden absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-50">
+                        <a href="#" onclick="confirmNavigation('/user')" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-headphones w-4 text-blue-300"></i>
+                            User Page
+                        </a>
+                        <a href="#" onclick="confirmNavigation('/playlist-editor')" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-sliders-h w-4 text-amber-300"></i>
+                            Playlist Editor
+                        </a>
+                        <a href="#" onclick="confirmNavigation('/settings')" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-cog w-4 text-gray-300"></i>
+                            Settings
+                        </a>
+                        <a href="/venue" target="_blank" rel="noopener" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-wifi w-4 text-sky-300"></i>
+                            Venue WiFi
+                        </a>
+                        <a href="/kiosk" target="_blank" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-tv w-4 text-indigo-300"></i>
+                            Kiosk Display
+                        </a>
+                        <a href="/qr" target="_blank" class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-slate-800">
+                            <i class="fas fa-qrcode w-4 text-pink-300"></i>
+                            QR Codes
+                        </a>
+                    </div>
+                </div>
             </div>
         </header>
 

@@ -194,6 +194,7 @@ class VirtualJukebox {
         this.queueList = document.getElementById('queueList');
         this.queueCount = document.getElementById('queueCount');
         this.userCount = document.getElementById('userCount');
+        this.modeBadge = document.getElementById('modeBadge');
         this.nextBtn = document.getElementById('nextBtn');
         this.fadeNextBtn = document.getElementById('fadeNextBtn');
         this.toast = document.getElementById('toast');
@@ -565,6 +566,10 @@ class VirtualJukebox {
             } else {
                 this.nextPlaylistSong.textContent = 'Next: Back to start';
             }
+
+            this.nextFallbackSong = data.nextSong || null;
+            this.resolveFallbackNextArt();
+            this.refreshNowPlayingNextUp();
             
             // Update active playlist button styling
             this.updatePlaylistButtonStyles(data.activePlaylist);
@@ -907,11 +912,14 @@ class VirtualJukebox {
     updateNowPlaying(song) {
         if (!song) {
             this.currentSong = null;
+            this.updateModeBadge(false);
+            const nextUpHtml = this.renderNextUpHtml();
             this.nowPlaying.innerHTML = `
                 <div class="bg-gray-800 rounded-lg p-8 mb-4">
                     <i class="fas fa-music text-6xl text-gray-500 mb-4"></i>
                     <p class="text-gray-400">No song currently playing</p>
                 </div>
+                ${nextUpHtml}
             `;
             this.hidePlayerControls();
             return;
@@ -921,6 +929,8 @@ class VirtualJukebox {
         const isNewSong = !this.currentSong || this.currentSong.id !== song.id;
         
         this.currentSong = song;
+        const isHeadless = song.source === 'headless-audio' || song.source === 'fallback';
+        this.updateModeBadge(isHeadless);
         
         // Handle mic breaks differently
         if (song.type === 'mic-break') {
@@ -983,7 +993,130 @@ class VirtualJukebox {
                 ${isFallback ? '<div class="mt-3 text-center text-sm text-yellow-200">🎉 Playing wedding favorites while queue is empty</div>' : ''}
                 ${isSpotify && !song.videoId ? '<div class="mt-3 text-center text-sm text-green-200">🎵 Spotify track - use preview or open in Spotify app</div>' : ''}
             </div>
+            ${this.renderNextUpHtml()}
         `;
+    }
+
+    updateModeBadge(isHeadless) {
+        if (!this.modeBadge) return;
+        if (isHeadless) {
+            this.modeBadge.className = 'bg-amber-600 text-white px-3 py-1 rounded-full text-sm border border-amber-400';
+            this.modeBadge.innerHTML = '<i class="fas fa-server mr-1"></i>Mode: Headless';
+        } else {
+            this.modeBadge.className = 'bg-slate-800 text-slate-200 px-3 py-1 rounded-full text-sm border border-slate-600';
+            this.modeBadge.innerHTML = '<i class="fas fa-desktop mr-1"></i>Mode: Browser';
+        }
+    }
+
+    getNextUpInfo() {
+        if (this.currentQueue && this.currentQueue.length > 0) {
+            const next = this.currentQueue[0];
+            if (next.type === 'mic-break') {
+                return {
+                    title: 'Mic Break',
+                    artist: 'Announcements',
+                    albumArt: '',
+                    label: 'Next in queue'
+                };
+            }
+            return {
+                title: next.title || 'Unknown Song',
+                artist: next.artist || 'Unknown Artist',
+                albumArt: next.albumArt || '',
+                label: 'Next in queue'
+            };
+        }
+
+        if (this.nextFallbackSong && this.nextFallbackSong.search) {
+            const resolved = this.nextFallbackResolved;
+            const details = resolved
+                ? { title: resolved.title, artist: resolved.artist }
+                : this.parsePlaylistSongDetails(this.nextFallbackSong.search);
+            const autoPlayLabel = getEventConfig().playlists?.autoPlayLabel || 'Auto-Play';
+            return {
+                title: details.title,
+                artist: details.artist,
+                albumArt: resolved ? resolved.albumArt : '',
+                label: resolved ? `From ${autoPlayLabel}` : `Finding art • ${autoPlayLabel}`,
+                isLoading: this.isResolvingFallbackArt
+            };
+        }
+
+        return null;
+    }
+
+    renderNextUpHtml() {
+        const nextUp = this.getNextUpInfo();
+        if (!nextUp) return '';
+        const art = nextUp.albumArt
+            ? `<img src="${nextUp.albumArt}" alt="" class="w-12 h-12 rounded-lg shadow">`
+            : nextUp.isLoading
+            ? `<div class="w-12 h-12 rounded-lg bg-slate-700 overflow-hidden relative">
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 animate-pulse"></div>
+               </div>`
+            : `<div class="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300">
+                    <i class="fas fa-forward"></i>
+               </div>`;
+        return `
+            <div class="bg-black bg-opacity-30 backdrop-blur-sm rounded-xl p-4 border border-purple-500/50">
+                <div class="text-xs uppercase tracking-widest text-slate-300 mb-2">Playing Next</div>
+                <div class="flex items-center gap-3">
+                    ${art}
+                    <div class="flex-1">
+                        <div class="font-semibold">${nextUp.title}</div>
+                        <div class="text-sm text-slate-300">${nextUp.artist}</div>
+                        <div class="text-xs text-slate-400">${nextUp.label}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    refreshNowPlayingNextUp() {
+        if (this.currentSong) {
+            if (this.currentSong.type === 'mic-break') {
+                this.updateMicBreakDisplay(this.currentSong);
+            } else {
+                this.updateNowPlayingDisplay(this.currentSong);
+            }
+        } else {
+            this.updateNowPlaying(null);
+        }
+    }
+
+    async resolveFallbackNextArt() {
+        if (!this.nextFallbackSong || !this.nextFallbackSong.search) {
+            this.nextFallbackResolved = null;
+            this.nextFallbackKey = null;
+            this.isResolvingFallbackArt = false;
+            return;
+        }
+        const key = this.nextFallbackSong.search;
+        if (this.nextFallbackKey === key && this.nextFallbackResolved) {
+            return;
+        }
+        this.nextFallbackKey = key;
+        this.isResolvingFallbackArt = true;
+        this.refreshNowPlayingNextUp();
+        try {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(key)}&limit=1`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const result = Array.isArray(data.results) ? data.results[0] : null;
+            if (!result) return;
+            const fallbackDetails = this.parsePlaylistSongDetails(key);
+            this.nextFallbackResolved = {
+                title: result.title || fallbackDetails.title,
+                artist: result.artist || fallbackDetails.artist,
+                albumArt: result.thumbnail || ''
+            };
+            this.refreshNowPlayingNextUp();
+        } catch (error) {
+            console.error('Failed to resolve fallback art:', error);
+        } finally {
+            this.isResolvingFallbackArt = false;
+            this.refreshNowPlayingNextUp();
+        }
     }
 
     updateQueue(queue) {
@@ -994,6 +1127,7 @@ class VirtualJukebox {
         
         if (queue.length === 0) {
             this.queueList.innerHTML = '<p class="text-gray-400 text-center py-8">No songs in queue</p>';
+            this.refreshNowPlayingNextUp();
             return;
         }
 
@@ -1040,6 +1174,7 @@ class VirtualJukebox {
                 </div>
             `;
         }).join('');
+        this.refreshNowPlayingNextUp();
         
         // Reinitialize drag and drop after updating
         this.initializeDragAndDrop();
@@ -2407,6 +2542,7 @@ class VirtualJukebox {
                     <p class="text-orange-200 text-sm">🎙️ Use your microphone for announcements, then click "Next Song" to continue</p>
                 </div>
             </div>
+            ${this.renderNextUpHtml()}
         `;
     }
 
@@ -3447,4 +3583,32 @@ window.confirmNavigation = function(url) {
 // Initialize playlist editor
 document.addEventListener('DOMContentLoaded', () => {
     jukebox.initializePlaylistEditor();
+
+    const toolsMenu = document.getElementById('toolsMenu');
+    const toolsButton = document.getElementById('toolsButton');
+    const toolsDropdown = document.getElementById('toolsDropdown');
+
+    if (toolsMenu && toolsButton && toolsDropdown) {
+        const closeTools = () => {
+            toolsDropdown.classList.add('hidden');
+        };
+
+        toolsButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toolsDropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!toolsMenu.contains(event.target)) {
+                closeTools();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeTools();
+            }
+        });
+    }
 });

@@ -21,7 +21,6 @@ const duplicatePlaylistBtn = document.getElementById('duplicatePlaylistBtn');
 const viewJsonBtn = document.getElementById('viewJsonBtn');
 const jsonModal = document.getElementById('jsonModal');
 const jsonOutput = document.getElementById('jsonOutput');
-const jsonPretty = document.getElementById('jsonPretty');
 const closeJsonBtn = document.getElementById('closeJsonBtn');
 const copyJsonBtn = document.getElementById('copyJsonBtn');
 const unsavedBadge = document.getElementById('unsavedBadge');
@@ -72,29 +71,6 @@ const sortKeysDeep = (value) => {
       }, {});
   }
   return value;
-};
-
-const syntaxHighlight = (jsonText) => {
-  const escaped = jsonText
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return escaped.replace(
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-    (match) => {
-      let cls = 'text-emerald-300';
-      if (/^"/.test(match)) {
-        cls = /:$/.test(match) ? 'text-amber-200' : 'text-emerald-300';
-      } else if (/true|false/.test(match)) {
-        cls = 'text-rose-300';
-      } else if (/null/.test(match)) {
-        cls = 'text-slate-400';
-      } else {
-        cls = 'text-sky-300';
-      }
-      return `<span class="${cls}">${match}</span>`;
-    }
-  );
 };
 
 async function loadPlaylistFiles() {
@@ -389,9 +365,6 @@ if (viewJsonBtn) {
     if (jsonOutput) {
       jsonOutput.value = JSON.stringify(sortKeysDeep(currentPlaylist), null, 2);
     }
-    if (jsonPretty && jsonOutput) {
-      jsonPretty.innerHTML = syntaxHighlight(jsonOutput.value);
-    }
     if (jsonModal) {
       jsonModal.classList.remove('hidden');
       jsonModal.classList.add('flex');
@@ -454,10 +427,36 @@ async function queueTagging(item, index) {
   }
 }
 
+async function resolveVideoForItem(item, index) {
+  if (item.videoId) return true;
+  const query = item.search || `${item.title || ''} ${item.artist || ''}`.trim();
+  if (!query) return false;
+  try {
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=1`);
+    if (!response.ok) return false;
+    const data = await response.json();
+    const result = Array.isArray(data.results) ? data.results[0] : null;
+    if (!result || !result.videoId) return false;
+    currentPlaylist[index].videoId = result.videoId;
+    currentPlaylist[index].title = result.title || item.title;
+    currentPlaylist[index].artist = result.artist || item.artist;
+    currentPlaylist[index].album = result.album || item.album;
+    currentPlaylist[index].duration_sec = result.duration ? Number(result.duration) : item.duration_sec;
+    currentPlaylist[index].source = {
+      provider: 'youtube',
+      uri: `https://www.youtube.com/watch?v=${result.videoId}`
+    };
+    markDirty();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function tagMissingSongs() {
   const pending = currentPlaylist
     .map((item, index) => ({ item, index }))
-    .filter(entry => entry.item && !entry.item.tags && entry.item.videoId);
+    .filter(entry => entry.item && !entry.item.tags);
 
   if (!pending.length) {
     showToast('All songs already tagged', 'info');
@@ -469,7 +468,14 @@ async function tagMissingSongs() {
     tagMissingBtn.textContent = `Tagging ${pending.length}...`;
   }
 
+  let failed = 0;
+
   for (const entry of pending) {
+    const resolved = await resolveVideoForItem(entry.item, entry.index);
+    if (!resolved) {
+      failed += 1;
+      continue;
+    }
     await queueTagging(entry.item, entry.index);
   }
 
@@ -477,7 +483,11 @@ async function tagMissingSongs() {
     tagMissingBtn.disabled = false;
     tagMissingBtn.textContent = 'Tag Untagged Songs';
   }
-  showToast('Tagging complete', 'success');
+  if (failed) {
+    showToast(`Tagging complete (${failed} not found)`, failed === pending.length ? 'error' : 'info');
+  } else {
+    showToast('Tagging complete', 'success');
+  }
 }
 
 function formatTime(seconds) {

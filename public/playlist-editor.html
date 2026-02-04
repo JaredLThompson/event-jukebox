@@ -112,7 +112,7 @@
     </div>
 
     <div id="jsonModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 p-6" style="display: none; position: fixed; inset: 0; padding: 24px; background: rgba(0, 0, 0, 0.7);">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full h-full max-w-none max-h-none flex flex-col gap-3" style="width: min(1200px, 92vw); height: min(85vh, 900px);">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full h-full max-w-none max-h-none flex flex-col gap-3" style="width: min(1200px, 92vw); height: min(85vh, 900px); min-height: 0;">
             <div class="flex items-center justify-between">
                 <h3 class="text-lg font-semibold">Playlist JSON</h3>
                 <div class="flex items-center gap-2">
@@ -120,8 +120,7 @@
                     <button id="closeJsonBtn" class="text-slate-300 hover:text-white">✕</button>
                 </div>
             </div>
-            <textarea id="jsonOutput" class="hidden" readonly></textarea>
-            <pre id="jsonPretty" class="w-full flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-xs font-mono overflow-auto whitespace-pre"></pre>
+            <textarea id="jsonOutput" class="w-full flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-xs font-mono overflow-auto" readonly></textarea>
         </div>
     </div>
 

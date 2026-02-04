@@ -370,6 +370,9 @@
                 this.stats.queueCount = this.currentQueue.length;
                 this.animateCounter(this.queueCountEl, this.stats.queueCount);
                 this.updateUpNextPreview();
+                if (!this.currentQueue.length) {
+                    this.loadPlaylistStatus();
+                }
             }
             
             updateNowPlaying(song) {
@@ -393,6 +396,31 @@
             
             updateUpNextPreview() {
                 if (!this.currentQueue || this.currentQueue.length === 0) {
+                    if (this.nextFallbackSong) {
+                        const details = this.nextFallbackResolved
+                            ? { title: this.nextFallbackResolved.title, artist: this.nextFallbackResolved.artist }
+                            : this.parsePlaylistSongDetails(this.nextFallbackSong.search || '');
+                        const art = this.nextFallbackResolved && this.nextFallbackResolved.albumArt
+                            ? `<img src="${this.nextFallbackResolved.albumArt}" alt="" class="w-10 h-10 rounded-lg shadow">`
+                            : this.isResolvingFallbackArt
+                            ? `<div class="w-10 h-10 rounded-lg bg-slate-700 overflow-hidden relative">
+                                    <div class="absolute inset-0 bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 animate-pulse"></div>
+                               </div>`
+                            : `<div class="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300">
+                                    <i class="fas fa-forward"></i>
+                               </div>`;
+                        this.upNextPreviewEl.innerHTML = `
+                            <div class="flex items-center gap-3 justify-center">
+                                ${art}
+                                <div>
+                                    <div class="font-semibold text-sm">${details.title}</div>
+                                    <div class="text-xs text-gray-300">${details.artist}</div>
+                                    <div class="text-xs text-gray-400 mt-1">${this.isResolvingFallbackArt ? 'Finding art…' : 'Auto-Play'}</div>
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
                     this.upNextPreviewEl.innerHTML = `
                         <p class="text-gray-300">No songs in queue</p>
                     `;
@@ -400,11 +428,83 @@
                 }
                 
                 const nextSong = this.currentQueue[0]; // Show just the next song
+                const albumArt = nextSong.albumArt
+                    ? `<img src="${nextSong.albumArt}" alt="" class="w-10 h-10 rounded-lg shadow">`
+                    : `<div class="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300">
+                            <i class="fas fa-music"></i>
+                       </div>`;
                 this.upNextPreviewEl.innerHTML = `
-                    <div class="font-semibold text-sm">${nextSong.title}</div>
-                    <div class="text-xs text-gray-300">${nextSong.artist}</div>
-                    ${nextSong.requestedBy ? `<div class="text-xs text-gray-400 mt-1">by ${nextSong.requestedBy}</div>` : ''}
+                    <div class="flex items-center gap-3 justify-center">
+                        ${albumArt}
+                        <div>
+                            <div class="font-semibold text-sm">${nextSong.title}</div>
+                            <div class="text-xs text-gray-300">${nextSong.artist}</div>
+                            ${nextSong.requestedBy ? `<div class="text-xs text-gray-400 mt-1">by ${nextSong.requestedBy}</div>` : ''}
+                        </div>
+                    </div>
                 `;
+            }
+
+            async loadPlaylistStatus() {
+                try {
+                    const response = await fetch('/api/playlist/status');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    this.nextFallbackSong = data.nextSong || null;
+                    await this.resolveFallbackArt();
+                    this.updateUpNextPreview();
+                } catch (error) {
+                    console.error('Failed to load playlist status:', error);
+                }
+            }
+
+            parsePlaylistSongDetails(searchString) {
+                if (!searchString) return { title: 'Unknown Song', artist: 'Unknown Artist' };
+                if (searchString.includes(' by ')) {
+                    const [title, artist] = searchString.split(' by ');
+                    return { title: title.trim(), artist: artist.trim() };
+                }
+                const parts = searchString.split(' ');
+                if (parts.length >= 3) {
+                    return { title: parts.slice(0, 2).join(' '), artist: parts.slice(2).join(' ') };
+                }
+                if (parts.length === 2) {
+                    return { title: parts[0], artist: parts[1] };
+                }
+                return { title: searchString, artist: 'Various Artists' };
+            }
+
+            async resolveFallbackArt() {
+                if (!this.nextFallbackSong || !this.nextFallbackSong.search) {
+                    this.nextFallbackResolved = null;
+                    this.nextFallbackKey = null;
+                    this.isResolvingFallbackArt = false;
+                    return;
+                }
+                const key = this.nextFallbackSong.search;
+                if (this.nextFallbackKey === key && this.nextFallbackResolved) {
+                    return;
+                }
+                this.nextFallbackKey = key;
+                this.isResolvingFallbackArt = true;
+                this.updateUpNextPreview();
+                try {
+                    const response = await fetch(`/api/search?q=${encodeURIComponent(key)}&limit=1`);
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    const result = Array.isArray(data.results) ? data.results[0] : null;
+                    if (!result) return;
+                    const fallbackDetails = this.parsePlaylistSongDetails(key);
+                    this.nextFallbackResolved = {
+                        title: result.title || fallbackDetails.title,
+                        artist: result.artist || fallbackDetails.artist,
+                        albumArt: result.thumbnail || ''
+                    };
+                } catch (error) {
+                    console.error('Failed to resolve fallback art:', error);
+                } finally {
+                    this.isResolvingFallbackArt = false;
+                }
             }
             
             updateStats() {
