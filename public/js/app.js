@@ -581,7 +581,9 @@ class VirtualJukebox {
             this.playlistProgress.style.width = `${progressPercent}%`;
             
             // Show next song if available
-            if (data.nextSong) {
+            if (data.eventComplete) {
+                this.nextPlaylistSong.textContent = 'Next: Event complete';
+            } else if (data.nextSong) {
                 const nextSongName = this.parsePlaylistSong(data.nextSong.search);
                 this.nextPlaylistSong.textContent = `Next: ${nextSongName}`;
             } else {

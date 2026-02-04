@@ -652,6 +652,15 @@
                         if (target.classList.contains('event-loop')) {
                             this.eventSchedule[index].loop = target.checked;
                         }
+                        if (target.classList.contains('event-inject')) {
+                            this.eventSchedule[index].allowUserInject = target.checked;
+                        }
+                        if (target.classList.contains('event-dedupe')) {
+                            this.eventSchedule[index].dedupeUserInject = target.checked;
+                        }
+                        if (target.classList.contains('event-inject-fallback')) {
+                            this.eventSchedule[index].injectToFallback = target.checked;
+                        }
                         if (target.classList.contains('event-active')) {
                             this.activeEventId = this.eventSchedule[index].id;
                         }
@@ -813,11 +822,23 @@
                     fallbackSelect.value = this.fallbackPlaylistFile || '';
                 }
                 container.innerHTML = this.eventSchedule.map((event, index) => {
+                    if (typeof event.allowUserInject === 'undefined') {
+                        event.allowUserInject = false;
+                    }
+                    if (typeof event.dedupeUserInject === 'undefined') {
+                        event.dedupeUserInject = true;
+                    }
+                    if (typeof event.injectToFallback === 'undefined') {
+                        event.injectToFallback = true;
+                    }
                     const selectedFile = event.playlistFile ? event.playlistFile.split('/').pop() : '';
                     const loopChecked = event.loop !== false ? 'checked' : '';
                     const activeChecked = this.activeEventId === event.id ? 'checked' : '';
+                    const injectChecked = event.allowUserInject ? 'checked' : '';
+                    const dedupeChecked = event.dedupeUserInject !== false ? 'checked' : '';
+                    const fallbackChecked = event.injectToFallback !== false ? 'checked' : '';
                     return `
-                        <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] gap-3 items-center" data-index="${index}">
+                        <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 grid grid-cols-1 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] gap-3 items-center" data-index="${index}">
                             <label class="flex items-center gap-2 text-xs text-gray-300">
                                 <input type="radio" name="activeEvent" class="event-active" data-index="${index}" ${activeChecked}>
                                 Active
@@ -831,6 +852,20 @@
                                 <input type="checkbox" class="event-loop" data-index="${index}" ${loopChecked}>
                                 Loop
                             </label>
+                            <div class="flex flex-wrap gap-2 text-xs text-gray-300">
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" class="event-inject" data-index="${index}" ${injectChecked}>
+                                    Inject users
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" class="event-dedupe" data-index="${index}" ${dedupeChecked}>
+                                    Dedupe
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="checkbox" class="event-inject-fallback" data-index="${index}" ${fallbackChecked}>
+                                    Also fallback
+                                </label>
+                            </div>
                             <div class="flex gap-2">
                                 <button class="event-move-up bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move up">↑</button>
                                 <button class="event-move-down bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move down">↓</button>
@@ -869,7 +904,10 @@
                     id: this.createEventId(name),
                     name,
                     playlistFile,
-                    loop: true
+                    loop: true,
+                    allowUserInject: false,
+                    dedupeUserInject: true,
+                    injectToFallback: true
                 };
                 this.eventSchedule.push(event);
                 if (!this.activeEventId) {

@@ -442,13 +442,19 @@ function ensureEventsForTheme(themeKey) {
           id: primary?.key || 'primary',
           name: primary?.name || 'Primary Playlist',
           playlistFile: primary?.file || 'wedding-playlist.js',
-          loop: true
+          loop: true,
+          allowUserInject: false,
+          dedupeUserInject: true,
+          injectToFallback: true
         },
         {
           id: secondary?.key || 'secondary',
           name: secondary?.name || 'Secondary Playlist',
           playlistFile: secondary?.file || 'bride-playlist.js',
-          loop: true
+          loop: true,
+          allowUserInject: false,
+          dedupeUserInject: true,
+          injectToFallback: true
         }
       ]
     };
@@ -518,6 +524,33 @@ function loadPlaylistFromFile(filepath) {
   return null;
 }
 
+function savePlaylistFileToDisk(filename, playlist) {
+  if (!filename || !Array.isArray(playlist)) return false;
+  const safeName = sanitizePlaylistFilename(filename);
+  if (!safeName.endsWith('.js') && !safeName.endsWith('.json')) return false;
+  try {
+    fs.mkdirSync(PLAYLISTS_DIR, { recursive: true });
+    const filepath = path.join(PLAYLISTS_DIR, safeName);
+    if (fs.existsSync(filepath)) {
+      const backupsDir = path.join(__dirname, 'data', 'playlist-backups');
+      fs.mkdirSync(backupsDir, { recursive: true });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupName = `${safeName.replace(/\.(js|json)$/, '')}-${timestamp}${path.extname(safeName)}`;
+      fs.copyFileSync(filepath, path.join(backupsDir, backupName));
+    }
+    if (safeName.endsWith('.json')) {
+      fs.writeFileSync(filepath, JSON.stringify(playlist, null, 2));
+    } else {
+      const contents = `module.exports = ${JSON.stringify(playlist, null, 2)};\n`;
+      fs.writeFileSync(filepath, contents);
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to save playlist file:', error.message);
+    return false;
+  }
+}
+
 function resolvePlaylistFileForKey(playlistKey) {
   const fallbackFile = playlistKey === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js';
   const config = getPlaylistConfig(playlistKey);
@@ -576,6 +609,48 @@ function resolveFallbackContext() {
     label: activeEvent?.name || getPlaylistName(),
     event: activeEvent
   };
+}
+
+function buildSearchStringFromSong(song) {
+  if (song.search) return song.search;
+  if (song.title && song.artist) return `${song.title} ${song.artist}`.trim();
+  return song.title || '';
+}
+
+function playlistHasSong(playlist, song, searchString) {
+  if (!Array.isArray(playlist)) return false;
+  const searchLower = (searchString || '').toLowerCase();
+  return playlist.some(item => {
+    if (!item) return false;
+    if (song.videoId && item.videoId && song.videoId === item.videoId) {
+      return true;
+    }
+    if (item.search && searchLower) {
+      return item.search.toLowerCase() === searchLower;
+    }
+    return false;
+  });
+}
+
+function appendSongToPlaylistFile(song, playlistFile, options) {
+  if (!playlistFile) return false;
+  const safeName = sanitizePlaylistFilename(path.basename(playlistFile));
+  const filepath = path.join(PLAYLISTS_DIR, safeName);
+  const playlist = loadPlaylistFromFile(filepath) || [];
+  const searchString = buildSearchStringFromSong(song);
+  if (!searchString) return false;
+  if (options?.dedupe && playlistHasSong(playlist, song, searchString)) {
+    return false;
+  }
+  const entry = {
+    search: searchString,
+    type: options?.type || 'user'
+  };
+  if (song.videoId) {
+    entry.videoId = song.videoId;
+  }
+  playlist.push(entry);
+  return savePlaylistFileToDisk(safeName, playlist);
 }
 
 function loadAudioOutput() {
@@ -804,13 +879,20 @@ app.post('/api/events', (req, res) => {
   if (!themeKey || !Array.isArray(events)) {
     return res.status(400).json({ error: 'themeKey and events are required' });
   }
+  const normalizedEvents = events.map(event => ({
+    ...event,
+    loop: event.loop !== false,
+    allowUserInject: !!event.allowUserInject,
+    dedupeUserInject: event.dedupeUserInject !== false,
+    injectToFallback: event.injectToFallback !== false
+  }));
   const config = getEventConfig();
   config.themeKey = themeKey;
   config.eventsByTheme = config.eventsByTheme || {};
   config.eventsByTheme[themeKey] = {
     activeEventId: requestedActive || (events[0] && events[0].id) || null,
     fallbackPlaylistFile: fallbackPlaylistFile || config.eventsByTheme[themeKey]?.fallbackPlaylistFile || config.playlists?.primary?.file || 'wedding-playlist.js',
-    events: events
+    events: normalizedEvents
   };
   const saved = saveEventConfig(config);
   if (!saved) {
@@ -951,20 +1033,9 @@ app.post('/api/playlists/file', (req, res) => {
   }
 
   try {
-    fs.mkdirSync(PLAYLISTS_DIR, { recursive: true });
-    const filepath = path.join(PLAYLISTS_DIR, safeName);
-    if (fs.existsSync(filepath)) {
-      const backupsDir = path.join(__dirname, 'data', 'playlist-backups');
-      fs.mkdirSync(backupsDir, { recursive: true });
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupName = `${safeName.replace(/\\.(js|json)$/, '')}-${timestamp}${path.extname(safeName)}`;
-      fs.copyFileSync(filepath, path.join(backupsDir, backupName));
-    }
-    if (safeName.endsWith('.json')) {
-      fs.writeFileSync(filepath, JSON.stringify(playlist, null, 2));
-    } else {
-      const contents = `module.exports = ${JSON.stringify(playlist, null, 2)};\n`;
-      fs.writeFileSync(filepath, contents);
+    const saved = savePlaylistFileToDisk(safeName, playlist);
+    if (!saved) {
+      throw new Error('Failed to save playlist file');
     }
     res.json({ success: true, filename: safeName });
   } catch (error) {
@@ -1907,6 +1978,21 @@ app.post('/api/queue/next', async (req, res) => {
     // Normal queue operation
     currentlyPlaying = currentQueue.shift();
     fallbackMode = false;
+
+    const activeEvent = getActiveEvent();
+    const allowInject = !!activeEvent?.allowUserInject;
+    if (allowInject && currentlyPlaying && currentlyPlaying.type !== 'mic-break') {
+      const dedupe = activeEvent?.dedupeUserInject !== false;
+      const injectToFallback = activeEvent?.injectToFallback !== false;
+      const eventFile = getEventPlaylistFile(activeEvent);
+      appendSongToPlaylistFile(currentlyPlaying, eventFile, { dedupe, type: 'user' });
+      if (injectToFallback) {
+        const themeFallback = getThemeFallbackConfig();
+        if (themeFallback.file && themeFallback.file !== eventFile) {
+          appendSongToPlaylistFile(currentlyPlaying, themeFallback.file, { dedupe, type: 'user' });
+        }
+      }
+    }
     
     // Send the new song to play
     io.emit('nowPlaying', currentlyPlaying);
@@ -1980,16 +2066,18 @@ app.get('/api/playlist/status', (req, res) => {
   const playlist = context.playlist;
   const activeEvent = context.event;
   const shouldLoop = context.loop;
-  // Use currentFallbackIndex for the currently playing song, fallbackPlaylistIndex for next song
-  const displayIndex = currentFallbackIndex >= 0 ? currentFallbackIndex : fallbackPlaylistIndex;
-  const nextIndex = shouldLoop
-    ? (displayIndex + 1) % playlist.length
-    : (displayIndex + 1);
+  const hasCurrent = currentFallbackIndex >= 0;
+  const displayIndex = hasCurrent ? currentFallbackIndex : fallbackPlaylistIndex;
+  const nextIndex = hasCurrent
+    ? (shouldLoop ? (currentFallbackIndex + 1) % playlist.length : (currentFallbackIndex + 1))
+    : fallbackPlaylistIndex;
+  const eventComplete = !shouldLoop && playlist.length > 0 && fallbackPlaylistIndex >= playlist.length
+    && (currentFallbackIndex >= playlist.length - 1 || currentFallbackIndex === -1);
   
   res.json({
     currentIndex: displayIndex,
     totalSongs: playlist.length,
-    currentSong: displayIndex < playlist.length ? playlist[displayIndex] : null,
+    currentSong: hasCurrent && displayIndex < playlist.length ? playlist[displayIndex] : null,
     nextSong: nextIndex < playlist.length ? playlist[nextIndex] : null,
     fallbackMode: fallbackMode,
     activePlaylist: activePlaylist,
@@ -1997,7 +2085,8 @@ app.get('/api/playlist/status', (req, res) => {
     activeEventId: activeEvent?.id || null,
     activeEventName: activeEvent?.name || null,
     loop: shouldLoop,
-    fallbackSource: context.source
+    fallbackSource: context.source,
+    eventComplete: eventComplete
   });
 });
 
