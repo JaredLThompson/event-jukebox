@@ -2757,6 +2757,7 @@ Check browser console (F12) for detailed video IDs`);
         this.editPlaylistBtn = document.getElementById('editPlaylistBtn');
         this.playlistEditor = document.getElementById('playlistEditor');
         this.editingPlaylistName = document.getElementById('editingPlaylistName');
+        this.editingPlaylistFile = document.getElementById('editingPlaylistFile');
         this.addSongToPlaylistBtn = document.getElementById('addSongToPlaylistBtn');
         this.addSongForm = document.getElementById('addSongForm');
         this.newSongSearch = document.getElementById('newSongSearch');
@@ -2797,6 +2798,11 @@ Check browser console (F12) for detailed video IDs`);
                 this.editingPlaylistName.textContent = playlistName === 'wedding'
                     ? getPlaylistText('primary', 'shortName', 'Wedding Party')
                     : getPlaylistText('secondary', 'shortName', 'Bride\'s Elegant');
+                if (data.file && this.editingPlaylistFile) {
+                    this.editingPlaylistFile.textContent = `(${data.file})`;
+                } else if (this.editingPlaylistFile) {
+                    this.editingPlaylistFile.textContent = '';
+                }
                 
                 // Hide browser, show editor
                 this.playlistBrowser.classList.add('hidden');

@@ -272,6 +272,12 @@ function loadPlaylistFromFile(filepath) {
   return null;
 }
 
+function resolvePlaylistFileForKey(playlistKey) {
+  const fallbackFile = playlistKey === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js';
+  const config = getPlaylistConfig(playlistKey);
+  return resolvePlaylistFile(config, fallbackFile);
+}
+
 function loadAudioOutput() {
   if (!fs.existsSync(AUDIO_OUTPUT_FILE)) return null;
   try {
@@ -1745,19 +1751,20 @@ app.get('/api/playlist/get/:playlistName', (req, res) => {
   const { playlistName } = req.params;
   
   try {
-    let playlist;
-    if (playlistName === 'wedding') {
-      playlist = WEDDING_PLAYLIST;
-    } else if (playlistName === 'bride') {
-      playlist = BRIDE_PLAYLIST;
-    } else {
+    if (playlistName !== 'wedding' && playlistName !== 'bride') {
       return res.status(400).json({ error: 'Invalid playlist name' });
     }
+
+    const filepath = resolvePlaylistFileForKey(playlistName);
+    const loaded = loadPlaylistFromFile(filepath);
+    const fallback = playlistName === 'bride' ? BRIDE_PLAYLIST : WEDDING_PLAYLIST;
+    const playlist = Array.isArray(loaded) ? loaded : fallback;
     
     res.json({
       success: true,
       playlist: playlist,
-      playlistName: playlistName
+      playlistName: playlistName,
+      file: filepath ? path.basename(filepath) : null
     });
   } catch (error) {
     console.error('Error getting playlist:', error);
@@ -1781,27 +1788,45 @@ app.post('/api/playlist/save/:playlistName', (req, res) => {
       }
     }
     
-    // Update in-memory playlist
+    if (playlistName !== 'wedding' && playlistName !== 'bride') {
+      return res.status(400).json({ error: 'Invalid playlist name' });
+    }
+    
+    const filepath = resolvePlaylistFileForKey(playlistName) || path.join(__dirname, playlistName === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js');
+    const filename = path.basename(filepath);
+    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
+
+    // Backup existing playlist file
+    try {
+      if (fs.existsSync(filepath)) {
+        const backupsDir = path.join(__dirname, 'data', 'playlist-backups');
+        fs.mkdirSync(backupsDir, { recursive: true });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupName = `${filename.replace(/\\.(js|json)$/, '')}-${timestamp}${path.extname(filename)}`;
+        fs.copyFileSync(filepath, path.join(backupsDir, backupName));
+      }
+    } catch (error) {
+      console.error('Failed to backup playlist file:', error.message);
+    }
+    
+    if (filepath.endsWith('.json')) {
+      fs.writeFileSync(filepath, JSON.stringify(playlist, null, 2));
+    } else {
+      const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+
+module.exports = ${constantName};
+`;
+      fs.writeFileSync(filepath, fileContent);
+    }
+
+    // Update in-memory playlist for default fallbacks
     if (playlistName === 'wedding') {
       WEDDING_PLAYLIST.length = 0;
       WEDDING_PLAYLIST.push(...playlist);
     } else if (playlistName === 'bride') {
       BRIDE_PLAYLIST.length = 0;
       BRIDE_PLAYLIST.push(...playlist);
-    } else {
-      return res.status(400).json({ error: 'Invalid playlist name' });
     }
-    
-    // Save to file
-    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
-    const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
-    
-    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
-
-module.exports = ${constantName};
-`;
-    
-    fs.writeFileSync(filename, fileContent);
     
     // Reset playlist index and clear suppressions when playlist changes
     fallbackPlaylistIndex = 0;
@@ -1818,7 +1843,8 @@ module.exports = ${constantName};
     res.json({
       success: true,
       message: `${playlistName} playlist saved successfully`,
-      totalSongs: playlist.length
+      totalSongs: playlist.length,
+      file: filename
     });
     
   } catch (error) {
@@ -1837,15 +1863,13 @@ app.post('/api/playlist/add-song/:playlistName', (req, res) => {
   
   try {
     const newSong = { search, type };
-    let playlist;
-    
-    if (playlistName === 'wedding') {
-      playlist = WEDDING_PLAYLIST;
-    } else if (playlistName === 'bride') {
-      playlist = BRIDE_PLAYLIST;
-    } else {
+    if (playlistName !== 'wedding' && playlistName !== 'bride') {
       return res.status(400).json({ error: 'Invalid playlist name' });
     }
+    const filepath = resolvePlaylistFileForKey(playlistName);
+    const loaded = loadPlaylistFromFile(filepath);
+    const fallback = playlistName === 'bride' ? BRIDE_PLAYLIST : WEDDING_PLAYLIST;
+    const playlist = Array.isArray(loaded) ? loaded : fallback;
     
     // Add song at specified position or end
     if (position !== undefined && position >= 0 && position <= playlist.length) {
@@ -1855,15 +1879,17 @@ app.post('/api/playlist/add-song/:playlistName', (req, res) => {
     }
     
     // Save the updated playlist
-    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
     const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
-    
-    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+    const targetPath = filepath || path.join(__dirname, playlistName === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js');
+    if (targetPath.endsWith('.json')) {
+      fs.writeFileSync(targetPath, JSON.stringify(playlist, null, 2));
+    } else {
+      const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
 
 module.exports = ${constantName};
 `;
-    
-    fs.writeFileSync(filename, fileContent);
+      fs.writeFileSync(targetPath, fileContent);
+    }
     
     // Broadcast update
     io.emit('playlistUpdated', {
@@ -1889,15 +1915,13 @@ app.delete('/api/playlist/remove-song/:playlistName/:index', (req, res) => {
   const songIndex = parseInt(index);
   
   try {
-    let playlist;
-    
-    if (playlistName === 'wedding') {
-      playlist = WEDDING_PLAYLIST;
-    } else if (playlistName === 'bride') {
-      playlist = BRIDE_PLAYLIST;
-    } else {
+    if (playlistName !== 'wedding' && playlistName !== 'bride') {
       return res.status(400).json({ error: 'Invalid playlist name' });
     }
+    const filepath = resolvePlaylistFileForKey(playlistName);
+    const loaded = loadPlaylistFromFile(filepath);
+    const fallback = playlistName === 'bride' ? BRIDE_PLAYLIST : WEDDING_PLAYLIST;
+    const playlist = Array.isArray(loaded) ? loaded : fallback;
     
     if (songIndex < 0 || songIndex >= playlist.length) {
       return res.status(400).json({ error: 'Invalid song index' });
@@ -1907,15 +1931,17 @@ app.delete('/api/playlist/remove-song/:playlistName/:index', (req, res) => {
     const removedSong = playlist.splice(songIndex, 1)[0];
     
     // Save the updated playlist
-    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
     const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
-    
-    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+    const targetPath = filepath || path.join(__dirname, playlistName === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js');
+    if (targetPath.endsWith('.json')) {
+      fs.writeFileSync(targetPath, JSON.stringify(playlist, null, 2));
+    } else {
+      const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
 
 module.exports = ${constantName};
 `;
-    
-    fs.writeFileSync(filename, fileContent);
+      fs.writeFileSync(targetPath, fileContent);
+    }
     
     // Update suppressed songs indices (shift down indices after removed song)
     const newSuppressedSongs = new Set();
@@ -1959,15 +1985,13 @@ app.post('/api/playlist/reorder/:playlistName', (req, res) => {
   }
   
   try {
-    let playlist;
-    
-    if (playlistName === 'wedding') {
-      playlist = WEDDING_PLAYLIST;
-    } else if (playlistName === 'bride') {
-      playlist = BRIDE_PLAYLIST;
-    } else {
+    if (playlistName !== 'wedding' && playlistName !== 'bride') {
       return res.status(400).json({ error: 'Invalid playlist name' });
     }
+    const filepath = resolvePlaylistFileForKey(playlistName);
+    const loaded = loadPlaylistFromFile(filepath);
+    const fallback = playlistName === 'bride' ? BRIDE_PLAYLIST : WEDDING_PLAYLIST;
+    const playlist = Array.isArray(loaded) ? loaded : fallback;
     
     if (fromIndex < 0 || fromIndex >= playlist.length || toIndex < 0 || toIndex >= playlist.length) {
       return res.status(400).json({ error: 'Invalid indices' });
@@ -1978,15 +2002,17 @@ app.post('/api/playlist/reorder/:playlistName', (req, res) => {
     playlist.splice(toIndex, 0, movedSong);
     
     // Save the updated playlist
-    const filename = playlistName === 'wedding' ? 'wedding-playlist.js' : 'bride-playlist.js';
     const constantName = playlistName === 'wedding' ? 'WEDDING_PLAYLIST' : 'BRIDE_PLAYLIST';
-    
-    const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
+    const targetPath = filepath || path.join(__dirname, playlistName === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js');
+    if (targetPath.endsWith('.json')) {
+      fs.writeFileSync(targetPath, JSON.stringify(playlist, null, 2));
+    } else {
+      const fileContent = `const ${constantName} = ${JSON.stringify(playlist, null, 2)};
 
 module.exports = ${constantName};
 `;
-    
-    fs.writeFileSync(filename, fileContent);
+      fs.writeFileSync(targetPath, fileContent);
+    }
     
     // Update suppressed songs indices
     const newSuppressedSongs = new Set();
