@@ -445,6 +445,10 @@ app.get('/settings', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
 
+app.get('/playlist-editor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'playlist-editor.html'));
+});
+
 app.get('/api/event-config', (req, res) => {
   res.json(getEventConfig());
 });
@@ -487,6 +491,56 @@ app.post('/api/event-presets', (req, res) => {
 app.get('/api/playlists/files', (req, res) => {
   const files = listPlaylistFiles();
   res.json({ files });
+});
+
+app.get('/api/playlists/file', (req, res) => {
+  const name = req.query.name;
+  if (!name || typeof name !== 'string') {
+    return res.status(400).json({ error: 'Missing playlist file name' });
+  }
+  const safeName = sanitizePlaylistFilename(name);
+  const filepath = path.join(PLAYLISTS_DIR, safeName);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'Playlist file not found' });
+  }
+  const playlist = loadPlaylistFromFile(filepath);
+  if (!Array.isArray(playlist)) {
+    return res.status(400).json({ error: 'Playlist file is invalid' });
+  }
+  res.json({ playlist, filename: safeName });
+});
+
+app.post('/api/playlists/file', (req, res) => {
+  const { name, playlist } = req.body || {};
+  if (!name || typeof name !== 'string' || !Array.isArray(playlist)) {
+    return res.status(400).json({ error: 'Invalid playlist payload' });
+  }
+  const safeName = sanitizePlaylistFilename(name);
+  if (!safeName.endsWith('.js') && !safeName.endsWith('.json')) {
+    return res.status(400).json({ error: 'Playlist file must be .js or .json' });
+  }
+
+  try {
+    fs.mkdirSync(PLAYLISTS_DIR, { recursive: true });
+    const filepath = path.join(PLAYLISTS_DIR, safeName);
+    if (fs.existsSync(filepath)) {
+      const backupsDir = path.join(__dirname, 'data', 'playlist-backups');
+      fs.mkdirSync(backupsDir, { recursive: true });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupName = `${safeName.replace(/\\.(js|json)$/, '')}-${timestamp}${path.extname(safeName)}`;
+      fs.copyFileSync(filepath, path.join(backupsDir, backupName));
+    }
+    if (safeName.endsWith('.json')) {
+      fs.writeFileSync(filepath, JSON.stringify(playlist, null, 2));
+    } else {
+      const contents = `module.exports = ${JSON.stringify(playlist, null, 2)};\n`;
+      fs.writeFileSync(filepath, contents);
+    }
+    res.json({ success: true, filename: safeName });
+  } catch (error) {
+    console.error('Failed to save playlist file:', error.message);
+    res.status(500).json({ error: 'Failed to save playlist file' });
+  }
 });
 
 app.post('/api/playlists/upload', (req, res) => {
