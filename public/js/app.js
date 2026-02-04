@@ -243,6 +243,10 @@ class VirtualJukebox {
         this.playlistPosition = document.getElementById('playlistPosition');
         this.nextPlaylistSong = document.getElementById('nextPlaylistSong');
         this.playlistProgress = document.getElementById('playlistProgress');
+        this.eventSelect = document.getElementById('eventSelect');
+        this.nextEventBtn = document.getElementById('nextEventBtn');
+        this.eventLoopBadge = document.getElementById('eventLoopBadge');
+        this.playlistBrowserTitle = document.getElementById('playlistBrowserTitle');
         
         // Playlist browser elements
         this.expandPlaylistBtn = document.getElementById('expandPlaylistBtn');
@@ -358,6 +362,19 @@ class VirtualJukebox {
                 this.switchPlaylist(playlist);
             }
         });
+
+        if (this.eventSelect) {
+            this.eventSelect.addEventListener('change', (e) => {
+                const id = e.target.value;
+                if (id) {
+                    this.setActiveEvent(id);
+                }
+            });
+        }
+
+        if (this.nextEventBtn) {
+            this.nextEventBtn.addEventListener('click', () => this.nextEvent());
+        }
         
         // Play history controls
         this.viewHistoryBtn.addEventListener('click', () => this.showPlayHistory());
@@ -521,6 +538,9 @@ class VirtualJukebox {
             
             // Load playlist status
             this.updatePlaylistStatus();
+
+            // Load event schedule for selector
+            this.loadEventSchedule();
             
             // Load history count
             this.loadHistoryCount();
@@ -548,8 +568,9 @@ class VirtualJukebox {
             // Always show playlist status since we have a default playlist
             this.playlistStatus.classList.remove('hidden');
             
+            const displayName = data.activeEventName || data.playlistName;
             // Update playlist name and position
-            this.playlistName.textContent = data.playlistName + ':';
+            this.playlistName.textContent = displayName + ':';
             
             // Show current position (use 1 as minimum for display)
             const displayIndex = Math.max(0, data.currentIndex);
@@ -564,12 +585,15 @@ class VirtualJukebox {
                 const nextSongName = this.parsePlaylistSong(data.nextSong.search);
                 this.nextPlaylistSong.textContent = `Next: ${nextSongName}`;
             } else {
-                this.nextPlaylistSong.textContent = 'Next: Back to start';
+                this.nextPlaylistSong.textContent = data.loop === false ? 'Next: Event complete' : 'Next: Back to start';
             }
 
             this.nextFallbackSong = data.nextSong || null;
             this.resolveFallbackNextArt();
             this.refreshNowPlayingNextUp();
+
+            this.updateEventLoopBadge(data.loop);
+            this.updateEventSelector(data.activeEventId, displayName);
             
             // Update active playlist button styling
             this.updatePlaylistButtonStyles(data.activePlaylist);
@@ -584,9 +608,97 @@ class VirtualJukebox {
         }
     }
 
+    async loadEventSchedule() {
+        if (!this.eventSelect) return;
+        try {
+            const response = await fetch('/api/events');
+            if (!response.ok) return;
+            const data = await response.json();
+            this.eventSchedule = Array.isArray(data.events) ? data.events : [];
+            this.activeEventId = data.activeEventId || (this.eventSchedule[0] && this.eventSchedule[0].id) || '';
+            this.renderEventSelector();
+        } catch (error) {
+            console.error('Failed to load events:', error);
+        }
+    }
+
+    renderEventSelector() {
+        if (!this.eventSelect) return;
+        if (!this.eventSchedule || !this.eventSchedule.length) {
+            this.eventSelect.innerHTML = '<option value="">No events</option>';
+            return;
+        }
+        this.eventSelect.innerHTML = this.eventSchedule
+            .map(event => `<option value="${event.id}">${event.name}</option>`)
+            .join('');
+        if (this.activeEventId) {
+            this.eventSelect.value = this.activeEventId;
+        }
+        this.updateEventLoopBadge();
+    }
+
+    updateEventSelector(activeId, displayName) {
+        if (!this.eventSelect) return;
+        if (activeId && this.eventSchedule && this.eventSchedule.length) {
+            this.activeEventId = activeId;
+            this.eventSelect.value = activeId;
+        }
+        if (this.playlistBrowserTitle && displayName) {
+            this.playlistBrowserTitle.innerHTML = `<i class="fas fa-heart mr-2"></i>${displayName} Browser`;
+        }
+    }
+
+    updateEventLoopBadge(loopValue) {
+        if (!this.eventLoopBadge) return;
+        const shouldLoop = loopValue !== false;
+        if (shouldLoop) {
+            this.eventLoopBadge.textContent = 'Looping';
+            this.eventLoopBadge.className = 'text-xs text-yellow-100 bg-yellow-800/60 px-2 py-1 rounded-full border border-yellow-400/40';
+        } else {
+            this.eventLoopBadge.textContent = 'No Loop';
+            this.eventLoopBadge.className = 'text-xs text-amber-200 bg-amber-800/60 px-2 py-1 rounded-full border border-amber-400/40';
+        }
+    }
+
+    async setActiveEvent(eventId) {
+        try {
+            const response = await fetch('/api/events/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: eventId })
+            });
+            if (!response.ok) {
+                throw new Error('Failed to switch event');
+            }
+            this.activeEventId = eventId;
+            this.loadEventSchedule();
+            setTimeout(() => this.updatePlaylistStatus(), 500);
+        } catch (error) {
+            console.error('Failed to switch event:', error);
+            this.showToast('Failed to switch event', 'error');
+        }
+    }
+
+    async nextEvent() {
+        try {
+            const response = await fetch('/api/events/next', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Failed to advance event');
+            }
+            this.loadEventSchedule();
+            setTimeout(() => this.updatePlaylistStatus(), 500);
+        } catch (error) {
+            console.error('Failed to advance event:', error);
+            this.showToast('Failed to advance event', 'error');
+        }
+    }
+
     updatePlaylistButtonStyles(activePlaylist) {
         const weddingBtn = document.getElementById('switchToWeddingBtn');
         const brideBtn = document.getElementById('switchToBrideBtn');
+        if (!weddingBtn || !brideBtn) {
+            return;
+        }
         
         // Reset styles
         weddingBtn.className = 'playlist-switch-btn bg-yellow-700 hover:bg-yellow-800 px-3 py-1 rounded text-xs transition-colors';

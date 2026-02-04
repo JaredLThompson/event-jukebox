@@ -355,22 +355,25 @@
                     </div>
                 </div>
                 
-                <!-- Playlist Switcher -->
-                <div class="mt-3 flex items-center justify-center space-x-2">
-                    <span class="text-xs text-yellow-200">Switch Playlist:</span>
-                    <button id="switchToWeddingBtn" class="playlist-switch-btn bg-yellow-700 hover:bg-yellow-800 px-3 py-1 rounded text-xs transition-colors" data-playlist="wedding">
-                        🎉 <span data-event-text="playlistPrimaryShort">Party</span>
+                <!-- Event Switcher -->
+                <div class="mt-3 flex flex-col md:flex-row items-center justify-center gap-2">
+                    <span class="text-xs text-yellow-200">Event:</span>
+                    <select id="eventSelect" class="bg-yellow-700 text-yellow-50 px-3 py-1 rounded text-xs">
+                        <option value="">Loading events...</option>
+                    </select>
+                    <button id="nextEventBtn" class="bg-yellow-800 hover:bg-yellow-900 px-3 py-1 rounded text-xs transition-colors">
+                        Next Event
                     </button>
-                    <button id="switchToBrideBtn" class="playlist-switch-btn bg-yellow-700 hover:bg-yellow-800 px-3 py-1 rounded text-xs transition-colors" data-playlist="bride">
-                        ✨ <span data-event-text="playlistSecondaryShort">Elegant</span>
-                    </button>
+                    <span id="eventLoopBadge" class="text-xs text-yellow-100 bg-yellow-800/60 px-2 py-1 rounded-full border border-yellow-400/40">
+                        Looping
+                    </span>
                 </div>
             </div>
             
             <!-- Expandable Playlist Browser -->
             <div id="playlistBrowser" class="mb-4 bg-gradient-to-r from-amber-700 to-orange-700 rounded-lg p-4 hidden">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-lg font-semibold text-amber-100">
+                    <h3 class="text-lg font-semibold text-amber-100" id="playlistBrowserTitle">
                         <i class="fas fa-heart mr-2"></i><span data-event-text="playlistPrimaryLabel">Wedding Playlist</span> Browser
                     </h3>
                     <div class="flex space-x-2">

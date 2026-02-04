@@ -1,6 +1,7 @@
 {
   "appName": "Wedding Jukebox",
   "eventName": "Wedding",
+  "themeKey": "wedding",
   "tagline": "Add songs and keep the party going",
   "theme": {
     "primary": "#6d28d9",
@@ -31,5 +32,61 @@
       "addedBy": "✨ Bride's Collection"
     },
     "autoPlayLabel": "🎵 Wedding DJ Auto-Play"
+  },
+  "eventsByTheme": {
+    "wedding": {
+      "activeEventId": "ceremony",
+      "fallbackPlaylistFile": "playlists/wedding-playlist.js",
+      "events": [
+        {
+          "id": "ceremony",
+          "name": "Ceremony",
+          "playlistFile": "playlists/bride-playlist.js",
+          "loop": false
+        },
+        {
+          "id": "dinner",
+          "name": "Dinner",
+          "playlistFile": "playlists/bride-playlist.js",
+          "loop": true
+        },
+        {
+          "id": "first-dance",
+          "name": "First Dance",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": false
+        },
+        {
+          "id": "parents-dance",
+          "name": "Parents Dance",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": false
+        },
+        {
+          "id": "bouquet-toss",
+          "name": "Bouquet Toss",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": false
+        },
+        {
+          "id": "garter-toss",
+          "name": "Garter Toss",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": false
+        },
+        {
+          "id": "party",
+          "name": "Party",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": true
+        },
+        {
+          "id": "exit",
+          "name": "Celebration Exit",
+          "playlistFile": "playlists/wedding-playlist.js",
+          "loop": false
+        }
+      ]
+    }
   }
 }

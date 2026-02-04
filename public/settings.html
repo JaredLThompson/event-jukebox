@@ -273,6 +273,43 @@
                 </div>
             </section>
 
+            <!-- Event Schedule -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-calendar-alt mr-3 text-amber-200"></i>
+                    Event Schedule
+                </h2>
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">Events & Playlists</h3>
+                            <p class="text-gray-300 text-sm">Define event segments (ceremony, dinner, party) and assign a playlist + loop setting.</p>
+                        </div>
+                        <button id="addEventBtn" class="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                            Add Event
+                        </button>
+                    </div>
+                    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Fallback Playlist</label>
+                            <select id="fallbackPlaylistFile" class="w-full bg-gray-700 text-white rounded px-3 py-2">
+                                <option value="">Select fallback playlist</option>
+                            </select>
+                        </div>
+                        <div class="text-xs text-gray-400 flex items-end">
+                            Used when the queue is empty and an event finishes without looping.
+                        </div>
+                    </div>
+                    <div id="eventList" class="space-y-3 mt-4"></div>
+                    <div class="mt-4 flex flex-col md:flex-row gap-2">
+                        <button id="saveEventScheduleBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                            Save Event Schedule
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Events are saved per theme and persist on the Pi.</p>
+                </div>
+            </section>
+
             <!-- Playlist Files -->
             <section class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -451,6 +488,8 @@
                 this.eventConfig = null;
                 this.customPresets = {};
                 this.playlistFiles = [];
+                this.eventSchedule = [];
+                this.activeEventId = null;
                 this.initializeUI();
                 this.bindEvents();
             }
@@ -518,6 +557,7 @@
                 this.loadAudioOutputs();
                 this.loadEventConfig();
                 this.loadPlaylistFiles();
+                this.loadEventSchedule();
             }
             
             bindEvents() {
@@ -579,6 +619,74 @@
                 if (createPlaylistBtn) {
                     createPlaylistBtn.addEventListener('click', () => this.createPlaylistFile());
                 }
+
+                const addEventBtn = document.getElementById('addEventBtn');
+                if (addEventBtn) {
+                    addEventBtn.addEventListener('click', () => this.addEvent());
+                }
+
+                const saveEventScheduleBtn = document.getElementById('saveEventScheduleBtn');
+                if (saveEventScheduleBtn) {
+                    saveEventScheduleBtn.addEventListener('click', () => this.saveEventSchedule());
+                }
+
+                const eventList = document.getElementById('eventList');
+                if (eventList) {
+                    eventList.addEventListener('input', (event) => {
+                        const target = event.target;
+                        const index = parseInt(target.getAttribute('data-index'), 10);
+                        if (Number.isNaN(index)) return;
+                        if (target.classList.contains('event-name')) {
+                            this.eventSchedule[index].name = target.value;
+                        }
+                    });
+
+                    eventList.addEventListener('change', (event) => {
+                        const target = event.target;
+                        const index = parseInt(target.getAttribute('data-index'), 10);
+                        if (Number.isNaN(index)) return;
+                        if (target.classList.contains('event-playlist')) {
+                            const file = target.value;
+                            this.eventSchedule[index].playlistFile = file ? `playlists/${file}` : '';
+                        }
+                        if (target.classList.contains('event-loop')) {
+                            this.eventSchedule[index].loop = target.checked;
+                        }
+                        if (target.classList.contains('event-active')) {
+                            this.activeEventId = this.eventSchedule[index].id;
+                        }
+                    });
+
+                    eventList.addEventListener('click', (event) => {
+                        const target = event.target;
+                        const index = parseInt(target.getAttribute('data-index'), 10);
+                        if (Number.isNaN(index)) return;
+                        if (target.classList.contains('event-move-up') && index > 0) {
+                            const item = this.eventSchedule.splice(index, 1)[0];
+                            this.eventSchedule.splice(index - 1, 0, item);
+                            this.renderEventSchedule();
+                        }
+                        if (target.classList.contains('event-move-down') && index < this.eventSchedule.length - 1) {
+                            const item = this.eventSchedule.splice(index, 1)[0];
+                            this.eventSchedule.splice(index + 1, 0, item);
+                            this.renderEventSchedule();
+                        }
+                        if (target.classList.contains('event-remove')) {
+                            const removed = this.eventSchedule.splice(index, 1)[0];
+                            if (removed && removed.id === this.activeEventId) {
+                                this.activeEventId = this.eventSchedule[0]?.id || null;
+                            }
+                            this.renderEventSchedule();
+                        }
+                    });
+                }
+
+                const fallbackSelect = document.getElementById('fallbackPlaylistFile');
+                if (fallbackSelect) {
+                    fallbackSelect.addEventListener('change', (event) => {
+                        this.fallbackPlaylistFile = event.target.value;
+                    });
+                }
             }
             
             updateVisualizerSettingsVisibility() {
@@ -632,9 +740,13 @@
                     const response = await fetch('/api/event-config');
                     if (!response.ok) return;
                     this.eventConfig = await response.json();
+                    if (!this.eventConfig.themeKey) {
+                        this.eventConfig.themeKey = 'wedding';
+                    }
                     await this.loadCustomPresets();
                     this.renderPresetCards();
                     this.syncPlaylistFileSelectors();
+                    this.loadEventSchedule();
                 } catch (error) {
                     // Ignore
                 }
@@ -661,6 +773,7 @@
                 primarySelect.innerHTML = `<option value="">Default (wedding-playlist.js)</option>${options}`;
                 secondarySelect.innerHTML = `<option value="">Default (bride-playlist.js)</option>${options}`;
                 this.syncPlaylistFileSelectors();
+                this.renderEventSchedule();
             }
 
             syncPlaylistFileSelectors() {
@@ -670,6 +783,121 @@
                 const normalize = (value) => value ? value.split('/').pop() : '';
                 primarySelect.value = normalize(this.eventConfig.playlists?.primary?.file || '');
                 secondarySelect.value = normalize(this.eventConfig.playlists?.secondary?.file || '');
+            }
+
+            async loadEventSchedule() {
+                try {
+                    const response = await fetch('/api/events');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    this.eventSchedule = Array.isArray(data.events) ? data.events : [];
+                    this.activeEventId = data.activeEventId || (this.eventSchedule[0] && this.eventSchedule[0].id) || null;
+                    this.fallbackPlaylistFile = data.fallbackPlaylistFile ? data.fallbackPlaylistFile.split('/').pop() : '';
+                    this.renderEventSchedule();
+                } catch (error) {
+                    // Ignore
+                }
+            }
+
+            renderEventSchedule() {
+                const container = document.getElementById('eventList');
+                if (!container) return;
+                if (!this.eventSchedule.length) {
+                    container.innerHTML = '<div class="text-sm text-gray-400">No events configured yet.</div>';
+                    return;
+                }
+                const options = this.playlistFiles.map(file => `<option value="${file}">${file}</option>`).join('');
+                const fallbackSelect = document.getElementById('fallbackPlaylistFile');
+                if (fallbackSelect) {
+                    fallbackSelect.innerHTML = `<option value="">Select fallback playlist</option>${options}`;
+                    fallbackSelect.value = this.fallbackPlaylistFile || '';
+                }
+                container.innerHTML = this.eventSchedule.map((event, index) => {
+                    const selectedFile = event.playlistFile ? event.playlistFile.split('/').pop() : '';
+                    const loopChecked = event.loop !== false ? 'checked' : '';
+                    const activeChecked = this.activeEventId === event.id ? 'checked' : '';
+                    return `
+                        <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] gap-3 items-center" data-index="${index}">
+                            <label class="flex items-center gap-2 text-xs text-gray-300">
+                                <input type="radio" name="activeEvent" class="event-active" data-index="${index}" ${activeChecked}>
+                                Active
+                            </label>
+                            <input class="event-name w-full bg-gray-700 text-white rounded px-3 py-2 text-sm" data-index="${index}" value="${event.name || ''}" placeholder="Event name">
+                            <select class="event-playlist w-full bg-gray-700 text-white rounded px-3 py-2 text-sm" data-index="${index}">
+                                <option value="">Select playlist</option>
+                                ${options}
+                            </select>
+                            <label class="flex items-center gap-2 text-xs text-gray-300">
+                                <input type="checkbox" class="event-loop" data-index="${index}" ${loopChecked}>
+                                Loop
+                            </label>
+                            <div class="flex gap-2">
+                                <button class="event-move-up bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move up">↑</button>
+                                <button class="event-move-down bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move down">↓</button>
+                            </div>
+                            <button class="event-remove bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs" data-index="${index}">Remove</button>
+                        </div>
+                    `;
+                }).join('');
+
+                container.querySelectorAll('.event-playlist').forEach((select, index) => {
+                    const event = this.eventSchedule[index];
+                    const selectedFile = event.playlistFile ? event.playlistFile.split('/').pop() : '';
+                    select.value = selectedFile;
+                });
+            }
+
+            createEventId(name) {
+                const base = (name || 'event')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/(^-|-$)/g, '') || 'event';
+                let id = base;
+                let counter = 1;
+                const existing = new Set(this.eventSchedule.map(event => event.id));
+                while (existing.has(id)) {
+                    id = `${base}-${counter}`;
+                    counter += 1;
+                }
+                return id;
+            }
+
+            addEvent() {
+                const name = 'New Event';
+                const playlistFile = this.playlistFiles[0] ? `playlists/${this.playlistFiles[0]}` : '';
+                const event = {
+                    id: this.createEventId(name),
+                    name,
+                    playlistFile,
+                    loop: true
+                };
+                this.eventSchedule.push(event);
+                if (!this.activeEventId) {
+                    this.activeEventId = event.id;
+                }
+                this.renderEventSchedule();
+            }
+
+            async saveEventSchedule() {
+                const themeKey = this.eventConfig?.themeKey || 'wedding';
+                try {
+                    const response = await fetch('/api/events', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            themeKey,
+                            events: this.eventSchedule,
+                            activeEventId: this.activeEventId,
+                            fallbackPlaylistFile: this.fallbackPlaylistFile ? `playlists/${this.fallbackPlaylistFile}` : ''
+                        })
+                    });
+                    if (!response.ok) {
+                        throw new Error('Failed to save events');
+                    }
+                    this.showToast('Event schedule saved', 'success');
+                } catch (error) {
+                    this.showToast('Failed to save event schedule', 'error');
+                }
             }
 
             async uploadPlaylistFile() {
@@ -762,6 +990,7 @@
                         appName: 'Wedding Jukebox',
                         eventName: 'Wedding',
                         tagline: 'Add songs and keep the party going',
+                        themeKey: 'wedding',
                         theme: {
                             primary: '#6d28d9',
                             secondary: '#1f2937',
@@ -791,12 +1020,29 @@
                                 addedBy: "✨ Bride's Collection"
                             },
                             autoPlayLabel: '🎵 Wedding DJ Auto-Play'
+                        },
+                        eventsByTheme: {
+                            wedding: {
+                                activeEventId: 'ceremony',
+                                fallbackPlaylistFile: 'playlists/wedding-playlist.js',
+                                events: [
+                                    { id: 'ceremony', name: 'Ceremony', playlistFile: 'playlists/bride-playlist.js', loop: false },
+                                    { id: 'dinner', name: 'Dinner', playlistFile: 'playlists/bride-playlist.js', loop: true },
+                                    { id: 'first-dance', name: 'First Dance', playlistFile: 'playlists/wedding-playlist.js', loop: false },
+                                    { id: 'parents-dance', name: 'Parents Dance', playlistFile: 'playlists/wedding-playlist.js', loop: false },
+                                    { id: 'bouquet-toss', name: 'Bouquet Toss', playlistFile: 'playlists/wedding-playlist.js', loop: false },
+                                    { id: 'garter-toss', name: 'Garter Toss', playlistFile: 'playlists/wedding-playlist.js', loop: false },
+                                    { id: 'party', name: 'Party', playlistFile: 'playlists/wedding-playlist.js', loop: true },
+                                    { id: 'exit', name: 'Celebration Exit', playlistFile: 'playlists/wedding-playlist.js', loop: false }
+                                ]
+                            }
                         }
                     },
                     dojo: {
                         appName: 'Karate Jukebox',
                         eventName: 'Dojo Night',
                         tagline: 'Focus, energy, and music between rounds',
+                        themeKey: 'dojo',
                         theme: {
                             primary: '#ef4444',
                             secondary: '#111827',
@@ -826,12 +1072,27 @@
                                 addedBy: '🧘 Dojo Crew'
                             },
                             autoPlayLabel: '🥋 Dojo Auto-Play'
+                        },
+                        eventsByTheme: {
+                            dojo: {
+                                activeEventId: 'kids-class',
+                                fallbackPlaylistFile: 'playlists/dojo-playlist.js',
+                                events: [
+                                    { id: 'kids-class', name: 'Kids Class', playlistFile: 'playlists/dojo-playlist.js', loop: true },
+                                    { id: 'teens-class', name: 'Teens Class', playlistFile: 'playlists/dojo-playlist.js', loop: true },
+                                    { id: 'adult-class', name: 'Adult Class', playlistFile: 'playlists/dojo-playlist.js', loop: true },
+                                    { id: 'sparring-kids', name: 'Sparring Kids', playlistFile: 'playlists/dojo-playlist.js', loop: true },
+                                    { id: 'sparring-adults', name: 'Sparring Adults', playlistFile: 'playlists/dojo-playlist.js', loop: true },
+                                    { id: 'recovery', name: 'Recovery', playlistFile: 'playlists/recovery-playlist.js', loop: true }
+                                ]
+                            }
                         }
                     },
                     house: {
                         appName: 'House Party Jukebox',
                         eventName: 'House Party',
                         tagline: 'Queue the bangers and keep it moving',
+                        themeKey: 'house',
                         theme: {
                             primary: '#22c55e',
                             secondary: '#0f172a',
@@ -861,12 +1122,24 @@
                                 addedBy: '🌙 Chill Crew'
                             },
                             autoPlayLabel: '🎉 Party Auto-Play'
+                        },
+                        eventsByTheme: {
+                            house: {
+                                activeEventId: 'warmup',
+                                fallbackPlaylistFile: 'playlists/wedding-playlist.js',
+                                events: [
+                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/wedding-playlist.js', loop: true },
+                                    { id: 'party', name: 'Party Peak', playlistFile: 'playlists/wedding-playlist.js', loop: true },
+                                    { id: 'late-night', name: 'Late Night Chill', playlistFile: 'playlists/bride-playlist.js', loop: true }
+                                ]
+                            }
                         }
                     },
                     studio: {
                         appName: 'Training Studio Jukebox',
                         eventName: 'Training Session',
                         tagline: 'Keep the energy up between sets',
+                        themeKey: 'studio',
                         theme: {
                             primary: '#3b82f6',
                             secondary: '#111827',
@@ -896,6 +1169,17 @@
                                 addedBy: '🧊 Studio Crew'
                             },
                             autoPlayLabel: '🏋️ Studio Auto-Play'
+                        },
+                        eventsByTheme: {
+                            studio: {
+                                activeEventId: 'warmup',
+                                fallbackPlaylistFile: 'playlists/wedding-playlist.js',
+                                events: [
+                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/wedding-playlist.js', loop: true },
+                                    { id: 'workout', name: 'Workout', playlistFile: 'playlists/wedding-playlist.js', loop: true },
+                                    { id: 'cooldown', name: 'Cooldown', playlistFile: 'playlists/bride-playlist.js', loop: true }
+                                ]
+                            }
                         }
                     }
                 };
@@ -956,10 +1240,10 @@
                 });
             }
 
-            async applyPreset() {
-                const select = document.getElementById('eventPreset');
-                if (!select) return;
-                const presetKey = select.value;
+                async applyPreset() {
+                    const select = document.getElementById('eventPreset');
+                    if (!select) return;
+                    const presetKey = select.value;
                 if (!presetKey) {
                     this.showToast('Select a preset to apply', 'error');
                     return;
@@ -968,18 +1252,20 @@
                 const preset = presets[presetKey];
                 if (!preset) return;
 
-                try {
-                    const response = await fetch('/api/event-config', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(preset)
-                    });
+                    try {
+                        const response = await fetch('/api/event-config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(preset)
+                        });
                     if (!response.ok) {
                         throw new Error('Failed to save preset');
                     }
                     if (window.applyEventConfig) {
                         window.applyEventConfig(preset);
                     }
+                    this.eventConfig = preset;
+                    this.loadEventSchedule();
                     this.showToast('Event preset applied', 'success');
                 } catch (error) {
                     this.showToast('Failed to apply preset', 'error');

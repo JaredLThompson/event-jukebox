@@ -35,7 +35,10 @@ let connectedUsers = new Set();
 let fallbackPlaylistIndex = 0;
 let currentFallbackIndex = -1; // Track which song is currently playing from fallback
 let fallbackMode = false;
-let activePlaylist = 'bride'; // 'wedding' or 'bride'
+let activePlaylist = 'bride'; // legacy playlist key
+let activeEventId = null;
+let activeThemeKey = null;
+let activeFallbackSource = 'event';
 let queueParked = false; // New: park user submissions instead of blocking them
 let suppressedSongs = new Set(); // New: track suppressed playlist songs by index
 
@@ -89,8 +92,11 @@ function loadPlaylistState() {
   try {
     const data = fs.readFileSync(PLAYLIST_STATE_FILE, 'utf8');
     const parsed = JSON.parse(data);
-    if (parsed && (parsed.activePlaylist === 'wedding' || parsed.activePlaylist === 'bride')) {
-      return parsed.activePlaylist;
+    if (typeof parsed === 'string') {
+      return { activePlaylist: parsed };
+    }
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
     }
   } catch (error) {
     console.error('Failed to load playlist state:', error.message);
@@ -98,12 +104,15 @@ function loadPlaylistState() {
   return null;
 }
 
-function savePlaylistState(playlist) {
+function savePlaylistState(state) {
   try {
-    fs.writeFileSync(PLAYLIST_STATE_FILE, JSON.stringify({
-      activePlaylist: playlist,
+    const payload = {
+      activePlaylist: state?.activePlaylist || activePlaylist,
+      activeEventId: state?.activeEventId || activeEventId,
+      activeThemeKey: state?.activeThemeKey || activeThemeKey,
       savedAt: new Date().toISOString()
-    }, null, 2));
+    };
+    fs.writeFileSync(PLAYLIST_STATE_FILE, JSON.stringify(payload, null, 2));
   } catch (error) {
     console.error('Failed to save playlist state:', error.message);
   }
@@ -118,14 +127,30 @@ function loadEventConfig() {
 
   try {
     const overrideConfig = readConfig(EVENT_CONFIG_OVERRIDE);
-    if (overrideConfig) return overrideConfig;
+    if (overrideConfig) {
+      if (!overrideConfig.themeKey) overrideConfig.themeKey = 'wedding';
+      const themeKey = overrideConfig.themeKey || 'wedding';
+      overrideConfig.eventsByTheme = overrideConfig.eventsByTheme || {};
+      if (overrideConfig.eventsByTheme[themeKey] && !overrideConfig.eventsByTheme[themeKey].fallbackPlaylistFile) {
+        overrideConfig.eventsByTheme[themeKey].fallbackPlaylistFile = overrideConfig.playlists?.primary?.file || 'wedding-playlist.js';
+      }
+      return overrideConfig;
+    }
   } catch (error) {
     console.error('Failed to load event config override:', error.message);
   }
 
   try {
     const baseConfig = readConfig(EVENT_CONFIG_FILE);
-    if (baseConfig) return baseConfig;
+    if (baseConfig) {
+      if (!baseConfig.themeKey) baseConfig.themeKey = 'wedding';
+      const themeKey = baseConfig.themeKey || 'wedding';
+      baseConfig.eventsByTheme = baseConfig.eventsByTheme || {};
+      if (baseConfig.eventsByTheme[themeKey] && !baseConfig.eventsByTheme[themeKey].fallbackPlaylistFile) {
+        baseConfig.eventsByTheme[themeKey].fallbackPlaylistFile = baseConfig.playlists?.primary?.file || 'wedding-playlist.js';
+      }
+      return baseConfig;
+    }
   } catch (error) {
     console.error('Failed to load event config:', error.message);
   }
@@ -133,6 +158,7 @@ function loadEventConfig() {
   return {
     appName: 'Wedding Jukebox',
     eventName: 'Wedding',
+    themeKey: 'wedding',
     playlists: {
       primary: {
         key: 'wedding',
@@ -397,6 +423,67 @@ function getPlaylistConfig(key) {
   };
 }
 
+function getThemeKey() {
+  const config = getEventConfig();
+  return config.themeKey || activeThemeKey || 'wedding';
+}
+
+function ensureEventsForTheme(themeKey) {
+  const config = getEventConfig();
+  config.eventsByTheme = config.eventsByTheme || {};
+  if (!config.eventsByTheme[themeKey]) {
+    const primary = config.playlists?.primary;
+    const secondary = config.playlists?.secondary;
+    config.eventsByTheme[themeKey] = {
+      activeEventId: primary?.key || 'primary',
+      fallbackPlaylistFile: primary?.file || 'wedding-playlist.js',
+      events: [
+        {
+          id: primary?.key || 'primary',
+          name: primary?.name || 'Primary Playlist',
+          playlistFile: primary?.file || 'wedding-playlist.js',
+          loop: true
+        },
+        {
+          id: secondary?.key || 'secondary',
+          name: secondary?.name || 'Secondary Playlist',
+          playlistFile: secondary?.file || 'bride-playlist.js',
+          loop: true
+        }
+      ]
+    };
+  }
+  return config.eventsByTheme[themeKey];
+}
+
+function getActiveEventSet() {
+  const themeKey = getThemeKey();
+  const set = ensureEventsForTheme(themeKey);
+  const events = Array.isArray(set.events) ? set.events : [];
+  const activeId = activeEventId || set.activeEventId || (events[0] && events[0].id) || null;
+  return { themeKey, events, activeEventId: activeId };
+}
+
+function getActiveEvent() {
+  const { events, activeEventId: currentId } = getActiveEventSet();
+  const active = events.find(event => event.id === currentId) || events[0] || null;
+  return active;
+}
+
+function setActiveEvent(eventId) {
+  const { themeKey, events } = getActiveEventSet();
+  const exists = events.some(event => event.id === eventId);
+  if (!exists) return false;
+  activeEventId = eventId;
+  activeThemeKey = themeKey;
+  activeFallbackSource = 'event';
+  fallbackPlaylistIndex = 0;
+  currentFallbackIndex = -1;
+  suppressedSongs.clear();
+  savePlaylistState({ activePlaylist, activeEventId, activeThemeKey });
+  return true;
+}
+
 function resolvePlaylistFile(playlistConfig, fallbackFile) {
   const file = playlistConfig?.file || fallbackFile;
   if (!file) return null;
@@ -435,6 +522,60 @@ function resolvePlaylistFileForKey(playlistKey) {
   const fallbackFile = playlistKey === 'bride' ? 'bride-playlist.js' : 'wedding-playlist.js';
   const config = getPlaylistConfig(playlistKey);
   return resolvePlaylistFile(config, fallbackFile);
+}
+
+function getThemeFallbackConfig() {
+  const config = getEventConfig();
+  const themeKey = getThemeKey();
+  const themeEvents = ensureEventsForTheme(themeKey);
+  const fallbackFile = themeEvents.fallbackPlaylistFile || config.playlists?.primary?.file || 'wedding-playlist.js';
+  return {
+    themeKey,
+    file: fallbackFile,
+    label: config.playlists?.autoPlayLabel || 'Auto-Play'
+  };
+}
+
+function getEventPlaylistFile(activeEvent) {
+  if (activeEvent?.playlistFile) {
+    return activeEvent.playlistFile;
+  }
+  return getThemeFallbackConfig().file;
+}
+
+function resolveFallbackContext() {
+  const activeEvent = getActiveEvent();
+  const eventLoop = activeEvent?.loop !== false;
+  const eventFile = getEventPlaylistFile(activeEvent);
+  const eventPlaylist = loadPlaylistFromFile(resolvePlaylistFile({ file: eventFile }, eventFile));
+
+  const themeFallback = getThemeFallbackConfig();
+  const fallbackPlaylist = loadPlaylistFromFile(resolvePlaylistFile({ file: themeFallback.file }, themeFallback.file));
+
+  if (!eventLoop && Array.isArray(eventPlaylist) && fallbackPlaylistIndex >= eventPlaylist.length && Array.isArray(fallbackPlaylist) && fallbackPlaylist.length) {
+    if (activeFallbackSource !== 'theme') {
+      activeFallbackSource = 'theme';
+      fallbackPlaylistIndex = 0;
+      currentFallbackIndex = -1;
+      suppressedSongs.clear();
+    }
+    return {
+      source: 'theme',
+      playlist: fallbackPlaylist,
+      loop: true,
+      label: themeFallback.label,
+      event: activeEvent
+    };
+  }
+
+  activeFallbackSource = 'event';
+  return {
+    source: 'event',
+    playlist: Array.isArray(eventPlaylist) ? eventPlaylist : [],
+    loop: eventLoop,
+    label: activeEvent?.name || getPlaylistName(),
+    event: activeEvent
+  };
 }
 
 function loadAudioOutput() {
@@ -518,9 +659,17 @@ function fetchYouTubeOEmbed(youtubeId) {
 
 // Load persisted audio output selection
 audioOutputDevice = loadAudioOutput();
-const persistedPlaylist = loadPlaylistState();
-if (persistedPlaylist) {
-  activePlaylist = persistedPlaylist;
+const persistedState = loadPlaylistState();
+if (persistedState) {
+  if (persistedState.activePlaylist) {
+    activePlaylist = persistedState.activePlaylist;
+  }
+  if (persistedState.activeEventId) {
+    activeEventId = persistedState.activeEventId;
+  }
+  if (persistedState.activeThemeKey) {
+    activeThemeKey = persistedState.activeThemeKey;
+  }
 }
 eventConfig = loadEventConfig();
 
@@ -630,8 +779,75 @@ app.post('/api/event-config', (req, res) => {
   if (!saved) {
     return res.status(500).json({ error: 'Failed to save event config' });
   }
+  if (config.themeKey) {
+    activeThemeKey = config.themeKey;
+    savePlaylistState({ activePlaylist, activeEventId, activeThemeKey });
+  }
   io.emit('eventConfigUpdated', config);
   res.json({ success: true });
+});
+
+app.get('/api/events', (req, res) => {
+  const { themeKey, events, activeEventId: currentId } = getActiveEventSet();
+  const themeFallback = getThemeFallbackConfig();
+  res.json({
+    themeKey,
+    events,
+    activeEventId: currentId,
+    fallbackPlaylistFile: themeFallback.file,
+    fallbackLabel: themeFallback.label
+  });
+});
+
+app.post('/api/events', (req, res) => {
+  const { themeKey, events, activeEventId: requestedActive, fallbackPlaylistFile } = req.body || {};
+  if (!themeKey || !Array.isArray(events)) {
+    return res.status(400).json({ error: 'themeKey and events are required' });
+  }
+  const config = getEventConfig();
+  config.themeKey = themeKey;
+  config.eventsByTheme = config.eventsByTheme || {};
+  config.eventsByTheme[themeKey] = {
+    activeEventId: requestedActive || (events[0] && events[0].id) || null,
+    fallbackPlaylistFile: fallbackPlaylistFile || config.eventsByTheme[themeKey]?.fallbackPlaylistFile || config.playlists?.primary?.file || 'wedding-playlist.js',
+    events: events
+  };
+  const saved = saveEventConfig(config);
+  if (!saved) {
+    return res.status(500).json({ error: 'Failed to save events' });
+  }
+  activeThemeKey = themeKey;
+  activeEventId = config.eventsByTheme[themeKey].activeEventId;
+  savePlaylistState({ activePlaylist, activeEventId, activeThemeKey });
+  io.emit('eventsUpdated', { themeKey, events, activeEventId });
+  res.json({ success: true });
+});
+
+app.post('/api/events/active', (req, res) => {
+  const { id } = req.body || {};
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'Event id is required' });
+  }
+  const ok = setActiveEvent(id);
+  if (!ok) {
+    return res.status(400).json({ error: 'Unknown event id' });
+  }
+  const activeEvent = getActiveEvent();
+  io.emit('eventSwitched', { id, name: activeEvent?.name || id });
+  res.json({ success: true, activeEventId: activeEventId });
+});
+
+app.post('/api/events/next', (req, res) => {
+  const { events, activeEventId: currentId } = getActiveEventSet();
+  if (!events.length) {
+    return res.status(400).json({ error: 'No events configured' });
+  }
+  const currentIndex = events.findIndex(event => event.id === currentId);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % events.length : 0;
+  const nextEvent = events[nextIndex];
+  setActiveEvent(nextEvent.id);
+  io.emit('eventSwitched', { id: nextEvent.id, name: nextEvent.name });
+  res.json({ success: true, activeEventId: nextEvent.id });
 });
 
 app.get('/api/event-presets', (req, res) => {
@@ -1760,27 +1976,43 @@ app.post('/api/playlist/reset', (req, res) => {
 });
 
 app.get('/api/playlist/status', (req, res) => {
-  const playlist = getCurrentPlaylist();
+  const context = resolveFallbackContext();
+  const playlist = context.playlist;
+  const activeEvent = context.event;
+  const shouldLoop = context.loop;
   // Use currentFallbackIndex for the currently playing song, fallbackPlaylistIndex for next song
   const displayIndex = currentFallbackIndex >= 0 ? currentFallbackIndex : fallbackPlaylistIndex;
-  const nextIndex = (displayIndex + 1) % playlist.length;
+  const nextIndex = shouldLoop
+    ? (displayIndex + 1) % playlist.length
+    : (displayIndex + 1);
   
   res.json({
     currentIndex: displayIndex,
     totalSongs: playlist.length,
     currentSong: displayIndex < playlist.length ? playlist[displayIndex] : null,
-    nextSong: playlist[nextIndex] || null,
+    nextSong: nextIndex < playlist.length ? playlist[nextIndex] : null,
     fallbackMode: fallbackMode,
     activePlaylist: activePlaylist,
-    playlistName: getPlaylistName()
+    playlistName: context.source === 'theme' ? context.label : getPlaylistName(),
+    activeEventId: activeEvent?.id || null,
+    activeEventName: activeEvent?.name || null,
+    loop: shouldLoop,
+    fallbackSource: context.source
   });
 });
 
 // New endpoint for getting pre-resolved fallback songs
 app.get('/api/playlist/next-resolved', async (req, res) => {
   try {
-    const playlist = getCurrentPlaylist();
+    const context = resolveFallbackContext();
+    const activeEvent = context.event;
+    const shouldLoop = context.loop;
+    const playlist = context.playlist;
     if (playlist.length === 0) {
+      return res.json({ nextSong: null });
+    }
+
+    if (!shouldLoop && fallbackPlaylistIndex >= playlist.length) {
       return res.json({ nextSong: null });
     }
     
@@ -1791,8 +2023,11 @@ app.get('/api/playlist/next-resolved', async (req, res) => {
     
     // Find next non-suppressed song
     while (attempts < maxAttempts && suppressedSongs.has(nextIndex)) {
-      nextIndex = (nextIndex + 1) % playlist.length;
+      nextIndex = shouldLoop ? (nextIndex + 1) % playlist.length : nextIndex + 1;
       attempts++;
+      if (!shouldLoop && nextIndex >= playlist.length) {
+        return res.json({ nextSong: null });
+      }
     }
     
     if (attempts >= maxAttempts) {
@@ -1814,11 +2049,15 @@ app.get('/api/playlist/next-resolved', async (req, res) => {
         duration: song.duration_text,
         albumArt: song.thumbnail,
         album: song.album,
-        addedBy: getPlaylistConfig(activePlaylist).addedBy,
+        addedBy: context.source === 'theme'
+          ? context.label
+          : (activeEvent?.addedBy || `${activeEvent?.name || getPlaylistName()} Auto-Play`),
         addedAt: new Date().toISOString(),
         source: 'fallback',
         type: playlistItem.type,
-        playlist: activePlaylist,
+        playlist: context.source === 'theme'
+          ? `${context.event?.id || getThemeKey()}-fallback`
+          : (activeEvent?.id || activePlaylist),
         playlistIndex: nextIndex
       };
       
@@ -1870,6 +2109,24 @@ app.post('/api/playlist/jump', (req, res) => {
 app.post('/api/playlist/switch', (req, res) => {
   const { playlist } = req.body;
   
+  const eventSet = getActiveEventSet();
+  const eventMatch = eventSet.events.find(event => event.id === playlist);
+  if (eventMatch) {
+    setActiveEvent(eventMatch.id);
+    const playlistName = getPlaylistName();
+    io.emit('playlistSwitch', {
+      message: `Switched to ${playlistName}`,
+      playlist: eventMatch.id,
+      playlistName: playlistName
+    });
+    return res.json({
+      success: true,
+      message: `Switched to ${playlistName}`,
+      playlist: eventMatch.id,
+      playlistName: playlistName
+    });
+  }
+
   if (playlist !== 'wedding' && playlist !== 'bride') {
     return res.status(400).json({ error: 'Invalid playlist. Must be "wedding" or "bride"' });
   }
@@ -1879,7 +2136,7 @@ app.post('/api/playlist/switch', (req, res) => {
   currentFallbackIndex = -1;
   // Clear suppressed songs when switching playlists
   suppressedSongs.clear();
-  savePlaylistState(activePlaylist);
+  savePlaylistState({ activePlaylist, activeEventId, activeThemeKey });
   
   const playlistName = getPlaylistName();
   
@@ -2388,6 +2645,13 @@ server.listen(PORT, () => {
 
 // Fallback playlist functionality
 function getCurrentPlaylist() {
+  const activeEvent = getActiveEvent();
+  const eventFile = getEventPlaylistFile(activeEvent);
+  const eventPlaylist = loadPlaylistFromFile(resolvePlaylistFile({ file: eventFile }, eventFile));
+  if (Array.isArray(eventPlaylist)) {
+    return eventPlaylist;
+  }
+
   const primaryConfig = getPlaylistConfig('wedding');
   const secondaryConfig = getPlaylistConfig('bride');
   const primaryFile = resolvePlaylistFile(primaryConfig, 'wedding-playlist.js');
@@ -2398,18 +2662,32 @@ function getCurrentPlaylist() {
 }
 
 function getPlaylistName() {
+  const activeEvent = getActiveEvent();
+  if (activeEvent?.name) {
+    return activeEvent.name;
+  }
   return getPlaylistConfig(activePlaylist).name;
 }
 
 async function getNextFallbackSong() {
-  const playlist = getCurrentPlaylist();
+  const context = resolveFallbackContext();
+  const activeEvent = context.event;
+  const shouldLoop = context.loop;
+  const playlist = context.playlist;
   if (playlist.length === 0) return null;
+
+  if (!shouldLoop && fallbackPlaylistIndex >= playlist.length) {
+    return null;
+  }
   
   // Find next non-suppressed song
   let attempts = 0;
   const maxAttempts = playlist.length; // Prevent infinite loop
   
   while (attempts < maxAttempts) {
+    if (!shouldLoop && fallbackPlaylistIndex >= playlist.length) {
+      return null;
+    }
     // Check if current song is suppressed
     if (!suppressedSongs.has(fallbackPlaylistIndex)) {
       // Get the current song from the playlist
@@ -2429,18 +2707,24 @@ async function getNextFallbackSong() {
             duration: song.duration_text,
             albumArt: song.thumbnail,
             album: song.album,
-            addedBy: getPlaylistConfig(activePlaylist).addedBy,
+            addedBy: context.source === 'theme'
+              ? context.label
+              : (activeEvent?.addedBy || `${activeEvent?.name || getPlaylistName()} Auto-Play`),
             addedAt: new Date().toISOString(),
             source: 'fallback',
             type: playlistItem.type,
-            playlist: activePlaylist,
+            playlist: context.source === 'theme'
+              ? `${context.event?.id || getThemeKey()}-fallback`
+              : (activeEvent?.id || activePlaylist),
             playlistIndex: fallbackPlaylistIndex // Track which playlist song this is
           };
           
           // Set current playing index to the song we're about to play
           currentFallbackIndex = fallbackPlaylistIndex;
           // Increment index for next time
-          fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
+          fallbackPlaylistIndex = shouldLoop
+            ? (fallbackPlaylistIndex + 1) % playlist.length
+            : fallbackPlaylistIndex + 1;
           
           return fallbackSong;
         }
@@ -2450,7 +2734,9 @@ async function getNextFallbackSong() {
     }
     
     // Move to next song (either because current was suppressed or failed to load)
-    fallbackPlaylistIndex = (fallbackPlaylistIndex + 1) % playlist.length;
+    fallbackPlaylistIndex = shouldLoop
+      ? (fallbackPlaylistIndex + 1) % playlist.length
+      : fallbackPlaylistIndex + 1;
     attempts++;
   }
   
