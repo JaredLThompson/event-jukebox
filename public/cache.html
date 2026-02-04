@@ -71,6 +71,7 @@
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <button id="rebuildBtn" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-sm font-semibold shadow-md border border-indigo-400/60">Rebuild Metadata</button>
+                        <button id="rebuildThumbsBtn" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded text-sm font-semibold shadow-md border border-sky-400/60">Rebuild Thumbnails</button>
                         <div class="flex items-center gap-2 bg-gray-800/60 border border-gray-700 rounded px-2 py-1">
                             <span class="text-xs text-gray-400">Delete older than</span>
                             <input id="olderThanDays" type="number" min="1" step="1" placeholder="Days"
@@ -99,6 +100,7 @@
         const refreshBtn = document.getElementById('refreshBtn');
         const clearBtn = document.getElementById('clearBtn');
         const rebuildBtn = document.getElementById('rebuildBtn');
+        const rebuildThumbsBtn = document.getElementById('rebuildThumbsBtn');
         const clearOlderBtn = document.getElementById('clearOlderBtn');
         const olderThanDaysInput = document.getElementById('olderThanDays');
         const cacheTotalSize = document.getElementById('cacheTotalSize');
@@ -160,12 +162,18 @@
                 return;
             }
 
-            cacheList.innerHTML = files.map(file => {
-                const title = file.title || file.name;
-                const artist = file.artist ? ` — ${file.artist}` : '';
-                return `
-                    <div class="grid grid-cols-12 items-center py-2 row">
-                        <div class="col-span-6 truncate" title="${title}${artist}">
+                cacheList.innerHTML = files.map(file => {
+                    const title = file.title || file.name;
+                    const artist = file.artist ? ` — ${file.artist}` : '';
+                    const thumb = file.thumbnailUrl
+                        ? `<img src="${file.thumbnailUrl}" alt="" class="w-12 h-12 object-cover rounded-lg border border-gray-700" />`
+                        : `<div class="w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center text-xs text-gray-400">No Art</div>`;
+                    return `
+                    <div class="grid grid-cols-12 items-center py-2 row gap-2">
+                        <div class="col-span-2 flex items-center justify-center">
+                            ${thumb}
+                        </div>
+                        <div class="col-span-4 truncate" title="${title}${artist}">
                             <div class="font-medium">${title}${artist}</div>
                             <div class="text-xs text-gray-400">${file.name}</div>
                         </div>
@@ -212,6 +220,15 @@
             await fetch('/api/cache/rebuild', { method: 'POST' });
             rebuildBtn.disabled = false;
             rebuildBtn.textContent = 'Rebuild Metadata';
+            await loadCache();
+        });
+        rebuildThumbsBtn.addEventListener('click', async () => {
+            if (!confirm('Rebuild thumbnails for cached files? This may take a bit.')) return;
+            rebuildThumbsBtn.disabled = true;
+            rebuildThumbsBtn.textContent = 'Rebuilding...';
+            await fetch('/api/cache/rebuild-thumbnails', { method: 'POST' });
+            rebuildThumbsBtn.disabled = false;
+            rebuildThumbsBtn.textContent = 'Rebuild Thumbnails';
             await loadCache();
         });
         clearOlderBtn.addEventListener('click', async () => {

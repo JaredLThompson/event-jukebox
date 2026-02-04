@@ -857,13 +857,16 @@ app.get('/api/cache', (req, res) => {
         const stats = fs.statSync(fullPath);
         const youtubeId = name.replace('.mp3', '');
         const meta = manifest[youtubeId] || Object.values(manifest).find(entry => entry.filename === name) || null;
+        const thumbnailFile = meta?.thumbnailFile || null;
         return {
           name,
           sizeBytes: stats.size,
           modified: stats.mtime.toISOString(),
           title: meta?.title || null,
           artist: meta?.artist || null,
-          youtubeId: meta?.youtubeId || youtubeId
+          youtubeId: meta?.youtubeId || youtubeId,
+          thumbnailFile: thumbnailFile,
+          thumbnailUrl: thumbnailFile ? `/api/cache/file/${encodeURIComponent(thumbnailFile)}` : null
         };
       })
       .sort((a, b) => b.modified.localeCompare(a.modified));
@@ -993,6 +996,69 @@ app.post('/api/cache/rebuild', async (req, res) => {
     res.json({ success: true, updated });
   } catch (error) {
     res.status(500).json({ error: 'Failed to rebuild cache metadata' });
+  }
+});
+
+app.post('/api/cache/rebuild-thumbnails', async (req, res) => {
+  try {
+    if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+      return res.json({ success: true, rebuilt: 0 });
+    }
+
+    const manifest = loadCacheManifest();
+    const files = fs.readdirSync(AUDIO_CACHE_DIR).filter(name => name.endsWith('.mp3'));
+    let rebuilt = 0;
+
+    for (const name of files) {
+      const youtubeId = name.replace('.mp3', '');
+      const entry = manifest[youtubeId] || Object.values(manifest).find(item => item.filename === name) || null;
+      if (!entry || !entry.albumArt) continue;
+
+      try {
+        const filename = entry.thumbnailFile || `${youtubeId}.jpg`;
+        const filepath = path.join(AUDIO_CACHE_DIR, filename);
+        if (fs.existsSync(filepath)) {
+          continue;
+        }
+
+        const url = entry.albumArt;
+        const client = url.startsWith('https') ? https : httpClient;
+
+        await new Promise((resolve, reject) => {
+          const file = fs.createWriteStream(filepath);
+          client.get(url, (response) => {
+            if (response.statusCode !== 200) {
+              file.close();
+              fs.unlink(filepath, () => {});
+              reject(new Error(`Thumbnail download failed: ${response.statusCode}`));
+              return;
+            }
+            response.pipe(file);
+            file.on('finish', () => {
+              file.close();
+              entry.thumbnailFile = filename;
+              resolve();
+            });
+            file.on('error', (err) => {
+              fs.unlink(filepath, () => {});
+              reject(err);
+            });
+          }).on('error', (err) => {
+            fs.unlink(filepath, () => {});
+            reject(err);
+          });
+        });
+
+        rebuilt += 1;
+      } catch (error) {
+        console.error('Failed to rebuild thumbnail for', name, error.message);
+      }
+    }
+
+    saveCacheManifest(manifest);
+    res.json({ success: true, rebuilt });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to rebuild thumbnails' });
   }
 });
 

@@ -76,10 +76,81 @@ class AudioService {
             filename,
             title: song?.title || null,
             artist: song?.artist || null,
+            albumArt: song?.albumArt || null,
+            thumbnailFile: this.cacheManifest[youtubeId]?.thumbnailFile || null,
             source: song?.source || null,
             cachedAt: new Date().toISOString()
         };
         this.saveCacheManifest();
+    }
+
+    async cacheThumbnail(song, youtubeId) {
+        if (!song?.albumArt || !youtubeId) return null;
+        let url = song.albumArt;
+        if (!url) return null;
+
+        let ext = '.jpg';
+        try {
+            const parsed = new URL(url);
+            const pathname = parsed.pathname || '';
+            const parsedExt = path.extname(pathname);
+            if (parsedExt) {
+                ext = parsedExt;
+            }
+        } catch {
+            // Keep default .jpg
+        }
+
+        const filename = `${youtubeId}${ext}`;
+        const filepath = path.join(this.cacheDir, filename);
+
+        try {
+            if (fs.existsSync(filepath)) {
+                const stats = fs.statSync(filepath);
+                if (stats.size > 0) {
+                    this.cacheManifest[youtubeId] = {
+                        ...this.cacheManifest[youtubeId],
+                        thumbnailFile: filename
+                    };
+                    this.saveCacheManifest();
+                    return filename;
+                }
+            }
+        } catch {
+            // fall through to re-download
+        }
+
+        const client = url.startsWith('https') ? https : http;
+
+        return new Promise((resolve, reject) => {
+            const file = fs.createWriteStream(filepath);
+            client.get(url, (response) => {
+                if (response.statusCode !== 200) {
+                    file.close();
+                    fs.unlink(filepath, () => {});
+                    reject(new Error(`Thumbnail download failed: ${response.statusCode}`));
+                    return;
+                }
+
+                response.pipe(file);
+                file.on('finish', () => {
+                    file.close();
+                    this.cacheManifest[youtubeId] = {
+                        ...this.cacheManifest[youtubeId],
+                        thumbnailFile: filename
+                    };
+                    this.saveCacheManifest();
+                    resolve(filename);
+                });
+                file.on('error', (err) => {
+                    fs.unlink(filepath, () => {});
+                    reject(err);
+                });
+            }).on('error', (err) => {
+                fs.unlink(filepath, () => {});
+                reject(err);
+            });
+        });
     }
     
     /**
@@ -152,6 +223,7 @@ class AudioService {
 
             if (youtubeId) {
                 this.recordCacheEntry(youtubeId, song, audioFile);
+                this.cacheThumbnail(song, youtubeId).catch(() => {});
             }
             
             this.bufferingProgress = `Starting playback of ${song.title}...`;
@@ -892,6 +964,7 @@ class AudioService {
                     await this.extractYouTubeAudio(youtubeId);
                 }
                 this.recordCacheEntry(youtubeId, song, filepath);
+                this.cacheThumbnail(song, youtubeId).catch(() => {});
                 console.log('✅ Pre-buffered:', song.title);
                 this.isBuffering = false;
                 this.bufferingProgress = null;
