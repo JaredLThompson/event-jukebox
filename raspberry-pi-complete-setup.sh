@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 🥧 Complete Raspberry Pi Wedding Jukebox Setup Script
+# 🥧 Complete Raspberry Pi Event Jukebox Setup Script
 # Run this script on a fresh Raspberry Pi OS installation
 
 set -e  # Exit on any error
 
-echo "🥧 Wedding Jukebox - Raspberry Pi Setup"
+echo "🥧 Event Jukebox - Raspberry Pi Setup"
 echo "========================================"
 echo ""
 print_warning "This is the native (non-Docker) setup script."
@@ -85,7 +85,7 @@ sudo systemctl enable --now NetworkManager 2>/dev/null || true
 
 # Allow WiFi scan/connect for the app user via PolicyKit
 print_status "Configuring PolicyKit for WiFi scan/connect..."
-sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+sudo tee /etc/polkit-1/rules.d/49-event-jukebox-wifi.rules > /dev/null <<EOF
 polkit.addRule(function(action, subject) {
   if (subject.user === "$APP_USER") {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
@@ -99,7 +99,7 @@ EOF
 sudo systemctl restart polkit || true
 
 # Create application directory
-APP_DIR="/home/pi/wedding-jukebox"
+APP_DIR="/home/pi/event-jukebox"
 print_status "Setting up application directory: $APP_DIR"
 
 if [ -d "$APP_DIR" ]; then
@@ -108,8 +108,8 @@ if [ -d "$APP_DIR" ]; then
 fi
 
 # Clone repository
-print_status "Cloning Wedding Jukebox repository..."
-git clone https://github.com/JaredLThompson/wedding-jukebox.git "$APP_DIR"
+print_status "Cloning Event Jukebox repository..."
+git clone https://github.com/JaredLThompson/event-jukebox.git "$APP_DIR"
 cd "$APP_DIR"
 
 # Install Node.js dependencies
@@ -125,9 +125,9 @@ pip install -r requirements.txt
 
 # Create systemd service
 print_status "Creating systemd service..."
-sudo tee /etc/systemd/system/wedding-jukebox.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/event-jukebox.service > /dev/null <<EOF
 [Unit]
-Description=Wedding Jukebox
+Description=Event Jukebox
 After=network.target
 
 [Service]
@@ -146,17 +146,17 @@ EOF
 
 # Enable service
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox
+sudo systemctl enable event-jukebox
 
 # Setup headless audio service
 print_status "Setting up headless audio service..."
-if [ -f "$APP_DIR/wedding-jukebox-audio.service" ]; then
-    sudo cp "$APP_DIR/wedding-jukebox-audio.service" /etc/systemd/system/
+if [ -f "$APP_DIR/event-jukebox-audio.service" ]; then
+    sudo cp "$APP_DIR/event-jukebox-audio.service" /etc/systemd/system/
     sudo systemctl daemon-reload
-    sudo systemctl enable wedding-jukebox-audio
+    sudo systemctl enable event-jukebox-audio
     print_success "Audio service configured and enabled"
 else
-    print_warning "wedding-jukebox-audio.service file not found - audio service not configured"
+    print_warning "event-jukebox-audio.service file not found - audio service not configured"
     print_warning "You may need to set up the audio service manually after cloning the latest code"
 fi
 
@@ -191,7 +191,7 @@ fi
 print_status "Creating backup script..."
 tee "$APP_DIR/backup.sh" > /dev/null <<'EOF'
 #!/bin/bash
-BACKUP_DIR="/home/pi/wedding-jukebox/backups"
+BACKUP_DIR="/home/pi/event-jukebox/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 echo "Creating backup: $DATE"
@@ -199,7 +199,7 @@ mkdir -p "$BACKUP_DIR"
 
 # Backup important files
 cp oauth.json "$BACKUP_DIR/oauth_$DATE.json" 2>/dev/null || echo "No oauth.json to backup"
-cp wedding-play-history.json "$BACKUP_DIR/history_$DATE.json" 2>/dev/null || echo "No history to backup"
+cp event-play-history.json "$BACKUP_DIR/history_$DATE.json" 2>/dev/null || echo "No history to backup"
 
 # Keep only last 10 backups
 ls -t "$BACKUP_DIR"/oauth_*.json 2>/dev/null | tail -n +11 | xargs rm -f
@@ -214,16 +214,16 @@ chmod +x "$APP_DIR/backup.sh"
 print_status "Creating update script..."
 tee "$APP_DIR/update.sh" > /dev/null <<'EOF'
 #!/bin/bash
-cd /home/pi/wedding-jukebox
+cd /home/pi/event-jukebox
 
-echo "🔄 Updating Wedding Jukebox..."
+echo "🔄 Updating Event Jukebox..."
 
 # Backup first
 ./backup.sh
 
 # Stop services
-sudo systemctl stop wedding-jukebox
-sudo systemctl stop wedding-jukebox-audio
+sudo systemctl stop event-jukebox
+sudo systemctl stop event-jukebox-audio
 
 # Pull latest changes
 git pull origin main
@@ -234,14 +234,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Update audio service if it exists
-if [ -f "wedding-jukebox-audio.service" ]; then
-    sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+if [ -f "event-jukebox-audio.service" ]; then
+    sudo cp event-jukebox-audio.service /etc/systemd/system/
     sudo systemctl daemon-reload
 fi
 
 # Restart services
-sudo systemctl start wedding-jukebox
-sudo systemctl start wedding-jukebox-audio
+sudo systemctl start event-jukebox
+sudo systemctl start event-jukebox-audio
 
 echo "✅ Update complete!"
 EOF
@@ -253,17 +253,17 @@ print_status "Creating status script..."
 tee "$APP_DIR/status.sh" > /dev/null <<'EOF'
 #!/bin/bash
 
-echo "🥧 Wedding Jukebox Status"
+echo "🥧 Event Jukebox Status"
 echo "========================"
 echo ""
 
 # Service status
 echo "📊 Web Service Status:"
-sudo systemctl status wedding-jukebox --no-pager -l
+sudo systemctl status event-jukebox --no-pager -l
 
 echo ""
 echo "🎵 Audio Service Status:"
-sudo systemctl status wedding-jukebox-audio --no-pager -l
+sudo systemctl status event-jukebox-audio --no-pager -l
 
 echo ""
 echo "🌡️  System Info:"
@@ -277,11 +277,11 @@ hostname -I | awk '{print "IP Address: " $1}'
 
 echo ""
 echo "📝 Web Service Logs (last 10 lines):"
-sudo journalctl -u wedding-jukebox --no-pager -n 10
+sudo journalctl -u event-jukebox --no-pager -n 10
 
 echo ""
 echo "🎵 Audio Service Logs (last 10 lines):"
-sudo journalctl -u wedding-jukebox-audio --no-pager -n 10
+sudo journalctl -u event-jukebox-audio --no-pager -n 10
 EOF
 
 chmod +x "$APP_DIR/status.sh"
@@ -297,8 +297,8 @@ echo "   source venv/bin/activate"
 echo "   python setup_auth.py"
 echo ""
 echo "2. 🚀 Start the services:"
-echo "   sudo systemctl start wedding-jukebox"
-echo "   sudo systemctl start wedding-jukebox-audio"
+echo "   sudo systemctl start event-jukebox"
+echo "   sudo systemctl start event-jukebox-audio"
 echo ""
 echo "3. 🌐 Access the jukebox:"
 echo "   Find your Pi's IP: hostname -I"
@@ -309,10 +309,10 @@ echo "==================="
 echo "Status:    $APP_DIR/status.sh"
 echo "Update:    $APP_DIR/update.sh"
 echo "Backup:    $APP_DIR/backup.sh"
-echo "Logs:      sudo journalctl -u wedding-jukebox -f"
-echo "Audio Logs: sudo journalctl -u wedding-jukebox-audio -f"
-echo "Restart:   sudo systemctl restart wedding-jukebox"
-echo "           sudo systemctl restart wedding-jukebox-audio"
+echo "Logs:      sudo journalctl -u event-jukebox -f"
+echo "Audio Logs: sudo journalctl -u event-jukebox-audio -f"
+echo "Restart:   sudo systemctl restart event-jukebox"
+echo "           sudo systemctl restart event-jukebox-audio"
 echo ""
 
 # Get IP address

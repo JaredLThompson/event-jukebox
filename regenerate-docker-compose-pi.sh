@@ -20,17 +20,17 @@ WIFI_API_URL_VALUE="http://host.docker.internal:8787"
 
 cat > docker-compose.pi.yml <<'COMPOSE'
 services:
-  wedding-jukebox:
-    image: ghcr.io/jaredlthompson/wedding-jukebox:latest
-    container_name: wedding-jukebox-pi
+  event-jukebox:
+    image: ghcr.io/jaredlthompson/event-jukebox:latest
+    container_name: event-jukebox-pi
     ports:
       - "3000:3000"
     volumes:
       # Persist important data
-      - jukebox-data:/app/data
+      - event-jukebox-data:/app/data
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
-      - ./wedding-play-history.json:/app/wedding-play-history.json
+      - ./event-play-history.json:/app/event-play-history.json
       # Custom playlists
       - ./playlists:/app/playlists
       # Host audio cache (headless playback)
@@ -48,7 +48,7 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
-      - jukebox-network
+      - event-jukebox-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/playlist/status"]
       interval: 30s
@@ -64,11 +64,11 @@ services:
           memory: 256M
 
 volumes:
-  jukebox-data:
+  event-jukebox-data:
     driver: local
 
 networks:
-  jukebox-network:
+  event-jukebox-network:
     driver: bridge
 COMPOSE
 

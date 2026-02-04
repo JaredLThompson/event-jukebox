@@ -1,4 +1,4 @@
-# Wedding Jukebox
+# Event Jukebox
 
 A web-based wedding jukebox with YouTube Music + Spotify search, real-time collaboration, and a headless audio service for reliable playback on a Raspberry Pi.
 
@@ -13,7 +13,7 @@ A web-based wedding jukebox with YouTube Music + Spotify search, real-time colla
 
 ## Architecture (Current)
 - **Web app**: Runs in Docker (or locally) and serves the DJ + guest UI.
-- **Headless audio service**: Runs on the Pi as `wedding-jukebox-audio` (systemd). It downloads and plays audio via ALSA.
+- **Headless audio service**: Runs on the Pi as `event-jukebox-audio` (systemd). It downloads and plays audio via ALSA.
 - **Settings**: Audio output device and volume are controlled from the UI and sent to the audio service.
 
 ## Quick Start
@@ -30,7 +30,7 @@ A web-based wedding jukebox with YouTube Music + Spotify search, real-time colla
 ### Raspberry Pi (Recommended)
 ```bash
 # Docker-based Pi setup
-curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/event-jukebox/main/raspberry-pi-docker-setup.sh | bash
 
 # Dual WiFi setup (hotspot + internet)
 ./setup-dual-wifi.sh
@@ -38,12 +38,12 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 
 ### Headless Audio Service (Pi)
 ```bash
-cd /home/pi/wedding-jukebox
+cd /home/pi/event-jukebox
 sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
-sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+sudo cp event-jukebox-audio.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox-audio
-sudo systemctl start wedding-jukebox-audio
+sudo systemctl enable event-jukebox-audio
+sudo systemctl start event-jukebox-audio
 ```
 
 ### Local Development
@@ -82,10 +82,10 @@ For Pi deployments, you can override it at `/app/data/event-config.json` (inside
 ./restart-services.sh
 
 # Check audio logs
-sudo journalctl -u wedding-jukebox-audio -f
+sudo journalctl -u event-jukebox-audio -f
 
 # Check Docker service
-sudo systemctl status wedding-jukebox-docker
+sudo systemctl status event-jukebox-docker
 ```
 
 ## Configuration

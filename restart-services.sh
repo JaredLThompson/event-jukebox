@@ -7,14 +7,14 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 SERVICES=(
-  # "wedding-jukebox" # Local (non-Docker) service - keep commented to avoid port 3000 conflicts
-  "wedding-jukebox-docker"
-  "wedding-jukebox-audio"
-  "wedding-jukebox-wifi-api"
-  "wedding-jukebox-hotspot"
+  # "event-jukebox" # Local (non-Docker) service - keep commented to avoid port 3000 conflicts
+  "event-jukebox-docker"
+  "event-jukebox-audio"
+  "event-jukebox-wifi-api"
+  "event-jukebox-hotspot"
 )
 
-echo "Restarting Wedding Jukebox services..."
+echo "Restarting Event Jukebox services..."
 
 for service in "${SERVICES[@]}"; do
   if systemctl list-unit-files --type=service --no-legend | awk '{print $1}' | grep -q "^${service}\.service$"; then

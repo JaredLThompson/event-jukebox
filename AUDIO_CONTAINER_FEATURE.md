@@ -1,7 +1,7 @@
 # Headless Audio Service (Current Implementation)
 
 ## Overview
-The project now uses a **headless audio service** on the Raspberry Pi to handle real playback. This service runs outside Docker as a systemd unit (`wedding-jukebox-audio`) and plays through ALSA using `mpg123` and `yt-dlp`.
+The project now uses a **headless audio service** on the Raspberry Pi to handle real playback. This service runs outside Docker as a systemd unit (`event-jukebox-audio`) and plays through ALSA using `mpg123` and `yt-dlp`.
 
 ## Current Architecture
 - **Web app**: Runs in Docker (or locally) and serves the UI + APIs.

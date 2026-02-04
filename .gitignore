@@ -14,7 +14,7 @@ github-token*
 .docker/config.json
 
 # Wedding-specific data
-wedding-play-history.json
+event-play-history.json
 wedding-playlist-*.txt
 wedding-memory-playlist-*.js
 wedding-spotify-list-*.txt

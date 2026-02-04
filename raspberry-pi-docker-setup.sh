@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 🥧 Raspberry Pi Wedding Jukebox - Docker Setup
+# 🥧 Raspberry Pi Event Jukebox - Docker Setup
 # This script installs Docker and runs the jukebox from the container registry
 
 set -e
 
-echo "🥧 Wedding Jukebox - Docker Pi Setup"
+echo "🥧 Event Jukebox - Docker Pi Setup"
 echo "===================================="
 echo ""
 
@@ -87,7 +87,7 @@ else
 fi
 
 # Create application directory
-APP_DIR="/home/pi/wedding-jukebox"
+APP_DIR="/home/pi/event-jukebox"
 print_status "Setting up application directory: $APP_DIR"
 
 if [ -d "$APP_DIR" ]; then
@@ -96,8 +96,8 @@ if [ -d "$APP_DIR" ]; then
 fi
 
 # Clone repository (for config files)
-print_status "Cloning Wedding Jukebox repository..."
-git clone https://github.com/JaredLThompson/wedding-jukebox.git "$APP_DIR"
+print_status "Cloning Event Jukebox repository..."
+git clone https://github.com/JaredLThompson/event-jukebox.git "$APP_DIR"
 cd "$APP_DIR"
 
 # Determine the app user for services and permissions
@@ -113,7 +113,7 @@ sudo systemctl enable --now NetworkManager 2>/dev/null || true
 
 # Allow WiFi scan/connect for the app user via PolicyKit
 print_status "Configuring PolicyKit for WiFi scan/connect..."
-sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+sudo tee /etc/polkit-1/rules.d/49-event-jukebox-wifi.rules > /dev/null <<EOF
 polkit.addRule(function(action, subject) {
   if (subject.user === "$APP_USER") {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
@@ -134,17 +134,17 @@ print_status "Using host.docker.internal for WiFi API access"
 print_status "Creating Pi-optimized docker-compose.yml..."
 tee docker-compose.pi.yml > /dev/null <<EOF
 services:
-  wedding-jukebox:
-    image: ghcr.io/jaredlthompson/wedding-jukebox:latest
-    container_name: wedding-jukebox-pi
+  event-jukebox:
+    image: ghcr.io/jaredlthompson/event-jukebox:latest
+    container_name: event-jukebox-pi
     ports:
       - "3000:3000"
     volumes:
       # Persist important data
-      - jukebox-data:/app/data
+      - event-jukebox-data:/app/data
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
-      - ./wedding-play-history.json:/app/wedding-play-history.json
+      - ./event-play-history.json:/app/event-play-history.json
       # Host audio cache (headless playback)
       - ./audio-cache:/app/audio-cache
       # Audio device access
@@ -160,7 +160,7 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
-      - jukebox-network
+      - event-jukebox-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/playlist/status"]
       interval: 30s
@@ -176,11 +176,11 @@ services:
           memory: 256M
 
 volumes:
-  jukebox-data:
+  event-jukebox-data:
     driver: local
 
 networks:
-  jukebox-network:
+  event-jukebox-network:
     driver: bridge
 EOF
 
@@ -203,9 +203,9 @@ fi
 
 print_status "Using Docker Compose command: $COMPOSE_CMD"
 
-sudo tee /etc/systemd/system/wedding-jukebox-docker.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/event-jukebox-docker.service > /dev/null <<EOF
 [Unit]
-Description=Wedding Jukebox Docker
+Description=Event Jukebox Docker
 Requires=docker.service
 After=docker.service
 
@@ -223,8 +223,8 @@ EOF
 
 # Enable service
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox-docker
-sudo systemctl start wedding-jukebox-docker
+sudo systemctl enable event-jukebox-docker
+sudo systemctl start event-jukebox-docker
 
 # Create data directories and files
 mkdir -p "$APP_DIR/data"
@@ -232,9 +232,9 @@ mkdir -p "$APP_DIR/backups"
 mkdir -p "$APP_DIR/audio-cache"
 
 # Create required files if they don't exist (prevents Docker from creating them as directories)
-touch "$APP_DIR/oauth.json" "$APP_DIR/wedding-play-history.json"
+touch "$APP_DIR/oauth.json" "$APP_DIR/event-play-history.json"
 echo '{}' > "$APP_DIR/oauth.json" 2>/dev/null || true
-echo '[]' > "$APP_DIR/wedding-play-history.json" 2>/dev/null || true
+echo '[]' > "$APP_DIR/event-play-history.json" 2>/dev/null || true
 
 # Set permissions
 sudo chown -R pi:pi "$APP_DIR"
@@ -246,9 +246,9 @@ sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils nodejs npm
 
 # Setup headless audio service
 print_status "Setting up headless audio service..."
-sudo tee /etc/systemd/system/wedding-jukebox-audio.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/event-jukebox-audio.service > /dev/null <<EOF
 [Unit]
-Description=Wedding Jukebox Audio Service
+Description=Event Jukebox Audio Service
 After=network.target
 Requires=network.target
 
@@ -272,14 +272,14 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox-audio
+sudo systemctl enable event-jukebox-audio
 print_success "Audio service configured and enabled"
 
 # Setup WiFi API service (host-side)
 print_status "Setting up host WiFi API service..."
-sudo tee /etc/systemd/system/wedding-jukebox-wifi-api.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/event-jukebox-wifi-api.service > /dev/null <<EOF
 [Unit]
-Description=Wedding Jukebox WiFi API
+Description=Event Jukebox WiFi API
 After=NetworkManager.service
 Requires=NetworkManager.service
 
@@ -303,8 +303,8 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox-wifi-api
-sudo systemctl start wedding-jukebox-wifi-api
+sudo systemctl enable event-jukebox-wifi-api
+sudo systemctl start event-jukebox-wifi-api
 print_success "WiFi API service configured and enabled"
 
 # Install Node dependencies for host audio service
@@ -386,7 +386,7 @@ tee "$APP_DIR/update.sh" > /dev/null <<'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 
-echo "🔄 Updating Wedding Jukebox Docker..."
+echo "🔄 Updating Event Jukebox Docker..."
 
 # Backup first
 ./backup.sh
@@ -413,7 +413,7 @@ tee "$APP_DIR/status.sh" > /dev/null <<'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 
-echo "🥧 Wedding Jukebox Docker Status"
+echo "🥧 Event Jukebox Docker Status"
 echo "================================"
 echo ""
 
@@ -433,7 +433,7 @@ $COMPOSE_CMD -f docker-compose.pi.yml ps
 
 echo ""
 echo "🎵 Audio Service Status:"
-sudo systemctl status wedding-jukebox-audio --no-pager -l
+sudo systemctl status event-jukebox-audio --no-pager -l
 
 echo ""
 echo "🌡️  System Info:"
@@ -451,13 +451,13 @@ $COMPOSE_CMD -f docker-compose.pi.yml logs --tail=10
 
 echo ""
 echo "🎵 Audio Service Logs (last 10 lines):"
-sudo journalctl -u wedding-jukebox-audio -n 10 --no-pager
+sudo journalctl -u event-jukebox-audio -n 10 --no-pager
 EOF
 
 # Backup script
 tee "$APP_DIR/backup.sh" > /dev/null <<'EOF'
 #!/bin/bash
-BACKUP_DIR="/home/pi/wedding-jukebox/backups"
+BACKUP_DIR="/home/pi/event-jukebox/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 echo "Creating backup: $DATE"
@@ -465,10 +465,10 @@ mkdir -p "$BACKUP_DIR"
 
 # Backup important files
 cp oauth.json "$BACKUP_DIR/oauth_$DATE.json" 2>/dev/null || echo "No oauth.json to backup"
-cp wedding-play-history.json "$BACKUP_DIR/history_$DATE.json" 2>/dev/null || echo "No history to backup"
+cp event-play-history.json "$BACKUP_DIR/history_$DATE.json" 2>/dev/null || echo "No history to backup"
 
 # Backup Docker volumes
-docker run --rm -v wedding-jukebox_jukebox-data:/data -v "$BACKUP_DIR":/backup alpine tar czf "/backup/docker-data_$DATE.tar.gz" -C /data .
+docker run --rm -v event-jukebox_event-jukebox-data:/data -v "$BACKUP_DIR":/backup alpine tar czf "/backup/docker-data_$DATE.tar.gz" -C /data .
 
 # Keep only last 10 backups
 ls -t "$BACKUP_DIR"/oauth_*.json 2>/dev/null | tail -n +11 | xargs rm -f
@@ -484,16 +484,16 @@ chmod +x "$APP_DIR/status.sh"
 chmod +x "$APP_DIR/backup.sh"
 
 # Pull the Docker image (with retry for authentication issues)
-print_status "Pulling Wedding Jukebox Docker image..."
-if ! docker pull ghcr.io/jaredlthompson/wedding-jukebox:latest; then
+print_status "Pulling Event Jukebox Docker image..."
+if ! docker pull ghcr.io/jaredlthompson/event-jukebox:latest; then
     print_warning "Failed to pull from GitHub Container Registry. This might be due to rate limiting."
     print_status "Attempting to pull without authentication..."
     
     # Try with explicit public access
-    if ! docker pull ghcr.io/jaredlthompson/wedding-jukebox:latest 2>/dev/null; then
+    if ! docker pull ghcr.io/jaredlthompson/event-jukebox:latest 2>/dev/null; then
         print_warning "Unable to pull pre-built image. Building locally instead..."
-        print_status "Building Wedding Jukebox Docker image locally..."
-        if docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .; then
+        print_status "Building Event Jukebox Docker image locally..."
+        if docker build -t ghcr.io/jaredlthompson/event-jukebox:latest .; then
             print_success "Docker image built successfully"
         else
             print_error "Failed to build Docker image"
@@ -516,8 +516,8 @@ echo "   cd $APP_DIR"
 echo "   ./setup-youtube-auth.sh"
 echo ""
 echo "2. 🚀 Start the services:"
-echo "   sudo systemctl start wedding-jukebox-docker"
-echo "   sudo systemctl start wedding-jukebox-audio"
+echo "   sudo systemctl start event-jukebox-docker"
+echo "   sudo systemctl start event-jukebox-audio"
 echo ""
 echo "3. 🌐 Access the jukebox:"
 echo "   Find your Pi's IP: hostname -I"
@@ -529,9 +529,9 @@ echo "Status:    $APP_DIR/status.sh"
 echo "Update:    $APP_DIR/update.sh"
 echo "Backup:    $APP_DIR/backup.sh"
 echo "Logs:      docker compose -f docker-compose.pi.yml logs -f"
-echo "Audio Logs: sudo journalctl -u wedding-jukebox-audio -f"
-echo "Restart:   sudo systemctl restart wedding-jukebox-docker"
-echo "           sudo systemctl restart wedding-jukebox-audio"
+echo "Audio Logs: sudo journalctl -u event-jukebox-audio -f"
+echo "Restart:   sudo systemctl restart event-jukebox-docker"
+echo "           sudo systemctl restart event-jukebox-audio"
 echo ""
 
 # Get IP address

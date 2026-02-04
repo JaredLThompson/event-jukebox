@@ -14,8 +14,8 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-CONTAINER_NAME="wedding-jukebox"
-IMAGE_NAME="wedding-jukebox:latest"
+CONTAINER_NAME="event-jukebox"
+IMAGE_NAME="event-jukebox:latest"
 
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -192,8 +192,8 @@ backup_data() {
     print_status "Creating backup in: $BACKUP_DIR"
     
     # Backup local files
-    if [[ -f "wedding-play-history.json" ]]; then
-        cp "wedding-play-history.json" "$BACKUP_DIR/"
+    if [[ -f "event-play-history.json" ]]; then
+        cp "event-play-history.json" "$BACKUP_DIR/"
         print_success "Backed up play history"
     fi
     
@@ -220,7 +220,7 @@ backup_data() {
     # Backup from container if running
     if docker ps --format 'table {{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         print_status "Backing up data from running container..."
-        docker cp ${CONTAINER_NAME}:/app/wedding-play-history.json "$BACKUP_DIR/container-play-history.json" 2>/dev/null || true
+        docker cp ${CONTAINER_NAME}:/app/event-play-history.json "$BACKUP_DIR/container-play-history.json" 2>/dev/null || true
     fi
     
     print_success "Backup completed: $BACKUP_DIR"
@@ -247,7 +247,7 @@ restore_data() {
     print_status "Restoring from: $BACKUP_DIR"
     
     # Restore files
-    for file in "wedding-play-history.json" "wedding-playlist.js" "bride-playlist.js" ".env" "oauth.json"; do
+    for file in "event-play-history.json" "wedding-playlist.js" "bride-playlist.js" ".env" "oauth.json"; do
         if [[ -f "$BACKUP_DIR/$file" ]]; then
             cp "$BACKUP_DIR/$file" .
             print_success "Restored: $file"

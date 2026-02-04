@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Update Wedding Jukebox with a fresh local Docker build
+# Update Event Jukebox with a fresh local Docker build
 set -e
 
-APP_DIR="/home/pi/wedding-jukebox"
+APP_DIR="/home/pi/event-jukebox"
 
-echo "🔧 Updating Wedding Jukebox (local build)..."
+echo "🔧 Updating Event Jukebox (local build)..."
 cd "$APP_DIR"
 
 if [ -x "./backup.sh" ]; then
@@ -16,13 +16,13 @@ else
 fi
 
 echo "🛑 Stopping existing container (if running)..."
-docker stop wedding-jukebox 2>/dev/null || true
-docker rm wedding-jukebox 2>/dev/null || true
+docker stop event-jukebox 2>/dev/null || true
+docker rm event-jukebox 2>/dev/null || true
 
 echo "🏗️ Rebuilding and deploying container..."
 ./deploy-local.sh --rebuild
 
 echo "🔊 Restarting audio service..."
-sudo systemctl restart wedding-jukebox-audio
+sudo systemctl restart event-jukebox-audio
 
 echo "✅ Update complete!"

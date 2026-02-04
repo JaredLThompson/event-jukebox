@@ -149,7 +149,7 @@ let systemMode = 'headless';
 const spotifyService = new SpotifyService();
 
 // Play history tracking
-const PLAY_HISTORY_FILE = 'wedding-play-history.json';
+const PLAY_HISTORY_FILE = 'event-play-history.json';
 const AUDIO_CACHE_DIR = path.join(__dirname, 'audio-cache');
 let playHistory = [];
 

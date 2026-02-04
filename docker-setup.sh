@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🐳 Wedding Jukebox Docker Setup"
+echo "🐳 Event Jukebox Docker Setup"
 echo "================================"
 
 # Check if Docker is installed
@@ -52,27 +52,27 @@ if [ ! -f "oauth.json" ]; then
 fi
 
 # Create empty history file if it doesn't exist
-if [ ! -f "wedding-play-history.json" ]; then
-    echo '[]' > wedding-play-history.json
+if [ ! -f "event-play-history.json" ]; then
+    echo '[]' > event-play-history.json
     echo "📝 Created empty play history file"
 fi
 
 echo ""
 echo "🏗️  Building Docker container..."
-docker build -t wedding-jukebox . || {
+docker build -t event-jukebox . || {
     echo "❌ Docker build failed"
     exit 1
 }
 
 echo ""
-echo "🚀 Starting Wedding Jukebox..."
+echo "🚀 Starting Event Jukebox..."
 docker-compose up -d || {
     echo "❌ Failed to start container"
     exit 1
 }
 
 echo ""
-echo "✅ Wedding Jukebox is running!"
+echo "✅ Event Jukebox is running!"
 echo ""
 echo "🌐 Access URLs:"
 echo "   DJ Interface:  http://localhost:3000"

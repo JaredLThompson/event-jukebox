@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🎵 Wedding Jukebox Dual WiFi Setup Script
+# 🎵 Event Jukebox Dual WiFi Setup Script
 # This configures the Pi to be both a WiFi hotspot AND connect to venue WiFi
 # Perfect for weddings - guests connect to Pi, Pi connects to venue internet
 
@@ -50,7 +50,7 @@ run_cmd() {
     "$@"
 }
 
-echo "🎵 Wedding Jukebox Dual WiFi Setup"
+echo "🎵 Event Jukebox Dual WiFi Setup"
 echo "=================================="
 echo ""
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -239,7 +239,7 @@ if systemctl is-active --quiet NetworkManager; then
 
     echo "🔐 Ensuring PolicyKit allows WiFi scan/share for this user..."
     APP_USER="${SUDO_USER:-$(whoami)}"
-    run_cmd sudo tee /etc/polkit-1/rules.d/49-wedding-jukebox-wifi.rules > /dev/null <<EOF
+    run_cmd sudo tee /etc/polkit-1/rules.d/49-event-jukebox-wifi.rules > /dev/null <<EOF
 polkit.addRule(function(action, subject) {
   if (subject.user === "$APP_USER") {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
@@ -386,7 +386,7 @@ echo "🌐 Configuring network interfaces..."
     echo "   Detected Ubuntu - configuring with netplan..."
     
     # Create netplan configuration for hotspot interface
-    sudo tee /etc/netplan/99-wedding-jukebox-hotspot.yaml > /dev/null << EOF
+    sudo tee /etc/netplan/99-event-jukebox-hotspot.yaml > /dev/null << EOF
 network:
   version: 2
   wifis:
@@ -422,7 +422,7 @@ echo "📡 Configuring WiFi hotspot..."
 
 # Configure hostapd
 run_cmd sudo tee /etc/hostapd/hostapd.conf > /dev/null << EOF
-# Wedding Jukebox Hotspot Configuration
+# Event Jukebox Hotspot Configuration
 interface=$HOTSPOT_INTERFACE
 driver=nl80211
 ssid=$HOTSPOT_SSID
@@ -448,7 +448,7 @@ run_cmd sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig 2>/dev/null || true
 
 # Configure dnsmasq
 run_cmd sudo tee /etc/dnsmasq.conf > /dev/null << EOF
-# Wedding Jukebox DHCP Configuration
+# Event Jukebox DHCP Configuration
 interface=$HOTSPOT_INTERFACE
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 
@@ -478,7 +478,7 @@ replace_managed_block \
 echo "🔀 Configuring internet sharing..."
 
 # Enable IP forwarding (idempotent)
-run_cmd sudo tee /etc/sysctl.d/99-wedding-jukebox.conf > /dev/null << EOF
+run_cmd sudo tee /etc/sysctl.d/99-event-jukebox.conf > /dev/null << EOF
 net.ipv4.ip_forward=1
 EOF
 
@@ -491,9 +491,9 @@ run_cmd sudo iptables -A FORWARD -i "$HOTSPOT_INTERFACE" -o "$VENUE_INTERFACE" -
 run_cmd sudo sh -c "iptables-save > /etc/iptables/rules.v4"
 
 # Create systemd service to ensure hotspot IP is set on boot
-run_cmd sudo tee /etc/systemd/system/wedding-jukebox-hotspot.service > /dev/null << EOF
+run_cmd sudo tee /etc/systemd/system/event-jukebox-hotspot.service > /dev/null << EOF
 [Unit]
-Description=Wedding Jukebox Hotspot IP Configuration
+Description=Event Jukebox Hotspot IP Configuration
 After=network.target
 Before=hostapd.service dnsmasq.service
 
@@ -507,7 +507,7 @@ ExecStart=/bin/sleep 2
 WantedBy=multi-user.target
 EOF
 
-run_cmd sudo systemctl enable wedding-jukebox-hotspot
+run_cmd sudo systemctl enable event-jukebox-hotspot
 
 echo "🚀 Enabling services..."
 # Unmask hostapd service (it gets masked during installation)

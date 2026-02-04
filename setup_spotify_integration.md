@@ -14,7 +14,7 @@ This guide will help you set up Spotify integration for your Virtual Jukebox app
 2. Log in with your Spotify account
 3. Click **"Create App"**
 4. Fill in the app details:
-   - **App name**: "Wedding DJ Virtual Jukebox"
+   - **App name**: "Event Jukebox"
    - **App description**: "Virtual jukebox for wedding music with Spotify integration"
    - **Website**: `http://localhost:3000` (or your domain)
    - **Redirect URI**: Not required for this integration (Client Credentials flow)

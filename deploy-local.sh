@@ -15,8 +15,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-CONTAINER_NAME="wedding-jukebox"
-IMAGE_NAME="wedding-jukebox:latest"
+CONTAINER_NAME="event-jukebox"
+IMAGE_NAME="event-jukebox:latest"
 PORT=${PORT:-3000}
 HOST_PORT=${HOST_PORT:-3000}
 FORCE_LOCAL_BUILD=0
@@ -61,27 +61,27 @@ if grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ -f "docker-compose.pi.
     fi
 
     # Ensure host WiFi API is running if available
-    if systemctl is-enabled wedding-jukebox-wifi-api &> /dev/null; then
+    if systemctl is-enabled event-jukebox-wifi-api &> /dev/null; then
         print_status "Starting WiFi API service..."
-        sudo systemctl start wedding-jukebox-wifi-api || true
+        sudo systemctl start event-jukebox-wifi-api || true
     fi
 
     # Use compose for Pi deployment
     print_status "Stopping any existing services..."
     $COMPOSE_CMD -f docker-compose.pi.yml down || true
-    if docker ps -a --format '{{.Names}}' | grep -q "^wedding-jukebox-pi$"; then
-        print_status "Removing stale container wedding-jukebox-pi..."
-        docker rm -f wedding-jukebox-pi || true
+    if docker ps -a --format '{{.Names}}' | grep -q "^event-jukebox-pi$"; then
+        print_status "Removing stale container event-jukebox-pi..."
+        docker rm -f event-jukebox-pi || true
     fi
 
     print_status "Starting services with docker-compose.pi.yml..."
     if [[ "$FORCE_LOCAL_BUILD" -eq 1 ]]; then
         print_warning "Force local build enabled. Building image locally..."
-        docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .
+        docker build -t ghcr.io/jaredlthompson/event-jukebox:latest .
     else
         if ! $COMPOSE_CMD -f docker-compose.pi.yml pull; then
             print_warning "Image pull failed. Building locally instead..."
-            docker build -t ghcr.io/jaredlthompson/wedding-jukebox:latest .
+            docker build -t ghcr.io/jaredlthompson/event-jukebox:latest .
         fi
     fi
     $COMPOSE_CMD -f docker-compose.pi.yml up -d
@@ -150,7 +150,7 @@ fi
 
 # Create volume for persistent data
 print_status "Creating Docker volume for persistent data..."
-docker volume create wedding-jukebox-data 2>/dev/null || true
+docker volume create event-event-jukebox-data 2>/dev/null || true
 
 # Detect host IP for QR codes
 print_status "Detecting host IP address for QR codes..."
@@ -208,9 +208,9 @@ DOCKER_RUN_CMD="docker run -d \
     --restart unless-stopped \
     -p ${HOST_PORT}:${PORT} \
     -e HOST_IP=${HOST_IP} \
-    -v wedding-jukebox-data:/app/data \
+    -v event-event-jukebox-data:/app/data \
     -v $(pwd)/audio-cache:/app/audio-cache \
-    -v $(pwd)/wedding-play-history.json:/app/wedding-play-history.json \
+    -v $(pwd)/event-play-history.json:/app/event-play-history.json \
     -v $(pwd)/wedding-playlist.js:/app/wedding-playlist.js \
     -v $(pwd)/bride-playlist.js:/app/bride-playlist.js"
 

@@ -1,19 +1,19 @@
 version: '3.8'
 
 services:
-  wedding-jukebox:
+  event-jukebox:
     # Use local build with latest playlist editor features
     build: .
     # Uncomment to use registry image instead:
-    # image: ghcr.io/jaredlthompson/wedding-jukebox:latest
+    # image: ghcr.io/jaredlthompson/event-jukebox:latest
     ports:
       - "3000:3000"
     volumes:
       # Persist important data
-      - jukebox-data:/app/data
+      - event-jukebox-data:/app/data
       # Mount OAuth and history files if they exist
       - ./oauth.json:/app/oauth.json:ro
-      - ./wedding-play-history.json:/app/wedding-play-history.json
+      - ./event-play-history.json:/app/event-play-history.json
       # Custom playlists
       - ./playlists:/app/playlists
     environment:
@@ -21,7 +21,7 @@ services:
       - PORT=3000
     restart: unless-stopped
     networks:
-      - jukebox-network
+      - event-jukebox-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/playlist/status"]
       interval: 30s
@@ -30,9 +30,9 @@ services:
       start_period: 30s
 
 volumes:
-  jukebox-data:
+  event-jukebox-data:
     driver: local
 
 networks:
-  jukebox-network:
+  event-jukebox-network:
     driver: bridge

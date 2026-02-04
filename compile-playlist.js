@@ -3,13 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const HISTORY_FILE = 'wedding-play-history.json';
+const HISTORY_FILE = 'event-play-history.json';
 
 function compilePlaylistFromHistory() {
     try {
         // Check if history file exists
         if (!fs.existsSync(HISTORY_FILE)) {
-            console.log('❌ No play history file found. Make sure wedding-play-history.json exists.');
+            console.log('❌ No play history file found. Make sure event-play-history.json exists.');
             return;
         }
 

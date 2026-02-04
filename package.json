@@ -1,14 +1,14 @@
 {
-  "name": "wedding-jukebox",
+  "name": "event-jukebox",
   "version": "0.9.0",
-  "description": "A wedding-focused virtual jukebox with guest requests and DJ controls",
-  "homepage": "https://github.com/JaredLThompson/wedding-jukebox#readme",
+  "description": "An event-focused virtual jukebox with guest requests and DJ controls",
+  "homepage": "https://github.com/JaredLThompson/event-jukebox#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JaredLThompson/wedding-jukebox.git"
+    "url": "https://github.com/JaredLThompson/event-jukebox.git"
   },
   "bugs": {
-    "url": "https://github.com/JaredLThompson/wedding-jukebox/issues"
+    "url": "https://github.com/JaredLThompson/event-jukebox/issues"
   },
   "main": "server.js",
   "scripts": {

@@ -1,5 +1,5 @@
 [Unit]
-Description=Wedding Jukebox Audio Service
+Description=Event Jukebox Audio Service
 After=network.target
 Requires=network.target
 
@@ -7,8 +7,8 @@ Requires=network.target
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi/wedding-jukebox
-ExecStart=/usr/bin/node /home/pi/wedding-jukebox/audio-integration.js
+WorkingDirectory=/home/pi/event-jukebox
+ExecStart=/usr/bin/node /home/pi/event-jukebox/audio-integration.js
 Restart=always
 RestartSec=5
 StandardOutput=journal

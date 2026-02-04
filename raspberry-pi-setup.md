@@ -1,4 +1,4 @@
-# Raspberry Pi Wedding Jukebox Setup
+# Raspberry Pi Event Jukebox Setup
 
 ## Hardware Requirements
 - Raspberry Pi 4 (4GB+ recommended)
@@ -9,32 +9,32 @@
 ## Option A: Docker Setup (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-docker-setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/event-jukebox/main/raspberry-pi-docker-setup.sh | bash
 ./setup-dual-wifi.sh
 ```
 
 This installs and enables:
-- `wedding-jukebox-docker` (web app container)
-- `wedding-jukebox-audio` (headless audio service)
-- `wedding-jukebox-wifi-api` (optional uplink WiFi manager)
+- `event-jukebox-docker` (web app container)
+- `event-jukebox-audio` (headless audio service)
+- `event-jukebox-wifi-api` (optional uplink WiFi manager)
 
 ### Headless Audio Service
 The audio service runs on the host and plays music through the Pi speakers.
 
 ```bash
-cd /home/pi/wedding-jukebox
+cd /home/pi/event-jukebox
 sudo apt install -y yt-dlp mpg123 ffmpeg alsa-utils
-sudo cp wedding-jukebox-audio.service /etc/systemd/system/
+sudo cp event-jukebox-audio.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable wedding-jukebox-audio
-sudo systemctl start wedding-jukebox-audio
+sudo systemctl enable event-jukebox-audio
+sudo systemctl start event-jukebox-audio
 ```
 
 ## Option B: Direct Code Installation
 If you want to run without Docker:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main/raspberry-pi-complete-setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/JaredLThompson/event-jukebox/main/raspberry-pi-complete-setup.sh | bash
 ./setup-dual-wifi.sh
 ```
 
@@ -68,8 +68,8 @@ Examples:
 ## Service Management
 
 ```bash
-sudo systemctl status wedding-jukebox-docker
-sudo systemctl status wedding-jukebox-audio
+sudo systemctl status event-jukebox-docker
+sudo systemctl status event-jukebox-audio
 ```
 
 Restart all services:
@@ -78,10 +78,10 @@ Restart all services:
 ```
 
 ### Avoid Port Conflicts
-If you use Docker on the Pi, do **not** run the legacy `wedding-jukebox` systemd service at the same time (it will bind port 3000).
+If you use Docker on the Pi, do **not** run the legacy `event-jukebox` systemd service at the same time (it will bind port 3000).
 
 ## Logs
 ```bash
-sudo journalctl -u wedding-jukebox-audio -f
-sudo journalctl -u wedding-jukebox-docker -f
+sudo journalctl -u event-jukebox-audio -f
+sudo journalctl -u event-jukebox-docker -f
 ```
