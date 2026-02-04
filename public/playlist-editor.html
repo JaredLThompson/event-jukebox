@@ -58,6 +58,9 @@
                             <button id="loadPlaylistBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm">Load</button>
                             <button id="savePlaylistBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded text-sm font-semibold">Save</button>
                         </div>
+                        <div class="flex items-center gap-2 text-xs text-amber-200">
+                            <span id="unsavedBadge" class="hidden px-2 py-1 rounded-full bg-amber-500/20 border border-amber-400/40">Unsaved changes</span>
+                        </div>
                         <button id="tagMissingBtn" class="bg-amber-500 hover:bg-amber-400 text-slate-900 px-3 py-2 rounded text-sm font-semibold">
                             Tag Untagged Songs
                         </button>
@@ -117,7 +120,8 @@
                     <button id="closeJsonBtn" class="text-slate-300 hover:text-white">✕</button>
                 </div>
             </div>
-            <textarea id="jsonOutput" class="w-full flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-xs font-mono" readonly></textarea>
+            <textarea id="jsonOutput" class="hidden" readonly></textarea>
+            <pre id="jsonPretty" class="w-full flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-xs font-mono overflow-auto whitespace-pre"></pre>
         </div>
     </div>
 

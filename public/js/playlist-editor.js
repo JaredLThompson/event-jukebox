@@ -21,14 +21,17 @@ const duplicatePlaylistBtn = document.getElementById('duplicatePlaylistBtn');
 const viewJsonBtn = document.getElementById('viewJsonBtn');
 const jsonModal = document.getElementById('jsonModal');
 const jsonOutput = document.getElementById('jsonOutput');
+const jsonPretty = document.getElementById('jsonPretty');
 const closeJsonBtn = document.getElementById('closeJsonBtn');
 const copyJsonBtn = document.getElementById('copyJsonBtn');
+const unsavedBadge = document.getElementById('unsavedBadge');
 
 let currentPlaylist = [];
 let previewPlayer = null;
 let previewTimer = null;
 let currentPreviewVideo = null;
 let tagQueue = new Map();
+let isDirty = false;
 
 const showToast = (message, tone = 'info') => {
   const toast = document.createElement('div');
@@ -41,6 +44,58 @@ const showToast = (message, tone = 'info') => {
 };
 
 const formatSearch = (song) => `${song.title} ${song.artist || ''}`.trim();
+
+const markDirty = () => {
+  isDirty = true;
+  if (unsavedBadge) {
+    unsavedBadge.classList.remove('hidden');
+  }
+};
+
+const clearDirty = () => {
+  isDirty = false;
+  if (unsavedBadge) {
+    unsavedBadge.classList.add('hidden');
+  }
+};
+
+const sortKeysDeep = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(sortKeysDeep);
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = sortKeysDeep(value[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+};
+
+const syntaxHighlight = (jsonText) => {
+  const escaped = jsonText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let cls = 'text-emerald-300';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'text-amber-200' : 'text-emerald-300';
+      } else if (/true|false/.test(match)) {
+        cls = 'text-rose-300';
+      } else if (/null/.test(match)) {
+        cls = 'text-slate-400';
+      } else {
+        cls = 'text-sky-300';
+      }
+      return `<span class="${cls}">${match}</span>`;
+    }
+  );
+};
 
 async function loadPlaylistFiles() {
   const response = await fetch('/api/playlists/files');
@@ -60,6 +115,7 @@ async function loadPlaylist() {
   const data = await response.json();
   currentPlaylist = Array.isArray(data.playlist) ? data.playlist : [];
   renderPlaylist();
+  clearDirty();
 }
 
 function renderPlaylist() {
@@ -103,6 +159,7 @@ function renderPlaylist() {
       const moved = currentPlaylist.splice(evt.oldIndex, 1)[0];
       currentPlaylist.splice(evt.newIndex, 0, moved);
       renderPlaylist();
+      markDirty();
     }
   });
 }
@@ -139,6 +196,7 @@ async function savePlaylist() {
   }
 
   showToast('Playlist saved', 'success');
+  clearDirty();
 }
 
 function setPreview(song) {
@@ -217,6 +275,7 @@ searchResults.querySelectorAll('[data-add]').forEach(btn => {
       };
       currentPlaylist.unshift(newItem);
       renderPlaylist();
+      markDirty();
       queueTagging(newItem, 0);
     });
   });
@@ -228,15 +287,18 @@ playlistItems.addEventListener('input', (event) => {
   if (Number.isNaN(index)) return;
   if (target.classList.contains('playlist-search')) {
     currentPlaylist[index].search = target.value;
+    markDirty();
   }
   if (target.classList.contains('playlist-type')) {
     currentPlaylist[index].type = target.value;
+    markDirty();
   }
   if (target.classList.contains('playlist-tags')) {
     try {
       const parsed = JSON.parse(target.value);
       currentPlaylist[index].tags = parsed;
       renderPlaylist();
+      markDirty();
     } catch {
       // Ignore invalid JSON while typing
     }
@@ -258,6 +320,7 @@ playlistItems.addEventListener('click', (event) => {
   const index = parseInt(button.getAttribute('data-remove'), 10);
   currentPlaylist.splice(index, 1);
   renderPlaylist();
+  markDirty();
 });
 
 searchBtn.addEventListener('click', searchYouTube);
@@ -296,6 +359,7 @@ createPlaylistBtn.addEventListener('click', async () => {
   renderPlaylist();
   newPlaylistName.value = '';
   showToast('Playlist created', 'success');
+  clearDirty();
 });
 
 duplicatePlaylistBtn.addEventListener('click', async () => {
@@ -317,12 +381,16 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
   playlistFileSelect.value = name;
   duplicatePlaylistName.value = '';
   showToast('Playlist duplicated', 'success');
+  clearDirty();
 });
 
 if (viewJsonBtn) {
   viewJsonBtn.addEventListener('click', () => {
     if (jsonOutput) {
-      jsonOutput.value = JSON.stringify(currentPlaylist, null, 2);
+      jsonOutput.value = JSON.stringify(sortKeysDeep(currentPlaylist), null, 2);
+    }
+    if (jsonPretty && jsonOutput) {
+      jsonPretty.innerHTML = syntaxHighlight(jsonOutput.value);
     }
     if (jsonModal) {
       jsonModal.classList.remove('hidden');
@@ -378,6 +446,7 @@ async function queueTagging(item, index) {
     currentPlaylist[index].tags = data.tags;
     currentPlaylist[index].confidence = data.confidence;
     renderPlaylist();
+    markDirty();
   } catch (error) {
     showToast('Failed to tag track', 'error');
   } finally {
@@ -448,6 +517,12 @@ window.onYouTubeIframeAPIReady = () => {
     }
   });
 };
+
+window.addEventListener('beforeunload', (event) => {
+  if (!isDirty) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 (async () => {
   await loadPlaylistFiles();
