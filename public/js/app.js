@@ -1065,9 +1065,60 @@ class VirtualJukebox {
             return;
         }
 
-        // In browser mode, just advance the queue
+        // In browser mode, fade out the YouTube player then advance the queue
+        if (this.player && this.isPlayerReady) {
+            const durationMs = this.getFadeDurationMs();
+            this.setFadeUI(true, durationMs);
+            this.fadeOutPlayer(durationMs, () => {
+                if (this.player && this.isPlayerReady) {
+                    try {
+                        this.player.pauseVideo();
+                        this.player.stopVideo();
+                    } catch (error) {
+                        console.warn('Failed to pause player before switching:', error);
+                    }
+                }
+                this.playNextSong();
+                this.setFadeUI(false);
+                this.restorePlayerVolume();
+            });
+            return;
+        }
+
         console.log('🚀 Browser mode, advancing queue...');
         this.playNextSong();
+    }
+
+    fadeOutPlayer(durationMs, onComplete) {
+        if (!this.player || !this.isPlayerReady) {
+            if (onComplete) onComplete();
+            return;
+        }
+        const start = Date.now();
+        const initialVolume = this.player.getVolume ? this.player.getVolume() : 50;
+        const tick = () => {
+            const elapsed = Date.now() - start;
+            const progress = Math.min(1, elapsed / durationMs);
+            const nextVolume = Math.max(0, Math.round(initialVolume * (1 - progress)));
+            if (this.player.setVolume) {
+                this.player.setVolume(nextVolume);
+            }
+            if (progress < 1) {
+                requestAnimationFrame(tick);
+            } else if (onComplete) {
+                onComplete();
+            }
+        };
+        requestAnimationFrame(tick);
+    }
+
+    restorePlayerVolume() {
+        if (!this.player || !this.isPlayerReady) return;
+        const savedVolume = parseInt(jukeboxSettings.get('volumePercent'), 10);
+        const clamped = Number.isNaN(savedVolume) ? 50 : Math.min(100, Math.max(0, savedVolume));
+        if (this.player.setVolume) {
+            this.player.setVolume(clamped);
+        }
     }
 
     getFadeDurationMs() {

@@ -126,7 +126,30 @@
             </div>
         </header>
 
-            <div class="settings-container p-8">
+        <div class="setting-item p-6 mb-6">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-life-ring text-yellow-300 text-xl mt-1"></i>
+                    <div>
+                        <h2 class="text-lg font-semibold mb-2">Quick Help</h2>
+                        <p class="text-sm text-gray-300">A few handy tips while you are setting things up:</p>
+                    </div>
+                </div>
+                <button id="helpToggleBtn" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg">
+                    Hide Help
+                </button>
+            </div>
+            <div id="helpContent" class="mt-4">
+                <ul class="text-sm text-gray-300 space-y-1">
+                    <li>Headless mode is recommended for Raspberry Pi installs.</li>
+                    <li>Browser mode is best for laptops and demos.</li>
+                    <li>Playlist files live in <span class="text-gray-200">/app/playlists</span> and persist across Docker rebuilds.</li>
+                    <li>Event schedule controls which playlist is active and whether it loops.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="settings-container p-8">
             <!-- Quick Tools -->
             <section class="mb-8">
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -235,6 +258,7 @@
                         <div>
                             <h3 class="text-lg font-semibold mb-2">System Mode</h3>
                             <p class="text-gray-300 text-sm">Choose how audio plays: headless service or in-browser.</p>
+                            <p class="text-xs text-yellow-200 mt-2">Recommended: Headless on Raspberry Pi for the most reliable audio.</p>
                         </div>
                         <select id="systemMode" class="w-full md:w-72 bg-gray-700 text-white rounded px-3 py-2">
                             <option value="headless">Headless (Audio Service)</option>
@@ -571,6 +595,7 @@
                 });
                 
                 this.updateVisualizerSettingsVisibility();
+                this.setupHelpToggle();
                 this.loadAudioOutputs();
                 this.loadSystemMode();
                 this.loadEventConfig();
@@ -738,6 +763,22 @@
                         this.fallbackPlaylistFile = event.target.value;
                     });
                 }
+            }
+
+            setupHelpToggle() {
+                const toggle = document.getElementById('helpToggleBtn');
+                const content = document.getElementById('helpContent');
+                if (!toggle || !content) return;
+                const stored = localStorage.getItem('settingsHelpHidden');
+                if (stored === 'true') {
+                    content.classList.add('hidden');
+                    toggle.textContent = 'Show Help';
+                }
+                toggle.addEventListener('click', () => {
+                    const isHidden = content.classList.toggle('hidden');
+                    toggle.textContent = isHidden ? 'Show Help' : 'Hide Help';
+                    localStorage.setItem('settingsHelpHidden', isHidden ? 'true' : 'false');
+                });
             }
 
             async loadSystemMode() {
