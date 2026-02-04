@@ -3,8 +3,9 @@
 A web-based wedding jukebox with YouTube Music + Spotify search, real-time collaboration, and a headless audio service for reliable playback on a Raspberry Pi.
 
 ## Highlights
-- YouTube Music search and full playback (via yt-dlp + mpg123)
-- Spotify search with 30-second previews
+- YouTube Music search and full playback (headless mode via yt-dlp + mpg123)
+- Browser mode playback via YouTube iframe
+- Spotify search with 30-second previews (no full Spotify playback)
 - Real-time queue collaboration and DJ controls
 - Headless audio service (Pi plays music, any device can DJ)
 - Dual playlists with fallback mode and suppression
@@ -55,6 +56,7 @@ npm run dev
 ```
 
 Open http://localhost:3000
+If you are not running the headless audio service locally, switch **Settings → System Mode** to **Browser** so playback uses the YouTube iframe.
 
 ## Audio Output Selection
 The settings page allows you to select an ALSA output device. This setting is persisted on the Pi and applied to the audio service.

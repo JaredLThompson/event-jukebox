@@ -17,7 +17,7 @@ This guide will help you set up Spotify integration for your Virtual Jukebox app
    - **App name**: "Wedding DJ Virtual Jukebox"
    - **App description**: "Virtual jukebox for wedding music with Spotify integration"
    - **Website**: `http://localhost:3000` (or your domain)
-   - **Redirect URI**: `http://localhost:3000/auth/spotify/callback`
+   - **Redirect URI**: Not required for this integration (Client Credentials flow)
 5. Check the boxes for the terms of service
 6. Click **"Save"**
 
@@ -104,7 +104,7 @@ npm start
 - Spotify integration works alongside YouTube Music - users can search both services
 - Spotify songs show with a green theme and Spotify logo
 - Preview functionality is available for most tracks
-- Songs are queued normally but playback depends on the source
+- Songs are queued normally but full playback is handled via YouTube (Spotify is preview-only)
 - For full Spotify playback, users should open songs in their Spotify app
 
 ## API Limits

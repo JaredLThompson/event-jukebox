@@ -38,6 +38,21 @@ curl -fsSL https://raw.githubusercontent.com/JaredLThompson/wedding-jukebox/main
 ./setup-dual-wifi.sh
 ```
 
+## Optional: Disable the Desktop GUI (Recommended)
+For a dedicated event appliance, you can boot to the console (no desktop) to reduce memory usage and avoid accidental GUI sessions.
+
+Disable the desktop (boot to console):
+```bash
+sudo systemctl set-default multi-user.target
+sudo reboot
+```
+
+Re-enable the desktop later if needed:
+```bash
+sudo systemctl set-default graphical.target
+sudo reboot
+```
+
 ## Audio Output Selection
 Audio output is chosen from Settings and persisted on the Pi.
 
@@ -70,4 +85,3 @@ If you use Docker on the Pi, do **not** run the legacy `wedding-jukebox` systemd
 sudo journalctl -u wedding-jukebox-audio -f
 sudo journalctl -u wedding-jukebox-docker -f
 ```
-

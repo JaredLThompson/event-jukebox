@@ -53,6 +53,7 @@
 2. **Preview Functionality**: Listen to 30-second Spotify previews before adding
 3. **Seamless Integration**: Spotify songs appear in queue alongside YouTube tracks
 4. **Visual Distinction**: Easy to identify source of each song
+5. **Playback Note**: Spotify tracks are preview-only; full playback uses YouTube
 
 ### For DJs
 1. **Service Status**: Dashboard shows which services are available
@@ -140,7 +141,7 @@ Queue Display -> Handle both service types
 ## 🚧 Limitations & Considerations
 
 ### Spotify API Limitations
-- **No Full Playback**: Can't play full songs through web API
+- **No Full Playback**: Can't play full songs through web API (preview-only)
 - **Preview Only**: 30-second previews when available
 - **Rate Limits**: API calls are limited (but generous for typical usage)
 - **Regional Restrictions**: Some tracks may not be available in all regions

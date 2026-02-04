@@ -31,6 +31,5 @@ node setup_spotify_auth.js
 See `setup_spotify_integration.md` for details.
 
 ## Notes
-- Local dev uses browser audio by default.
+- The app defaults to headless audio. For local development without the headless service, set **Settings → System Mode → Browser**.
 - Headless audio is intended for the Raspberry Pi setup.
-
