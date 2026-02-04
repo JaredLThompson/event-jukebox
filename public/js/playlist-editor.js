@@ -327,6 +327,7 @@ if (viewJsonBtn) {
     if (jsonModal) {
       jsonModal.classList.remove('hidden');
       jsonModal.classList.add('flex');
+      jsonModal.style.display = 'flex';
     }
   });
 }
@@ -336,6 +337,7 @@ if (closeJsonBtn) {
     if (jsonModal) {
       jsonModal.classList.add('hidden');
       jsonModal.classList.remove('flex');
+      jsonModal.style.display = 'none';
     }
   });
 }
