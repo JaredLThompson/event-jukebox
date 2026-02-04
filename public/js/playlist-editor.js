@@ -2,6 +2,7 @@ const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
 const playlistFileSelect = document.getElementById('playlistFileSelect');
+const playlistDescriptionInput = document.getElementById('playlistDescription');
 const loadPlaylistBtn = document.getElementById('loadPlaylistBtn');
 const savePlaylistBtn = document.getElementById('savePlaylistBtn');
 const tagMissingBtn = document.getElementById('tagMissingBtn');
@@ -76,8 +77,24 @@ const sortKeysDeep = (value) => {
 async function loadPlaylistFiles() {
   const response = await fetch('/api/playlists/files');
   const data = await response.json();
-  const files = data.files || [];
-  playlistFileSelect.innerHTML = files.map(file => `<option value="${file}">${file}</option>`).join('');
+  const files = Array.isArray(data.files) ? data.files : [];
+  const normalized = files.map((item) => {
+    if (typeof item === 'string') return { file: item, description: '' };
+    return { file: item.file, description: item.description || '' };
+  }).filter(item => item.file);
+  const escapeAttr = (value) => (value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  playlistFileSelect.innerHTML = normalized
+    .map(item => {
+      const label = item.description ? `${item.file} — ${item.description}` : item.file;
+      const title = item.description ? escapeAttr(item.description) : '';
+      const titleAttr = title ? ` title="${title}"` : '';
+      return `<option value="${item.file}"${titleAttr}>${label}</option>`;
+    })
+    .join('');
 }
 
 async function loadPlaylist() {
@@ -90,6 +107,9 @@ async function loadPlaylist() {
   }
   const data = await response.json();
   currentPlaylist = Array.isArray(data.playlist) ? data.playlist : [];
+  if (playlistDescriptionInput) {
+    playlistDescriptionInput.value = data.description || '';
+  }
   renderPlaylist();
   clearDirty();
 }
@@ -147,6 +167,7 @@ async function savePlaylist() {
     return;
   }
 
+  const description = playlistDescriptionInput ? playlistDescriptionInput.value.trim() : '';
   const sanitized = currentPlaylist.map(item => ({
     search: item.search,
     type: item.type || 'custom',
@@ -163,7 +184,7 @@ async function savePlaylist() {
   const response = await fetch('/api/playlists/file', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, playlist: sanitized })
+    body: JSON.stringify({ name, playlist: sanitized, description })
   });
 
   if (!response.ok) {
@@ -307,6 +328,11 @@ searchInput.addEventListener('keydown', (e) => {
 });
 loadPlaylistBtn.addEventListener('click', loadPlaylist);
 savePlaylistBtn.addEventListener('click', savePlaylist);
+if (playlistDescriptionInput) {
+  playlistDescriptionInput.addEventListener('input', () => {
+    markDirty();
+  });
+}
 if (tagMissingBtn) {
   tagMissingBtn.addEventListener('click', tagMissingSongs);
 }
@@ -323,7 +349,7 @@ createPlaylistBtn.addEventListener('click', async () => {
   const response = await fetch('/api/playlists/file', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, playlist: [] })
+    body: JSON.stringify({ name, playlist: [], description: '' })
   });
   if (!response.ok) {
     showToast('Failed to create playlist', 'error');
@@ -344,10 +370,11 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
     showToast('Enter a filename', 'error');
     return;
   }
+  const description = playlistDescriptionInput ? playlistDescriptionInput.value.trim() : '';
   const response = await fetch('/api/playlists/file', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, playlist: currentPlaylist })
+    body: JSON.stringify({ name, playlist: currentPlaylist, description })
   });
   if (!response.ok) {
     showToast('Failed to duplicate playlist', 'error');
@@ -363,7 +390,11 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
 if (viewJsonBtn) {
   viewJsonBtn.addEventListener('click', () => {
     if (jsonOutput) {
-      jsonOutput.value = JSON.stringify(sortKeysDeep(currentPlaylist), null, 2);
+      const description = playlistDescriptionInput ? playlistDescriptionInput.value.trim() : '';
+      const payload = description
+        ? { description, tracks: sortKeysDeep(currentPlaylist) }
+        : sortKeysDeep(currentPlaylist);
+      jsonOutput.value = JSON.stringify(payload, null, 2);
     }
     if (jsonModal) {
       jsonModal.classList.remove('hidden');

@@ -721,7 +721,7 @@
                             if (!eventItem || !eventItem.playlistFile) return;
                             const base = eventItem.playlistFile.split('/').pop().replace(/\.js$/, '');
                             const backupFile = `${base}-backup.js`;
-                            if (!this.playlistFiles.includes(backupFile)) {
+                            if (!this.playlistFiles.some(item => item.file === backupFile)) {
                                 this.showToast('Backup playlist not found', 'error');
                                 return;
                             }
@@ -838,7 +838,16 @@
                     const response = await fetch('/api/playlists/files');
                     if (!response.ok) return;
                     const data = await response.json();
-                    this.playlistFiles = Array.isArray(data.files) ? data.files : [];
+                    const files = Array.isArray(data.files) ? data.files : [];
+                    this.playlistFiles = files.map((item) => {
+                        if (typeof item === 'string') {
+                            return { file: item, description: '' };
+                        }
+                        return {
+                            file: item.file,
+                            description: item.description || ''
+                        };
+                    }).filter(item => item.file);
                     this.renderPlaylistFileOptions();
                 } catch (error) {
                     this.playlistFiles = [];
@@ -850,7 +859,17 @@
                 const secondarySelect = document.getElementById('secondaryPlaylistFile');
                 if (!primarySelect || !secondarySelect) return;
 
-                const options = this.playlistFiles.map(file => `<option value="${file}">${file}</option>`).join('');
+                const escapeAttr = (value) => (value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const options = this.playlistFiles.map(item => {
+                    const label = item.description ? `${item.file} — ${item.description}` : item.file;
+                    const title = item.description ? escapeAttr(item.description) : '';
+                    const titleAttr = title ? ` title="${title}"` : '';
+                    return `<option value="${item.file}"${titleAttr}>${label}</option>`;
+                }).join('');
                 primarySelect.innerHTML = `<option value="">Default (wedding-playlist.js)</option>${options}`;
                 secondarySelect.innerHTML = `<option value="">Default (bride-playlist.js)</option>${options}`;
                 this.syncPlaylistFileSelectors();
@@ -887,7 +906,17 @@
                     container.innerHTML = '<div class="text-sm text-gray-400">No events configured yet.</div>';
                     return;
                 }
-                const options = this.playlistFiles.map(file => `<option value="${file}">${file}</option>`).join('');
+                const escapeAttr = (value) => (value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const options = this.playlistFiles.map(item => {
+                    const label = item.description ? `${item.file} — ${item.description}` : item.file;
+                    const title = item.description ? escapeAttr(item.description) : '';
+                    const titleAttr = title ? ` title="${title}"` : '';
+                    return `<option value="${item.file}"${titleAttr}>${label}</option>`;
+                }).join('');
                 const fallbackSelect = document.getElementById('fallbackPlaylistFile');
                 if (fallbackSelect) {
                     fallbackSelect.innerHTML = `<option value="">Select fallback playlist</option>${options}`;
@@ -976,7 +1005,7 @@
 
             addEvent() {
                 const name = 'New Event';
-                const playlistFile = this.playlistFiles[0] ? `playlists/${this.playlistFiles[0]}` : '';
+                const playlistFile = this.playlistFiles[0]?.file ? `playlists/${this.playlistFiles[0].file}` : '';
                 const event = {
                     id: this.createEventId(name),
                     name,

@@ -540,6 +540,7 @@ class VirtualJukebox {
                 console.log(`🧭 System mode updated: ${data.mode}`);
                 this.updateModeBadge(data.mode === 'headless');
                 this.systemMode = data.mode;
+                this.ensureYouTubePlayer();
             }
         });
 
@@ -600,6 +601,7 @@ class VirtualJukebox {
             console.log(`🧭 Active system mode: ${data.mode}`);
             this.updateModeBadge(data.mode === 'headless');
             this.systemMode = data.mode;
+            this.ensureYouTubePlayer();
         } catch (error) {
             console.error('Failed to load system mode:', error);
         }
@@ -1884,6 +1886,34 @@ class VirtualJukebox {
     }
 
     // YouTube Player Integration
+    ensureYouTubePlayer() {
+        if (this.systemMode !== 'browser') return;
+        if (this.player || this.isInitializingYouTube) return;
+
+        const initPlayer = () => {
+            this.isInitializingYouTube = false;
+            this.initializeYouTubePlayer();
+        };
+
+        if (window.YT && window.YT.Player) {
+            initPlayer();
+            return;
+        }
+
+        if (document.getElementById('youtube-iframe-api')) {
+            this.isInitializingYouTube = true;
+            window.onYouTubeIframeAPIReady = initPlayer;
+            return;
+        }
+
+        this.isInitializingYouTube = true;
+        const tag = document.createElement('script');
+        tag.id = 'youtube-iframe-api';
+        tag.src = 'https://www.youtube.com/iframe_api';
+        window.onYouTubeIframeAPIReady = initPlayer;
+        document.head.appendChild(tag);
+    }
+
     initializeYouTubePlayer() {
         this.player = new YT.Player('youtubePlayer', {
             height: '0',
@@ -1912,6 +1942,7 @@ class VirtualJukebox {
         this.isPlayerReady = true;
         this.setVolume(50); // Set default volume
         console.log('YouTube player ready');
+        this.showToast('YouTube player ready', 'info');
         
         // Initialize visualizer with YouTube player
         if (window.visualizer && window.visualizer.show) {
@@ -2003,6 +2034,7 @@ class VirtualJukebox {
         }
         
         // Fallback to YouTube player if available
+        this.ensureYouTubePlayer();
         if (!this.player || !this.isPlayerReady) {
             console.log('⚠️ No YouTube player available');
             return;

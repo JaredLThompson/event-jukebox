@@ -592,25 +592,50 @@ function resolvePlaylistFile(playlistConfig, fallbackFile) {
   return null;
 }
 
-function loadPlaylistFromFile(filepath) {
+function parsePlaylistPayload(raw) {
+  if (Array.isArray(raw)) {
+    return { tracks: raw, description: '' };
+  }
+  if (raw && typeof raw === 'object') {
+    const description = typeof raw.description === 'string' ? raw.description : '';
+    const tracks = Array.isArray(raw.tracks)
+      ? raw.tracks
+      : Array.isArray(raw.playlist)
+      ? raw.playlist
+      : Array.isArray(raw.songs)
+      ? raw.songs
+      : null;
+    if (tracks) {
+      return { tracks, description };
+    }
+  }
+  return null;
+}
+
+function loadPlaylistData(filepath) {
   if (!filepath) return null;
   try {
+    let raw;
     if (filepath.endsWith('.json')) {
-      const raw = fs.readFileSync(filepath, 'utf8');
-      return JSON.parse(raw);
-    }
-    if (filepath.endsWith('.js')) {
+      raw = JSON.parse(fs.readFileSync(filepath, 'utf8'));
+    } else if (filepath.endsWith('.js')) {
       const resolved = require.resolve(filepath);
       delete require.cache[resolved];
-      return require(resolved);
+      raw = require(resolved);
     }
+    return parsePlaylistPayload(raw);
   } catch (error) {
     console.error('Failed to load playlist file:', filepath, error.message);
   }
   return null;
 }
 
-function savePlaylistFileToDisk(filename, playlist) {
+function loadPlaylistFromFile(filepath) {
+  const data = loadPlaylistData(filepath);
+  return data ? data.tracks : null;
+}
+
+function savePlaylistFileToDisk(filename, playlist, description) {
   if (!filename || !Array.isArray(playlist)) return false;
   const safeName = sanitizePlaylistFilename(filename);
   if (!safeName.endsWith('.js') && !safeName.endsWith('.json')) return false;
@@ -624,10 +649,13 @@ function savePlaylistFileToDisk(filename, playlist) {
       const backupName = `${safeName.replace(/\.(js|json)$/, '')}-${timestamp}${path.extname(safeName)}`;
       fs.copyFileSync(filepath, path.join(backupsDir, backupName));
     }
+    const payload = description
+      ? { description: description.trim(), tracks: playlist }
+      : playlist;
     if (safeName.endsWith('.json')) {
-      fs.writeFileSync(filepath, JSON.stringify(playlist, null, 2));
+      fs.writeFileSync(filepath, JSON.stringify(payload, null, 2));
     } else {
-      const contents = `module.exports = ${JSON.stringify(playlist, null, 2)};\n`;
+      const contents = `module.exports = ${JSON.stringify(payload, null, 2)};\n`;
       fs.writeFileSync(filepath, contents);
     }
     return true;
@@ -722,7 +750,8 @@ function appendSongToPlaylistFile(song, playlistFile, options) {
   if (!playlistFile) return false;
   const safeName = sanitizePlaylistFilename(path.basename(playlistFile));
   const filepath = path.join(PLAYLISTS_DIR, safeName);
-  const playlist = loadPlaylistFromFile(filepath) || [];
+  const playlistData = loadPlaylistData(filepath);
+  const playlist = playlistData?.tracks || [];
   const searchString = buildSearchStringFromSong(song);
   if (!searchString) return false;
   if (options?.dedupe && playlistHasSong(playlist, song, searchString)) {
@@ -736,7 +765,7 @@ function appendSongToPlaylistFile(song, playlistFile, options) {
     entry.videoId = song.videoId;
   }
   playlist.push(entry);
-  return savePlaylistFileToDisk(safeName, playlist);
+  return savePlaylistFileToDisk(safeName, playlist, playlistData?.description || '');
 }
 
 function loadAudioOutput() {
@@ -1096,7 +1125,15 @@ app.post('/api/event-presets', (req, res) => {
 
 app.get('/api/playlists/files', (req, res) => {
   const files = listPlaylistFiles();
-  res.json({ files });
+  const payload = files.map((file) => {
+    const filepath = path.join(PLAYLISTS_DIR, file);
+    const data = loadPlaylistData(filepath);
+    return {
+      file,
+      description: data?.description || ''
+    };
+  });
+  res.json({ files: payload });
 });
 
 app.post('/api/ai/tag-track', async (req, res) => {
@@ -1158,15 +1195,16 @@ app.get('/api/playlists/file', (req, res) => {
   if (!fs.existsSync(filepath)) {
     return res.status(404).json({ error: 'Playlist file not found' });
   }
-  const playlist = loadPlaylistFromFile(filepath);
+  const data = loadPlaylistData(filepath);
+  const playlist = data?.tracks;
   if (!Array.isArray(playlist)) {
     return res.status(400).json({ error: 'Playlist file is invalid' });
   }
-  res.json({ playlist, filename: safeName });
+  res.json({ playlist, filename: safeName, description: data?.description || '' });
 });
 
 app.post('/api/playlists/file', (req, res) => {
-  const { name, playlist } = req.body || {};
+  const { name, playlist, description } = req.body || {};
   if (!name || typeof name !== 'string' || !Array.isArray(playlist)) {
     return res.status(400).json({ error: 'Invalid playlist payload' });
   }
@@ -1176,11 +1214,18 @@ app.post('/api/playlists/file', (req, res) => {
   }
 
   try {
-    const saved = savePlaylistFileToDisk(safeName, playlist);
+    let finalDescription = typeof description === 'string' ? description : '';
+    if (!finalDescription) {
+      const existing = loadPlaylistData(path.join(PLAYLISTS_DIR, safeName));
+      if (existing?.description) {
+        finalDescription = existing.description;
+      }
+    }
+    const saved = savePlaylistFileToDisk(safeName, playlist, finalDescription);
     if (!saved) {
       throw new Error('Failed to save playlist file');
     }
-    res.json({ success: true, filename: safeName });
+    res.json({ success: true, filename: safeName, description: finalDescription });
   } catch (error) {
     console.error('Failed to save playlist file:', error.message);
     res.status(500).json({ error: 'Failed to save playlist file' });
