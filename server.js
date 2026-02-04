@@ -1001,13 +1001,17 @@ app.post('/api/cache/rebuild', async (req, res) => {
 
 app.post('/api/cache/rebuild-thumbnails', async (req, res) => {
   try {
+    console.log('🖼️ Rebuild thumbnails requested');
     if (!fs.existsSync(AUDIO_CACHE_DIR)) {
+      console.log('🖼️ No audio cache directory found');
       return res.json({ success: true, rebuilt: 0 });
     }
 
     const manifest = loadCacheManifest();
     const files = fs.readdirSync(AUDIO_CACHE_DIR).filter(name => name.endsWith('.mp3'));
     let rebuilt = 0;
+
+    console.log(`🖼️ Rebuilding thumbnails for ${files.length} cached tracks`);
 
     for (const name of files) {
       const youtubeId = name.replace('.mp3', '');
@@ -1056,6 +1060,7 @@ app.post('/api/cache/rebuild-thumbnails', async (req, res) => {
     }
 
     saveCacheManifest(manifest);
+    console.log(`🖼️ Thumbnail rebuild complete. Rebuilt: ${rebuilt}`);
     res.json({ success: true, rebuilt });
   } catch (error) {
     res.status(500).json({ error: 'Failed to rebuild thumbnails' });
