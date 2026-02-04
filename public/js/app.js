@@ -88,7 +88,7 @@ class VirtualJukebox {
         
         // Warn before leaving page if music is playing
         window.addEventListener('beforeunload', (e) => {
-            const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+            const isHeadless = this.systemMode ? this.systemMode === 'headless' : false;
             if (isHeadless) {
                 return;
             }
@@ -247,6 +247,10 @@ class VirtualJukebox {
         this.nextEventBtn = document.getElementById('nextEventBtn');
         this.eventLoopBadge = document.getElementById('eventLoopBadge');
         this.playlistBrowserTitle = document.getElementById('playlistBrowserTitle');
+        this.eventInjectToggle = document.getElementById('eventInjectToggle');
+        this.eventDedupeToggle = document.getElementById('eventDedupeToggle');
+        this.eventInjectFallbackToggle = document.getElementById('eventInjectFallbackToggle');
+        this.eventDescription = document.getElementById('eventDescription');
         
         // Playlist browser elements
         this.expandPlaylistBtn = document.getElementById('expandPlaylistBtn');
@@ -374,6 +378,18 @@ class VirtualJukebox {
 
         if (this.nextEventBtn) {
             this.nextEventBtn.addEventListener('click', () => this.nextEvent());
+        }
+
+        if (this.eventInjectToggle) {
+            this.eventInjectToggle.addEventListener('change', () => this.updateActiveEventFlags());
+        }
+
+        if (this.eventDedupeToggle) {
+            this.eventDedupeToggle.addEventListener('change', () => this.updateActiveEventFlags());
+        }
+
+        if (this.eventInjectFallbackToggle) {
+            this.eventInjectFallbackToggle.addEventListener('change', () => this.updateActiveEventFlags());
         }
         
         // Play history controls
@@ -521,6 +537,7 @@ class VirtualJukebox {
 
         this.socket.on('systemModeUpdated', (data) => {
             if (data && data.mode) {
+                console.log(`🧭 System mode updated: ${data.mode}`);
                 this.updateModeBadge(data.mode === 'headless');
                 this.systemMode = data.mode;
             }
@@ -580,6 +597,7 @@ class VirtualJukebox {
             const response = await fetch('/api/system-mode');
             if (!response.ok) return;
             const data = await response.json();
+            console.log(`🧭 Active system mode: ${data.mode}`);
             this.updateModeBadge(data.mode === 'headless');
             this.systemMode = data.mode;
         } catch (error) {
@@ -655,6 +673,7 @@ class VirtualJukebox {
             const data = await response.json();
             this.eventSchedule = Array.isArray(data.events) ? data.events : [];
             this.activeEventId = data.activeEventId || (this.eventSchedule[0] && this.eventSchedule[0].id) || '';
+            this.fallbackPlaylistFile = data.fallbackPlaylistFile || '';
             this.renderEventSelector();
         } catch (error) {
             console.error('Failed to load events:', error);
@@ -665,6 +684,8 @@ class VirtualJukebox {
         if (!this.eventSelect) return;
         if (!this.eventSchedule || !this.eventSchedule.length) {
             this.eventSelect.innerHTML = '<option value="">No events</option>';
+            this.setEventToggleVisibility(false);
+            this.updateEventDescription(null);
             return;
         }
         this.eventSelect.innerHTML = this.eventSchedule
@@ -674,6 +695,9 @@ class VirtualJukebox {
             this.eventSelect.value = this.activeEventId;
         }
         this.updateEventLoopBadge();
+        this.syncEventToggles();
+        this.updateEventDescription(this.getActiveEventConfig());
+        this.setEventToggleVisibility(true);
     }
 
     updateEventSelector(activeId, displayName) {
@@ -685,6 +709,8 @@ class VirtualJukebox {
         if (this.playlistBrowserTitle && displayName) {
             this.playlistBrowserTitle.innerHTML = `<i class="fas fa-heart mr-2"></i>${displayName} Browser`;
         }
+        this.syncEventToggles();
+        this.updateEventDescription(this.getActiveEventConfig());
     }
 
     updateEventLoopBadge(loopValue) {
@@ -696,6 +722,82 @@ class VirtualJukebox {
         } else {
             this.eventLoopBadge.textContent = 'No Loop';
             this.eventLoopBadge.className = 'text-xs text-amber-200 bg-amber-800/60 px-2 py-1 rounded-full border border-amber-400/40';
+        }
+    }
+
+    getActiveEventConfig() {
+        if (!this.eventSchedule || !this.eventSchedule.length) return null;
+        return this.eventSchedule.find(event => event.id === this.activeEventId) || this.eventSchedule[0];
+    }
+
+    syncEventToggles() {
+        const activeEvent = this.getActiveEventConfig();
+        if (!activeEvent) {
+            this.setEventToggleVisibility(false);
+            this.updateEventDescription(null);
+            return;
+        }
+        if (this.eventInjectToggle) {
+            this.eventInjectToggle.checked = !!activeEvent.allowUserInject;
+        }
+        if (this.eventDedupeToggle) {
+            this.eventDedupeToggle.checked = activeEvent.dedupeUserInject !== false;
+        }
+        if (this.eventInjectFallbackToggle) {
+            this.eventInjectFallbackToggle.checked = activeEvent.injectToFallback !== false;
+        }
+        this.setEventToggleVisibility(true);
+        this.updateEventDescription(activeEvent);
+    }
+
+    updateEventDescription(event) {
+        if (!this.eventDescription) return;
+        const text = event?.description ? event.description.trim() : '';
+        if (text) {
+            this.eventDescription.textContent = text;
+            this.eventDescription.classList.remove('hidden');
+        } else {
+            this.eventDescription.textContent = '';
+            this.eventDescription.classList.add('hidden');
+        }
+    }
+
+    setEventToggleVisibility(isVisible) {
+        const wrapper = this.eventInjectToggle?.closest('div');
+        if (wrapper) {
+            wrapper.classList.toggle('hidden', !isVisible);
+        }
+    }
+
+    async updateActiveEventFlags() {
+        const activeEvent = this.getActiveEventConfig();
+        if (!activeEvent) return;
+        activeEvent.allowUserInject = !!this.eventInjectToggle?.checked;
+        activeEvent.dedupeUserInject = this.eventDedupeToggle ? this.eventDedupeToggle.checked : true;
+        activeEvent.injectToFallback = this.eventInjectFallbackToggle ? this.eventInjectFallbackToggle.checked : true;
+        await this.saveEventSchedule();
+    }
+
+    async saveEventSchedule() {
+        if (!this.eventSchedule || !this.eventSchedule.length) return;
+        try {
+            const response = await fetch('/api/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    themeKey: getEventConfig().themeKey || 'wedding',
+                    events: this.eventSchedule,
+                    activeEventId: this.activeEventId,
+                    fallbackPlaylistFile: this.fallbackPlaylistFile
+                })
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save events');
+            }
+            this.showToast('Event updated', 'success');
+        } catch (error) {
+            console.error('Failed to save events:', error);
+            this.showToast('Failed to update event', 'error');
         }
     }
 
@@ -902,8 +1004,11 @@ class VirtualJukebox {
     }
 
     async playNextSong() {
+        const isHeadlessMode = this.systemMode
+            ? this.systemMode === 'headless'
+            : (this.currentSong && this.currentSong.source === 'headless-audio');
         // Check if we're using the audio service (headless mode or fallback songs)
-        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+        if (isHeadlessMode) {
             // Send skip command directly to audio service
             this.socket.emit('skipCommand');
             this.showToast('Playing next song!', 'success');
@@ -943,8 +1048,12 @@ class VirtualJukebox {
             console.log('✅ Socket connection confirmed - pong received');
         });
         
+        const isHeadlessMode = this.systemMode
+            ? this.systemMode === 'headless'
+            : (this.currentSong && this.currentSong.source === 'headless-audio');
+
         // If using headless audio, ask the audio service to fade then skip
-        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+        if (isHeadlessMode) {
             console.log('📤 Headless audio detected, sending fade command to audio service');
             const durationMs = this.getFadeDurationMs();
             this.setFadeUI(true, durationMs);
@@ -954,17 +1063,8 @@ class VirtualJukebox {
             return;
         }
 
-        // Always try to send skip command if something is playing (non-headless)
-        if (this.isPlaying) {
-            console.log('📤 Audio is playing, sending skip command to audio service');
-            console.log('Emitting skipCommand via socket...');
-            this.socket.emit('skipCommand');
-            this.showToast('Skipping to next song...', 'info');
-            return;
-        }
-        
-        // If nothing seems to be playing, try to start the next song
-        console.log('🚀 Nothing playing, trying to start next song...');
+        // In browser mode, just advance the queue
+        console.log('🚀 Browser mode, advancing queue...');
         this.playNextSong();
     }
 
@@ -1018,9 +1118,7 @@ class VirtualJukebox {
     }
 
     confirmNavigation(url) {
-        const isHeadless = this.systemMode
-            ? this.systemMode === 'headless'
-            : this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
+        const isHeadless = this.systemMode ? this.systemMode === 'headless' : false;
         if (isHeadless) {
             window.location.href = url;
             return;
@@ -1085,8 +1183,7 @@ class VirtualJukebox {
         if (this.systemMode) {
             this.updateModeBadge(this.systemMode === 'headless');
         } else {
-            const isHeadless = song.source === 'headless-audio' || song.source === 'fallback';
-            this.updateModeBadge(isHeadless);
+            this.updateModeBadge(false);
         }
         
         // Handle mic breaks differently
@@ -1096,7 +1193,7 @@ class VirtualJukebox {
         } else {
             this.updateNowPlayingDisplay(song);
             // Only start playing if it's a new song and we have a videoId
-            if (isNewSong && song.videoId && this.isPlayerReady) {
+            if (isNewSong && song.videoId && this.isPlayerReady && this.systemMode === 'browser') {
                 this.playSong(song.videoId);
             }
             this.showPlayerControls();
@@ -1863,9 +1960,12 @@ class VirtualJukebox {
     togglePlayPause() {
         console.log('🎵 Play/Pause button clicked');
         console.log('Current state - isPlaying:', this.isPlaying, 'currentSong:', this.currentSong);
-        
-        // Check if we're using the audio service (headless mode or fallback songs)
-        if (this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback')) {
+        const isHeadlessMode = this.systemMode
+            ? this.systemMode === 'headless'
+            : (this.currentSong && this.currentSong.source === 'headless-audio');
+
+        // Check if we're using the audio service (headless mode)
+        if (isHeadlessMode) {
             // Test socket connection first
             console.log('🏓 Testing socket connection before pause...');
             this.socket.emit('ping');
@@ -1918,15 +2018,21 @@ class VirtualJukebox {
     setVolume(volume) {
         const volumeInt = parseInt(volume, 10);
         const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
-        const isHeadless = this.currentSong && (this.currentSong.source === 'headless-audio' || this.currentSong.source === 'fallback');
-
         this.updateVolumeValue(clamped);
         jukeboxSettings.set('volumePercent', clamped);
 
-        if (isHeadless || !this.player || !this.isPlayerReady) {
+        const isHeadlessMode = this.systemMode
+            ? this.systemMode === 'headless'
+            : (this.currentSong && this.currentSong.source === 'headless-audio');
+        if (isHeadlessMode) {
             const normalized = clamped / 100;
             console.log('🔊 Sending volume command to audio service:', normalized);
             this.socket.emit('volumeCommand', { volume: normalized });
+            this.scheduleVolumeToast(clamped);
+            return;
+        }
+
+        if (!this.player || !this.isPlayerReady) {
             this.scheduleVolumeToast(clamped);
             return;
         }

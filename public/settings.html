@@ -665,6 +665,9 @@
                         if (target.classList.contains('event-name')) {
                             this.eventSchedule[index].name = target.value;
                         }
+                        if (target.classList.contains('event-description')) {
+                            this.eventSchedule[index].description = target.value;
+                        }
                     });
 
                     eventList.addEventListener('change', (event) => {
@@ -712,6 +715,19 @@
                                 this.activeEventId = this.eventSchedule[0]?.id || null;
                             }
                             this.renderEventSchedule();
+                        }
+                        if (target.classList.contains('event-use-backup')) {
+                            const eventItem = this.eventSchedule[index];
+                            if (!eventItem || !eventItem.playlistFile) return;
+                            const base = eventItem.playlistFile.split('/').pop().replace(/\.js$/, '');
+                            const backupFile = `${base}-backup.js`;
+                            if (!this.playlistFiles.includes(backupFile)) {
+                                this.showToast('Backup playlist not found', 'error');
+                                return;
+                            }
+                            eventItem.playlistFile = `playlists/${backupFile}`;
+                            this.renderEventSchedule();
+                            this.saveEventSchedule();
                         }
                     });
                 }
@@ -893,8 +909,9 @@
                     const injectChecked = event.allowUserInject ? 'checked' : '';
                     const dedupeChecked = event.dedupeUserInject !== false ? 'checked' : '';
                     const fallbackChecked = event.injectToFallback !== false ? 'checked' : '';
+                    const description = event.description || '';
                     return `
-                        <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 grid grid-cols-1 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] gap-3 items-center" data-index="${index}">
+                        <div class="bg-gray-800/70 border border-gray-700 rounded-xl p-4 grid grid-cols-1 xl:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto_auto] gap-3 items-center" data-index="${index}">
                             <label class="flex items-center gap-2 text-xs text-gray-300">
                                 <input type="radio" name="activeEvent" class="event-active" data-index="${index}" ${activeChecked}>
                                 Active
@@ -904,6 +921,7 @@
                                 <option value="">Select playlist</option>
                                 ${options}
                             </select>
+                            <input class="event-description w-full bg-gray-700 text-white rounded px-3 py-2 text-sm xl:col-span-3" data-index="${index}" value="${description}" placeholder="Description (optional)">
                             <label class="flex items-center gap-2 text-xs text-gray-300">
                                 <input type="checkbox" class="event-loop" data-index="${index}" ${loopChecked}>
                                 Loop
@@ -922,6 +940,9 @@
                                     Also fallback
                                 </label>
                             </div>
+                            <button class="event-use-backup bg-amber-700 hover:bg-amber-600 text-white px-2 py-1 rounded text-xs" data-index="${index}">
+                                Use Backup
+                            </button>
                             <div class="flex gap-2">
                                 <button class="event-move-up bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move up">↑</button>
                                 <button class="event-move-down bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs" data-index="${index}" title="Move down">↓</button>
@@ -960,6 +981,7 @@
                     id: this.createEventId(name),
                     name,
                     playlistFile,
+                    description: '',
                     loop: true,
                     allowUserInject: false,
                     dedupeUserInject: true,
@@ -1120,14 +1142,14 @@
                                 activeEventId: 'ceremony',
                                 fallbackPlaylistFile: 'playlists/wedding-playlist.js',
                                 events: [
-                                    { id: 'ceremony', name: 'Ceremony', playlistFile: 'playlists/bride-playlist.js', loop: false },
-                                    { id: 'dinner', name: 'Dinner', playlistFile: 'playlists/bride-playlist.js', loop: true },
-                                    { id: 'first-dance', name: 'First Dance', playlistFile: 'playlists/wedding-playlist.js', loop: false },
-                                    { id: 'parents-dance', name: 'Parents Dance', playlistFile: 'playlists/wedding-playlist.js', loop: false },
-                                    { id: 'bouquet-toss', name: 'Bouquet Toss', playlistFile: 'playlists/wedding-playlist.js', loop: false },
-                                    { id: 'garter-toss', name: 'Garter Toss', playlistFile: 'playlists/wedding-playlist.js', loop: false },
-                                    { id: 'party', name: 'Party', playlistFile: 'playlists/wedding-playlist.js', loop: true },
-                                    { id: 'exit', name: 'Celebration Exit', playlistFile: 'playlists/wedding-playlist.js', loop: false }
+                                    { id: 'ceremony', name: 'Ceremony', playlistFile: 'playlists/wedding-ceremony.js', loop: false },
+                                    { id: 'dinner', name: 'Dinner', playlistFile: 'playlists/wedding-dinner.js', loop: true },
+                                    { id: 'first-dance', name: 'First Dance', playlistFile: 'playlists/wedding-first-dance.js', loop: false },
+                                    { id: 'parents-dance', name: 'Parents Dance', playlistFile: 'playlists/wedding-parents-dance.js', loop: false },
+                                    { id: 'bouquet-toss', name: 'Bouquet Toss', playlistFile: 'playlists/wedding-bouquet-toss.js', loop: false },
+                                    { id: 'garter-toss', name: 'Garter Toss', playlistFile: 'playlists/wedding-garter-toss.js', loop: false },
+                                    { id: 'party', name: 'Party', playlistFile: 'playlists/wedding-party.js', loop: true },
+                                    { id: 'exit', name: 'Celebration Exit', playlistFile: 'playlists/wedding-exit.js', loop: false }
                                 ]
                             }
                         }
@@ -1220,11 +1242,11 @@
                         eventsByTheme: {
                             house: {
                                 activeEventId: 'warmup',
-                                fallbackPlaylistFile: 'playlists/wedding-playlist.js',
+                                fallbackPlaylistFile: 'playlists/house-party.js',
                                 events: [
-                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/wedding-playlist.js', loop: true },
-                                    { id: 'party', name: 'Party Peak', playlistFile: 'playlists/wedding-playlist.js', loop: true },
-                                    { id: 'late-night', name: 'Late Night Chill', playlistFile: 'playlists/bride-playlist.js', loop: true }
+                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/house-warmup.js', loop: true },
+                                    { id: 'party', name: 'Party Peak', playlistFile: 'playlists/house-party.js', loop: true },
+                                    { id: 'late-night', name: 'Late Night Chill', playlistFile: 'playlists/house-late-night.js', loop: true }
                                 ]
                             }
                         }
@@ -1267,11 +1289,11 @@
                         eventsByTheme: {
                             studio: {
                                 activeEventId: 'warmup',
-                                fallbackPlaylistFile: 'playlists/wedding-playlist.js',
+                                fallbackPlaylistFile: 'playlists/studio-workout.js',
                                 events: [
-                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/wedding-playlist.js', loop: true },
-                                    { id: 'workout', name: 'Workout', playlistFile: 'playlists/wedding-playlist.js', loop: true },
-                                    { id: 'cooldown', name: 'Cooldown', playlistFile: 'playlists/bride-playlist.js', loop: true }
+                                    { id: 'warmup', name: 'Warmup', playlistFile: 'playlists/studio-warmup.js', loop: true },
+                                    { id: 'workout', name: 'Workout', playlistFile: 'playlists/studio-workout.js', loop: true },
+                                    { id: 'cooldown', name: 'Cooldown', playlistFile: 'playlists/studio-cooldown.js', loop: true }
                                 ]
                             }
                         }

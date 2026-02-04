@@ -41,49 +41,49 @@
         {
           "id": "ceremony",
           "name": "Ceremony",
-          "playlistFile": "playlists/bride-playlist.js",
+          "playlistFile": "playlists/wedding-ceremony.js",
           "loop": false
         },
         {
           "id": "dinner",
           "name": "Dinner",
-          "playlistFile": "playlists/bride-playlist.js",
+          "playlistFile": "playlists/wedding-dinner.js",
           "loop": true
         },
         {
           "id": "first-dance",
           "name": "First Dance",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-first-dance.js",
           "loop": false
         },
         {
           "id": "parents-dance",
           "name": "Parents Dance",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-parents-dance.js",
           "loop": false
         },
         {
           "id": "bouquet-toss",
           "name": "Bouquet Toss",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-bouquet-toss.js",
           "loop": false
         },
         {
           "id": "garter-toss",
           "name": "Garter Toss",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-garter-toss.js",
           "loop": false
         },
         {
           "id": "party",
           "name": "Party",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-party.js",
           "loop": true
         },
         {
           "id": "exit",
           "name": "Celebration Exit",
-          "playlistFile": "playlists/wedding-playlist.js",
+          "playlistFile": "playlists/wedding-exit.js",
           "loop": false
         }
       ]
