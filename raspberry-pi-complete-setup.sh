@@ -8,9 +8,6 @@ set -e  # Exit on any error
 echo "🥧 Event Jukebox - Raspberry Pi Setup"
 echo "========================================"
 echo ""
-print_warning "This is the native (non-Docker) setup script."
-print_warning "If you want Docker-based setup, use: raspberry-pi-docker-setup.sh"
-echo ""
 
 # Colors for output
 RED='\033[0;31m'
@@ -34,6 +31,10 @@ print_warning() {
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
+
+print_warning "This is the native (non-Docker) setup script."
+print_warning "If you want Docker-based setup, use: raspberry-pi-docker-setup.sh"
+echo ""
 
 # Determine the app user for services and permissions
 APP_USER="${SUDO_USER:-$(whoami)}"
