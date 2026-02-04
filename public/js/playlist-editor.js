@@ -18,6 +18,11 @@ const newPlaylistName = document.getElementById('newPlaylistName');
 const createPlaylistBtn = document.getElementById('createPlaylistBtn');
 const duplicatePlaylistName = document.getElementById('duplicatePlaylistName');
 const duplicatePlaylistBtn = document.getElementById('duplicatePlaylistBtn');
+const viewJsonBtn = document.getElementById('viewJsonBtn');
+const jsonModal = document.getElementById('jsonModal');
+const jsonOutput = document.getElementById('jsonOutput');
+const closeJsonBtn = document.getElementById('closeJsonBtn');
+const copyJsonBtn = document.getElementById('copyJsonBtn');
 
 let currentPlaylist = [];
 let previewPlayer = null;
@@ -71,12 +76,15 @@ function renderPlaylist() {
       ? `Energy ${item.tags.energy} · ${item.tags.pace}${item.tags.intent?.length ? ` · ${item.tags.intent.join(', ')}` : ''}`
       : 'Tags not generated';
     const tagsJson = item.tags ? JSON.stringify(item.tags, null, 2) : '';
+    const fallbackBadge = item.fallback
+      ? '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/40">fallback tags</span>'
+      : '';
     row.innerHTML = `
       <div class="text-xs text-slate-500 mt-1">${index + 1}</div>
       <div class="flex-1">
         <input data-index="${index}" class="playlist-search w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm" value="${item.search || ''}" />
         <input data-index="${index}" class="playlist-type w-full mt-2 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs" value="${item.type || ''}" placeholder="Type (optional)" />
-        <div class="mt-2 text-xs text-slate-400">${tagSummary}</div>
+        <div class="mt-2 text-xs text-slate-400">${tagSummary}${fallbackBadge}</div>
         <div class="mt-2 hidden" data-tags-panel="${index}">
           <textarea data-index="${index}" class="playlist-tags w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs h-28" placeholder="Edit tags JSON">${tagsJson}</textarea>
         </div>
@@ -310,6 +318,39 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
   duplicatePlaylistName.value = '';
   showToast('Playlist duplicated', 'success');
 });
+
+if (viewJsonBtn) {
+  viewJsonBtn.addEventListener('click', () => {
+    if (jsonOutput) {
+      jsonOutput.value = JSON.stringify(currentPlaylist, null, 2);
+    }
+    if (jsonModal) {
+      jsonModal.classList.remove('hidden');
+      jsonModal.classList.add('flex');
+    }
+  });
+}
+
+if (closeJsonBtn) {
+  closeJsonBtn.addEventListener('click', () => {
+    if (jsonModal) {
+      jsonModal.classList.add('hidden');
+      jsonModal.classList.remove('flex');
+    }
+  });
+}
+
+if (copyJsonBtn) {
+  copyJsonBtn.addEventListener('click', async () => {
+    if (!jsonOutput) return;
+    try {
+      await navigator.clipboard.writeText(jsonOutput.value);
+      showToast('JSON copied', 'success');
+    } catch (error) {
+      showToast('Copy failed', 'error');
+    }
+  });
+}
 
 async function queueTagging(item, index) {
   if (!item || !item.videoId || tagQueue.has(item.videoId)) return;
