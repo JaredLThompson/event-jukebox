@@ -309,11 +309,11 @@
             <div class="wifi-info">
                 <div class="wifi-item">
                     <span class="wifi-label">Network:</span>
-                    <span class="wifi-value" data-event-text="wifiSsid">Wedding-Jukebox</span>
+                    <span class="wifi-value" data-event-text="wifiSsid">--</span>
                 </div>
                 <div class="wifi-item">
                     <span class="wifi-label">Password:</span>
-                    <span class="wifi-value" data-event-text="wifiPassword">WeddingMusic2026</span>
+                    <span class="wifi-value" data-event-text="wifiPassword">--</span>
                 </div>
             </div>
         </div>
@@ -356,8 +356,8 @@
         // Wait for DOM to be ready
         document.addEventListener('DOMContentLoaded', function() {
             // Generate WiFi QR Code
-            const wifiSSID = window.eventConfig?.wifi?.ssid || 'Wedding-Jukebox';
-            const wifiPassword = window.eventConfig?.wifi?.password || 'WeddingMusic2026';
+            const wifiSSID = window.eventConfig?.wifi?.ssid || '';
+            const wifiPassword = window.eventConfig?.wifi?.password || '';
             const wifiSecurity = 'WPA'; // WPA/WEP/nopass
             
             // WiFi QR code format: WIFI:T:WPA;S:SSID;P:password;H:false;;
@@ -365,8 +365,15 @@
             const wifiQrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(wifiString)}`;
             
             const wifiQrImg = document.getElementById('wifiQrCode');
-            wifiQrImg.src = wifiQrApiUrl;
-            wifiQrImg.title = 'Scan to connect to WiFi automatically';
+            if (!wifiSSID || !wifiPassword) {
+                wifiQrImg.style.display = 'none';
+                const container = wifiQrImg.parentElement;
+                const note = container.querySelector('.wifi-qr-note');
+                note.textContent = 'WiFi QR code not available - configure WiFi in Event Settings';
+            } else {
+                wifiQrImg.src = wifiQrApiUrl;
+                wifiQrImg.title = 'Scan to connect to WiFi automatically';
+            }
             
             wifiQrImg.onerror = function() {
                 console.error('WiFi QR Code failed to load');

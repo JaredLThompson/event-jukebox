@@ -245,7 +245,8 @@ polkit.addRule(function(action, subject) {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
         action.id === "org.freedesktop.NetworkManager.network-control" ||
         action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
-        action.id === "org.freedesktop.NetworkManager.wifi.share") {
+        action.id === "org.freedesktop.NetworkManager.wifi.share.open" ||
+        action.id === "org.freedesktop.NetworkManager.wifi.share.protected") {
       return polkit.Result.YES;
     }
   }

@@ -97,7 +97,8 @@ function buildAuthFixCommand(user) {
         '    if (action.id === \"org.freedesktop.NetworkManager.wifi.scan\" ||',
         '        action.id === \"org.freedesktop.NetworkManager.network-control\" ||',
         '        action.id === \"org.freedesktop.NetworkManager.settings.modify.system\" ||',
-        '        action.id === \"org.freedesktop.NetworkManager.wifi.share\") {',
+        '        action.id === \"org.freedesktop.NetworkManager.wifi.share.open\" ||',
+        '        action.id === \"org.freedesktop.NetworkManager.wifi.share.protected\") {',
         '      return polkit.Result.YES;',
         '    }',
         '  }',
@@ -439,17 +440,36 @@ if (authFixToggleBtn && authFixPanel) {
 if (authFixCopyBtn) {
     authFixCopyBtn.addEventListener('click', async () => {
         if (!authFixCommandText) return;
+        const showCopyStatus = (message) => {
+            authFixCopyBtn.textContent = message;
+            setTimeout(() => {
+                authFixCopyBtn.textContent = 'Copy Command';
+            }, 1500);
+        };
+        const fallbackCopy = () => {
+            if (!authFixCommand) return false;
+            authFixCommand.removeAttribute('readonly');
+            authFixCommand.select();
+            authFixCommand.setSelectionRange(0, authFixCommand.value.length);
+            const ok = document.execCommand('copy');
+            authFixCommand.setAttribute('readonly', 'readonly');
+            window.getSelection().removeAllRanges();
+            return ok;
+        };
         try {
-            await navigator.clipboard.writeText(authFixCommandText);
-            authFixCopyBtn.textContent = 'Copied!';
-            setTimeout(() => {
-                authFixCopyBtn.textContent = 'Copy Command';
-            }, 1500);
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(authFixCommandText);
+                showCopyStatus('Copied!');
+                return;
+            }
+            if (fallbackCopy()) {
+                showCopyStatus('Copied!');
+                return;
+            }
+            showCopyStatus('Copy Failed');
         } catch (error) {
-            authFixCopyBtn.textContent = 'Copy Failed';
-            setTimeout(() => {
-                authFixCopyBtn.textContent = 'Copy Command';
-            }, 1500);
+            const ok = fallbackCopy();
+            showCopyStatus(ok ? 'Copied!' : 'Copy Failed');
         }
     });
 }
