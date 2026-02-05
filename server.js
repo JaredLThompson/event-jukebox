@@ -15,6 +15,8 @@ const SpotifyService = require('./spotify_service');
 require('dotenv').config();
 
 const OAUTH_FILE = path.join(__dirname, 'oauth.json');
+const HOSTAPD_CONF_PATH = process.env.HOSTAPD_CONF || '/etc/hostapd/hostapd.conf';
+const HOSTAPD_SERVICE = process.env.HOSTAPD_SERVICE || 'hostapd';
 
 function parseCurlHeaders(curlText) {
   const headers = {};
@@ -250,7 +252,9 @@ app.use((req, res, next) => {
     '/settings',
     '/settings.html',
     '/playlist-editor',
-    '/playlist-editor.html'
+    '/playlist-editor.html',
+    '/hostapd',
+    '/hostapd.html'
   ]);
   if (protectedPaths.has(req.path)) {
     return requireAuthPage(req, res, next);
@@ -1573,6 +1577,10 @@ app.get('/venue', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'venue.html'));
 });
 
+app.get('/hostapd', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hostapd.html'));
+});
+
 app.get('/cache', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'cache.html'));
 });
@@ -1583,6 +1591,71 @@ app.get('/kiosk', (req, res) => {
 
 app.get('/qr', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'qr.html'));
+});
+
+app.get('/api/hostapd', async (req, res) => {
+  try {
+    const contents = fs.readFileSync(HOSTAPD_CONF_PATH, 'utf8');
+    const parsed = parseHostapdConfig(contents);
+    let serviceStatus = null;
+    try {
+      const { stdout } = await runSystemctl(['is-active', HOSTAPD_SERVICE]);
+      const status = stdout.trim();
+      serviceStatus = { ok: true, status, active: status === 'active' };
+    } catch (error) {
+      serviceStatus = { ok: false, error: error.stderr || error.message || 'systemctl unavailable' };
+    }
+    return res.json({ path: HOSTAPD_CONF_PATH, config: parsed.config, service: serviceStatus });
+  } catch (error) {
+    const statusCode = error.code === 'ENOENT' ? 404 : 500;
+    return res.status(statusCode).json({
+      error: 'Unable to read hostapd configuration.',
+      details: error.message
+    });
+  }
+});
+
+app.get('/api/hostapd/raw', (req, res) => {
+  try {
+    const contents = fs.readFileSync(HOSTAPD_CONF_PATH, 'utf8');
+    res.setHeader('Content-Type', 'text/plain');
+    return res.send(contents);
+  } catch (error) {
+    const statusCode = error.code === 'ENOENT' ? 404 : 500;
+    return res.status(statusCode).send(`Unable to read hostapd configuration: ${error.message}`);
+  }
+});
+
+app.post('/api/hostapd', async (req, res) => {
+  const { config, restart = true } = req.body || {};
+  if (!config || typeof config !== 'object') {
+    return res.status(400).json({ error: 'config object is required.' });
+  }
+
+  try {
+    const currentContents = fs.readFileSync(HOSTAPD_CONF_PATH, 'utf8');
+    const { contents: updatedContents, config: updatedConfig } = applyHostapdUpdates(currentContents, config);
+    fs.writeFileSync(HOSTAPD_CONF_PATH, updatedContents, 'utf8');
+
+    let restartStatus = null;
+    if (restart) {
+      try {
+        await runSystemctl(['restart', HOSTAPD_SERVICE]);
+        const { stdout } = await runSystemctl(['is-active', HOSTAPD_SERVICE]);
+        const status = stdout.trim();
+        restartStatus = { ok: true, status, active: status === 'active' };
+      } catch (error) {
+        restartStatus = { ok: false, error: error.stderr || error.message || 'Failed to restart hostapd.' };
+      }
+    }
+
+    return res.json({ ok: true, path: HOSTAPD_CONF_PATH, config: updatedConfig, restart: restartStatus });
+  } catch (error) {
+    return res.status(400).json({
+      error: 'Unable to update hostapd configuration.',
+      details: error.message
+    });
+  }
 });
 
 function resolveNmcliPath() {
@@ -1611,6 +1684,180 @@ function runNmcli(args) {
       resolve({ stdout, stderr });
     });
   });
+}
+
+function resolveSystemctlPath() {
+  const candidates = ['/usr/bin/systemctl', '/bin/systemctl', '/usr/sbin/systemctl', '/sbin/systemctl'];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function runSystemctl(args) {
+  const systemctlPath = resolveSystemctlPath();
+  if (!systemctlPath) {
+    const error = new Error('systemctl not available');
+    error.code = 'ENOENT';
+    throw error;
+  }
+  return new Promise((resolve, reject) => {
+    execFile(systemctlPath, args, { timeout: 15000 }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        return reject(error);
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+const HOSTAPD_ALLOWED_KEYS = new Set([
+  'interface',
+  'driver',
+  'ssid',
+  'hw_mode',
+  'channel',
+  'wmm_enabled',
+  'macaddr_acl',
+  'auth_algs',
+  'ignore_broadcast_ssid',
+  'wpa',
+  'wpa_passphrase',
+  'wpa_key_mgmt',
+  'rsn_pairwise',
+  'country_code'
+]);
+
+function parseHostapdConfig(contents) {
+  const lines = contents.split(/\r?\n/);
+  const entries = [];
+  const config = {};
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      entries.push({ type: 'raw', line });
+      return;
+    }
+    const eqIndex = line.indexOf('=');
+    if (eqIndex === -1) {
+      entries.push({ type: 'raw', line });
+      return;
+    }
+    const key = line.slice(0, eqIndex).trim();
+    const value = line.slice(eqIndex + 1).trim();
+    config[key] = value;
+    entries.push({ type: 'kv', key, line });
+  });
+
+  return { lines, entries, config };
+}
+
+function sanitizeHostapdValue(key, rawValue) {
+  if (typeof rawValue !== 'string') {
+    throw new Error(`${key} must be a string.`);
+  }
+  const value = rawValue.trim();
+  if (!HOSTAPD_ALLOWED_KEYS.has(key)) {
+    throw new Error(`Unsupported key: ${key}`);
+  }
+
+  switch (key) {
+    case 'interface':
+      if (!/^(wlan|wlx)[\\w-]+$/.test(value)) {
+        throw new Error('Invalid interface name.');
+      }
+      return value;
+    case 'ssid':
+      if (!value || value.length > 32) {
+        throw new Error('SSID must be 1-32 characters.');
+      }
+      if (/[\\r\\n]/.test(value)) {
+        throw new Error('SSID contains invalid characters.');
+      }
+      return value;
+    case 'wpa_passphrase':
+      if (value.length < 8 || value.length > 63) {
+        throw new Error('Passphrase must be 8-63 characters.');
+      }
+      return value;
+    case 'channel': {
+      const channel = Number(value);
+      if (!Number.isInteger(channel) || channel < 1 || channel > 165) {
+        throw new Error('Channel must be between 1 and 165.');
+      }
+      return String(channel);
+    }
+    case 'hw_mode':
+      if (!['g', 'a', 'b'].includes(value)) {
+        throw new Error('hw_mode must be g, a, or b.');
+      }
+      return value;
+    case 'wpa': {
+      const mode = Number(value);
+      if (![1, 2].includes(mode)) {
+        throw new Error('wpa must be 1 or 2.');
+      }
+      return String(mode);
+    }
+    case 'wmm_enabled':
+    case 'macaddr_acl':
+    case 'auth_algs':
+    case 'ignore_broadcast_ssid': {
+      const num = Number(value);
+      if (!Number.isInteger(num) || num < 0 || num > 2) {
+        throw new Error(`${key} must be a valid integer value.`);
+      }
+      return String(num);
+    }
+    case 'country_code':
+      if (!/^[A-Z]{2}$/.test(value)) {
+        throw new Error('country_code must be a 2-letter country code.');
+      }
+      return value;
+    case 'driver':
+    case 'wpa_key_mgmt':
+    case 'rsn_pairwise':
+      if (!value || /[\\r\\n]/.test(value)) {
+        throw new Error(`${key} contains invalid characters.`);
+      }
+      return value;
+    default:
+      return value;
+  }
+}
+
+function applyHostapdUpdates(contents, updates) {
+  const parsed = parseHostapdConfig(contents);
+  const sanitizedUpdates = {};
+
+  Object.entries(updates).forEach(([key, value]) => {
+    sanitizedUpdates[key] = sanitizeHostapdValue(key, value);
+  });
+
+  const remaining = new Set(Object.keys(sanitizedUpdates));
+  const nextLines = parsed.entries.map((entry) => {
+    if (entry.type !== 'kv') return entry.line;
+    if (!remaining.has(entry.key)) return entry.line;
+    remaining.delete(entry.key);
+    return `${entry.key}=${sanitizedUpdates[entry.key]}`;
+  });
+
+  if (remaining.size > 0) {
+    if (nextLines.length && nextLines[nextLines.length - 1].trim() !== '') {
+      nextLines.push('');
+    }
+    remaining.forEach((key) => {
+      nextLines.push(`${key}=${sanitizedUpdates[key]}`);
+    });
+  }
+
+  return {
+    contents: nextLines.join('\n').replace(/\n*$/, '\n'),
+    config: { ...parsed.config, ...sanitizedUpdates }
+  };
 }
 
 function getWifiApiBase() {

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" data-title-suffix="Hotspot Settings">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Jukebox - Hotspot Settings</title>
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+
+    <link href="css/output.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: radial-gradient(circle at top left, #111827 0%, #0f172a 45%, #020617 100%);
+            min-height: 100vh;
+        }
+
+        .panel {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 20px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 14px;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .badge-on {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+        }
+
+        .badge-off {
+            background: rgba(248, 113, 113, 0.2);
+            color: #fca5a5;
+        }
+
+        .input-dark {
+            background: rgba(15, 23, 42, 0.9);
+            color: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+        }
+
+        .input-dark:focus {
+            outline: 2px solid rgba(59, 130, 246, 0.6);
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-3 bg-gradient-to-r from-cyan-300 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
+                <i class="fas fa-broadcast-tower mr-3"></i>Hotspot Settings
+            </h1>
+            <p class="text-gray-300 text-lg">Edit the hostapd hotspot configuration on the Pi.</p>
+            <div class="mt-4 flex flex-wrap justify-center gap-3">
+                <a href="/settings" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-full transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Settings
+                </a>
+                <a href="/" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-full transition-colors">
+                    <i class="fas fa-home mr-2"></i>DJ Console
+                </a>
+            </div>
+        </header>
+
+        <section class="panel p-6 mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-semibold">Service Status</h2>
+                    <p class="text-gray-300 text-sm">Hostapd must be restarted after edits for changes to apply.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="serviceBadge" class="badge badge-off">unknown</span>
+                    <button id="refreshBtn" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-sm">
+                        <i class="fas fa-rotate mr-2"></i>Refresh
+                    </button>
+                    <button id="viewRawBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">
+                        <i class="fas fa-file-lines mr-2"></i>View Raw
+                    </button>
+                    <button id="downloadRawBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </button>
+                </div>
+            </div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="card p-4">
+                    <p class="text-sm text-gray-300">Config Path</p>
+                    <p id="configPath" class="text-sm font-semibold break-all">--</p>
+                </div>
+                <div class="card p-4">
+                    <p class="text-sm text-gray-300">Service Status</p>
+                    <p id="serviceStatus" class="text-sm font-semibold">--</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="rawPanel" class="panel p-6 mb-6 hidden">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-2xl font-semibold">Raw hostapd.conf</h2>
+                    <p class="text-gray-300 text-sm">Read-only view of the current configuration file.</p>
+                </div>
+                <button id="hideRawBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">
+                    Hide
+                </button>
+            </div>
+            <textarea id="rawConfig" class="input-dark rounded px-3 py-2 w-full h-64 font-mono text-xs" readonly></textarea>
+        </section>
+
+        <section class="panel p-8">
+            <form id="hostapdForm" class="space-y-6">
+                <div>
+                    <h2 class="text-2xl font-semibold mb-2">Hotspot Basics</h2>
+                    <p class="text-gray-300 text-sm">These settings control the SSID and security your guests see.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Interface</label>
+                        <input id="interface" class="input-dark rounded px-3 py-2 w-full" placeholder="wlan0" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">SSID</label>
+                        <input id="ssid" class="input-dark rounded px-3 py-2 w-full" placeholder="Event-Jukebox" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Password</label>
+                        <div class="flex gap-2">
+                            <input id="wpa_passphrase" type="password" class="input-dark rounded px-3 py-2 w-full" placeholder="8-63 characters" required>
+                            <button id="togglePassBtn" class="bg-slate-600 hover:bg-slate-500 px-3 rounded" type="button">Show</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Channel</label>
+                        <input id="channel" type="number" min="1" max="165" class="input-dark rounded px-3 py-2 w-full" placeholder="7" required>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Band (hw_mode)</label>
+                        <select id="hw_mode" class="input-dark rounded px-3 py-2 w-full">
+                            <option value="g">2.4 GHz (g)</option>
+                            <option value="a">5 GHz (a)</option>
+                            <option value="b">Legacy (b)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Country Code</label>
+                        <input id="country_code" class="input-dark rounded px-3 py-2 w-full" placeholder="US">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <input id="ignore_broadcast_ssid" type="checkbox" class="h-5 w-5">
+                        <label for="ignore_broadcast_ssid" class="text-sm">Hide SSID broadcast</label>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-700 pt-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold">Advanced Settings</h3>
+                        <button id="toggleAdvancedBtn" type="button" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg">Show</button>
+                    </div>
+                    <div id="advancedFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Driver</label>
+                            <input id="driver" class="input-dark rounded px-3 py-2 w-full" placeholder="nl80211">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WPA Mode</label>
+                            <input id="wpa" type="number" min="1" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WPA Key Mgmt</label>
+                            <input id="wpa_key_mgmt" class="input-dark rounded px-3 py-2 w-full" placeholder="WPA-PSK">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">RSN Pairwise</label>
+                            <input id="rsn_pairwise" class="input-dark rounded px-3 py-2 w-full" placeholder="CCMP">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WMM Enabled</label>
+                            <input id="wmm_enabled" type="number" min="0" max="1" class="input-dark rounded px-3 py-2 w-full" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">MAC ACL</label>
+                            <input id="macaddr_acl" type="number" min="0" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Auth Algs</label>
+                            <input id="auth_algs" type="number" min="0" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <label class="flex items-center gap-3 text-sm">
+                        <input id="restartAfterSave" type="checkbox" class="h-5 w-5" checked>
+                        Restart hostapd after save
+                    </label>
+                    <button type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-3 rounded-lg font-semibold">
+                        <i class="fas fa-save mr-2"></i>Save Settings
+                    </button>
+                </div>
+                <p id="formStatus" class="text-sm text-gray-300"></p>
+            </form>
+        </section>
+    </div>
+
+    <script src="js/event-config.js"></script>
+    <script src="js/hostapd.js"></script>
+</body>
+</html>
