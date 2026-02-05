@@ -118,7 +118,12 @@ class VirtualJukebox {
             if (!response.ok) return;
             const data = await response.json();
             if (data && data.buildTime) {
+                const message = `Build: ${data.buildTime}`;
                 console.log(`🧱 app.js build: ${data.buildTime} (${data.source || 'build-info'})`);
+                const buildInfoEl = document.getElementById('buildInfo');
+                if (buildInfoEl) {
+                    buildInfoEl.textContent = message;
+                }
             }
         } catch (error) {
             console.warn('Failed to load build info:', error.message);
