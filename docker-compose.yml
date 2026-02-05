@@ -12,7 +12,7 @@ services:
       # Persist important data
       - event-jukebox-data:/app/data
       # Mount OAuth and history files if they exist
-      - ./oauth.json:/app/oauth.json:ro
+      - ./oauth.json:/app/oauth.json
       - ./event-play-history.json:/app/event-play-history.json
       # Custom playlists
       - ./playlists:/app/playlists

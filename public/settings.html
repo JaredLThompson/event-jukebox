@@ -266,6 +266,29 @@
                         </select>
                     </div>
                 </div>
+
+                <div class="setting-item p-6 mb-4">
+                    <div class="flex flex-col gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">YouTube Music Auth (No Ads)</h3>
+                            <p class="text-gray-300 text-sm">Paste the “Copy as cURL” output from the YouTube Music browse request.</p>
+                        </div>
+                        <div id="youtubeAuthStatus" class="text-xs text-gray-300 bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 hidden"></div>
+                        <textarea id="youtubeAuthCurl" class="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm h-32" placeholder="Paste the cURL command here..."></textarea>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="saveYoutubeAuthBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                                Save oauth.json
+                            </button>
+                            <button id="testYoutubeAuthBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                                Test Auth
+                            </button>
+                            <button id="showYoutubeAuthBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hidden">
+                                View Saved Info
+                            </button>
+                            <span class="text-xs text-gray-300 self-center">This is stored locally on the Pi and not sent anywhere else.</span>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Event Branding -->
@@ -601,6 +624,7 @@
                 this.loadEventConfig();
                 this.loadPlaylistFiles();
                 this.loadEventSchedule();
+                this.loadOauthStatus();
             }
             
             bindEvents() {
@@ -668,6 +692,70 @@
                     systemModeSelect.addEventListener('change', (event) => {
                         this.systemMode = event.target.value;
                         this.saveSystemMode();
+                    });
+                }
+
+                const saveYoutubeAuthBtn = document.getElementById('saveYoutubeAuthBtn');
+                if (saveYoutubeAuthBtn) {
+                    saveYoutubeAuthBtn.addEventListener('click', async () => {
+                        const textarea = document.getElementById('youtubeAuthCurl');
+                        const curl = textarea ? textarea.value.trim() : '';
+                        if (!curl) {
+                            this.showToast('Paste the cURL command first', 'error');
+                            return;
+                        }
+                        if (this.oauthExists) {
+                            const proceed = confirm('oauth.json already exists. Overwrite it?');
+                            if (!proceed) return;
+                        }
+                        try {
+                            const response = await fetch('/api/oauth', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ curl })
+                            });
+                            if (!response.ok) {
+                                const err = await response.json().catch(() => ({}));
+                                throw new Error(err.error || 'Failed to save oauth.json');
+                            }
+                            this.showToast('oauth.json saved', 'success');
+                        } catch (error) {
+                            this.showToast(error.message || 'Failed to save oauth.json', 'error');
+                        }
+                    });
+                }
+
+                const testYoutubeAuthBtn = document.getElementById('testYoutubeAuthBtn');
+                if (testYoutubeAuthBtn) {
+                    testYoutubeAuthBtn.addEventListener('click', async () => {
+                        try {
+                            const response = await fetch('/api/oauth/test');
+                            if (!response.ok) {
+                                const err = await response.json().catch(() => ({}));
+                                const message = err.details
+                                    ? `${err.error || 'Auth test failed'}: ${err.details}`
+                                    : (err.error || 'Auth test failed');
+                                throw new Error(message);
+                            }
+                            this.showToast('YouTube auth verified', 'success');
+                        } catch (error) {
+                            this.showToast(error.message || 'Auth test failed', 'error');
+                        }
+                    });
+                }
+
+                const showYoutubeAuthBtn = document.getElementById('showYoutubeAuthBtn');
+                if (showYoutubeAuthBtn) {
+                    showYoutubeAuthBtn.addEventListener('click', () => {
+                        if (!this.oauthInfo) {
+                            this.showToast('No oauth.json info available', 'info');
+                            return;
+                        }
+                        const status = document.getElementById('youtubeAuthStatus');
+                        if (status) {
+                            status.textContent = this.oauthInfo;
+                            status.classList.remove('hidden');
+                        }
                     });
                 }
 
@@ -892,6 +980,35 @@
                     this.renderPlaylistFileOptions();
                 } catch (error) {
                     this.playlistFiles = [];
+                }
+            }
+
+            async loadOauthStatus() {
+                try {
+                    const response = await fetch('/api/oauth');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    const status = document.getElementById('youtubeAuthStatus');
+                    const showBtn = document.getElementById('showYoutubeAuthBtn');
+                    this.oauthExists = !!data.exists;
+                    this.oauthInfo = null;
+                    if (!status) return;
+                    if (!data.exists) {
+                        status.textContent = 'No oauth.json found yet.';
+                        status.classList.remove('hidden');
+                        if (showBtn) showBtn.classList.add('hidden');
+                        return;
+                    }
+                    const origin = data.origin ? `Origin: ${data.origin}` : 'Origin: (not set)';
+                    const authUser = `AuthUser: ${data.authUser || '0'}`;
+                    const cookieInfo = `Cookie length: ${data.cookieLength || 0}`;
+                    const userAgent = data.hasUserAgent ? 'User-Agent: yes' : 'User-Agent: missing';
+                    this.oauthInfo = `${authUser} • ${origin} • ${cookieInfo} • ${userAgent}`;
+                    status.textContent = 'oauth.json found.';
+                    status.classList.remove('hidden');
+                    if (showBtn) showBtn.classList.remove('hidden');
+                } catch (error) {
+                    // Ignore
                 }
             }
 

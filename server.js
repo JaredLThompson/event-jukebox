@@ -14,6 +14,122 @@ const BRIDE_PLAYLIST = require('./bride-playlist');
 const SpotifyService = require('./spotify_service');
 require('dotenv').config();
 
+const OAUTH_FILE = path.join(__dirname, 'oauth.json');
+
+function parseCurlHeaders(curlText) {
+  const headers = {};
+  if (!curlText || typeof curlText !== 'string') return headers;
+  const headerRegex = /(?:-H|--header)\s+(['"])(.*?)\1/g;
+  let match;
+  while ((match = headerRegex.exec(curlText)) !== null) {
+    const raw = match[2];
+    const idx = raw.indexOf(':');
+    if (idx === -1) continue;
+    const key = raw.slice(0, idx).trim();
+    const value = raw.slice(idx + 1).trim();
+    if (!key) continue;
+    headers[key.toLowerCase()] = value;
+  }
+  return headers;
+}
+
+function parseHeaderBlock(headerBlock) {
+  const headers = {};
+  if (!headerBlock || typeof headerBlock !== 'string') return headers;
+  for (const line of headerBlock.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.indexOf(':');
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+    if (!key) continue;
+    headers[key.toLowerCase()] = value;
+  }
+  return headers;
+}
+
+function buildHeaderBlockFromHeaders(headers) {
+  return Object.entries(headers)
+    .map(([key, value]) => `${key.toLowerCase()}: ${value}`)
+    .join('\n');
+}
+
+function extractHeaderLinesFromCurl(curlText) {
+  if (!curlText || typeof curlText !== 'string') return '';
+  const lines = [];
+  for (const rawLine of curlText.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith('-H ') || line.startsWith('--header ')) {
+      let headerLine = line.replace(/^(-H|--header)\s+/, '');
+      if ((headerLine.startsWith("'") && headerLine.endsWith("'")) || (headerLine.startsWith('"') && headerLine.endsWith('"'))) {
+        headerLine = headerLine.slice(1, -1);
+      }
+      if (headerLine.endsWith('\\')) {
+        headerLine = headerLine.slice(0, -1).trim();
+      }
+      lines.push(headerLine);
+    }
+  }
+  return lines.join('\n').trim();
+}
+
+function normalizeHeaderBlock(input) {
+  if (!input || typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  if (trimmed.startsWith('curl ') || trimmed.includes('\n -H ') || trimmed.includes('\n  -H ')) {
+    return extractHeaderLinesFromCurl(trimmed);
+  }
+  return trimmed;
+}
+
+function lowercaseHeaderBlock(headerBlock) {
+  if (!headerBlock || typeof headerBlock !== 'string') return '';
+  return headerBlock
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      const idx = trimmed.indexOf(':');
+      if (idx === -1) return trimmed;
+      const key = trimmed.slice(0, idx).trim().toLowerCase();
+      const value = trimmed.slice(idx + 1).trim();
+      return `${key}: ${value}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function getHeaderValueCaseInsensitive(headers, key) {
+  if (!headers || typeof headers !== 'object') return '';
+  const lowerKey = key.toLowerCase();
+  for (const [k, value] of Object.entries(headers)) {
+    if (k.toLowerCase() === lowerKey) return value || '';
+  }
+  return '';
+}
+
+function getPythonCommand() {
+  const isDocker = process.env.NODE_ENV === 'production' && fs.existsSync('/app/venv');
+  if (isDocker) {
+    return {
+      cmd: '/app/venv/bin/python',
+      cwd: '/app',
+      env: {
+        ...process.env,
+        PATH: '/app/venv/bin:' + process.env.PATH,
+        PYTHONPATH: '/app'
+      }
+    };
+  }
+  return {
+    cmd: 'venv/bin/python3',
+    cwd: __dirname,
+    env: process.env
+  };
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -116,6 +232,7 @@ let currentQueue = [];
 let parkedQueue = []; // New: parked user submissions
 let currentlyPlaying = null;
 let connectedUsers = new Set();
+let audioServiceSockets = new Set();
 let fallbackPlaylistIndex = 0;
 let currentFallbackIndex = -1; // Track which song is currently playing from fallback
 let fallbackMode = false;
@@ -1242,6 +1359,144 @@ app.post('/api/playlists/upload', (req, res) => {
     }
     res.json({ success: true, filename: req.file.filename });
   });
+});
+
+app.post('/api/oauth', (req, res) => {
+  try {
+    const { curl } = req.body || {};
+    if (!curl || typeof curl !== 'string') {
+      return res.status(400).json({ error: 'Missing cURL content' });
+    }
+    const headersFromCurl = parseCurlHeaders(curl);
+    let headerBlock = '';
+    if (Object.keys(headersFromCurl).length) {
+      headerBlock = buildHeaderBlockFromHeaders(headersFromCurl);
+    } else {
+      headerBlock = normalizeHeaderBlock(curl);
+      if (!headerBlock) {
+        return res.status(400).json({ error: 'No headers found in cURL' });
+      }
+      headerBlock = lowercaseHeaderBlock(headerBlock);
+    }
+    const headers = Object.keys(headersFromCurl).length
+      ? headersFromCurl
+      : parseHeaderBlock(headerBlock);
+    const cookie = headers['cookie'];
+    const authUser = headers['x-goog-authuser'];
+    if (!cookie || !authUser) {
+      return res.status(400).json({ error: 'Missing cookie or X-Goog-AuthUser header in cURL' });
+    }
+
+    if (fs.existsSync(OAUTH_FILE)) {
+      const ts = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+      const backupPath = `${OAUTH_FILE}.${ts}`;
+      fs.copyFileSync(OAUTH_FILE, backupPath);
+    }
+
+    const { cmd, cwd, env } = getPythonCommand();
+    const python = spawn(cmd, [
+      'youtube_music_service.py',
+      'setup_auth',
+      '--output', OAUTH_FILE
+    ], { cwd, env });
+
+    let out = '';
+    let error = '';
+    python.stdout.on('data', (chunk) => { out += chunk.toString(); });
+    python.stderr.on('data', (chunk) => { error += chunk.toString(); });
+    python.stdin.write(headerBlock);
+    python.stdin.end();
+
+    python.on('close', (code) => {
+      if (code !== 0) {
+        console.error('OAuth setup error:', error || out);
+        return res.status(500).json({ error: 'Failed to create oauth.json', details: error || out });
+      }
+      return res.json({ success: true });
+    });
+
+    python.on('error', (err) => {
+      console.error('OAuth setup process error:', err);
+      res.status(500).json({ error: 'Failed to start oauth setup' });
+    });
+  } catch (error) {
+    console.error('Failed to save oauth.json:', error.message);
+    res.status(500).json({ error: 'Failed to save oauth.json' });
+  }
+});
+
+app.get('/api/oauth', (req, res) => {
+  try {
+    if (!fs.existsSync(OAUTH_FILE)) {
+      return res.json({ exists: false });
+    }
+    const raw = fs.readFileSync(OAUTH_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    const cookie = getHeaderValueCaseInsensitive(parsed, 'cookie');
+    return res.json({
+      exists: true,
+      authUser: getHeaderValueCaseInsensitive(parsed, 'x-goog-authuser') || '0',
+      origin: getHeaderValueCaseInsensitive(parsed, 'x-origin') || '',
+      cookieLength: cookie.length,
+      hasUserAgent: Boolean(getHeaderValueCaseInsensitive(parsed, 'user-agent'))
+    });
+  } catch (error) {
+    console.error('Failed to read oauth.json:', error.message);
+    res.status(500).json({ error: 'Failed to read oauth.json' });
+  }
+});
+
+app.get('/api/oauth/test', (req, res) => {
+  try {
+    if (!fs.existsSync(OAUTH_FILE)) {
+      return res.status(400).json({ error: 'oauth.json not found' });
+    }
+    const { cmd, cwd, env } = getPythonCommand();
+    const python = spawn(cmd, [
+      'youtube_music_service.py',
+      'search',
+      '--query', 'Taylor Swift',
+      '--limit', '1',
+      '--auth', OAUTH_FILE
+    ], { cwd, env });
+
+    let data = '';
+    let error = '';
+
+    python.stdout.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+
+    python.stderr.on('data', (chunk) => {
+      error += chunk.toString();
+    });
+
+    python.on('close', (code) => {
+      if (code !== 0) {
+        console.error('OAuth test error:', error);
+        return res.status(500).json({ error: 'Auth test failed', details: error || 'Unknown error' });
+      }
+      try {
+        const parsed = JSON.parse(data);
+        const count = Array.isArray(parsed.results) ? parsed.results.length : 0;
+        if (!count) {
+          return res.status(500).json({ error: 'Auth test returned no results', details: JSON.stringify(parsed).slice(0, 500) });
+        }
+        return res.json({ success: true, results: count });
+      } catch (parseError) {
+        console.error('Failed to parse OAuth test response:', parseError);
+        return res.status(500).json({ error: 'Auth test parse failed', details: data.slice(0, 500) });
+      }
+    });
+
+    python.on('error', (err) => {
+      console.error('OAuth test process error:', err);
+      res.status(500).json({ error: 'Auth test failed to start' });
+    });
+  } catch (error) {
+    console.error('OAuth test failed:', error.message);
+    res.status(500).json({ error: 'Auth test failed' });
+  }
 });
 
 app.get('/api/audio/output', async (req, res) => {
@@ -2872,6 +3127,11 @@ app.post('/api/audio/test', (req, res) => {
 });
 
 // Socket.IO connection handling
+const emitUserCount = () => {
+  const count = connectedUsers.size;
+  io.emit('userCount', count);
+};
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   connectedUsers.add(socket.id);
@@ -2889,10 +3149,17 @@ io.on('connection', (socket) => {
   socket.emit('userCount', connectedUsers.size);
   socket.broadcast.emit('userCount', connectedUsers.size);
 
+  socket.on('audioServiceConnected', () => {
+    audioServiceSockets.add(socket.id);
+    connectedUsers.delete(socket.id);
+    emitUserCount();
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    audioServiceSockets.delete(socket.id);
     connectedUsers.delete(socket.id);
-    socket.broadcast.emit('userCount', connectedUsers.size);
+    emitUserCount();
   });
   
   // Handle audio service commands and forward to audio service
@@ -3042,36 +3309,13 @@ async function getNextFallbackSong() {
 // YouTube Music integration functions
 async function searchYouTubeMusic(query, limit = 10) {
   return new Promise((resolve, reject) => {
-    // For Docker environments, use direct python call with proper environment
-    const isDocker = process.env.NODE_ENV === 'production' && fs.existsSync('/app/venv');
-    
-    let python;
-    if (isDocker) {
-      // Docker environment - use venv python directly
-      python = spawn('/app/venv/bin/python', [
-        'youtube_music_service.py', 
-        'search', 
-        '--query', query, 
-        '--limit', limit.toString()
-      ], {
-        cwd: '/app',
-        env: { 
-          ...process.env,
-          PATH: '/app/venv/bin:' + process.env.PATH,
-          PYTHONPATH: '/app'
-        }
-      });
-    } else {
-      // Local development - use direct python3 path
-      python = spawn('venv/bin/python3', [
-        'youtube_music_service.py', 
-        'search', 
-        '--query', query, 
-        '--limit', limit.toString()
-      ], {
-        cwd: __dirname
-      });
-    }
+    const { cmd, cwd, env } = getPythonCommand();
+    const python = spawn(cmd, [
+      'youtube_music_service.py',
+      'search',
+      '--query', query,
+      '--limit', limit.toString()
+    ], { cwd, env });
 
     let data = '';
     let error = '';

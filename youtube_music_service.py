@@ -6,7 +6,7 @@ Provides a bridge between the Node.js jukebox and YouTube Music
 
 import json
 import sys
-from ytmusicapi import YTMusic
+from ytmusicapi import YTMusic, setup as ytm_setup
 import argparse
 from typing import Dict, List, Any
 
@@ -75,14 +75,31 @@ class YouTubeMusicService:
 
 def main():
     parser = argparse.ArgumentParser(description='YouTube Music API Service')
-    parser.add_argument('action', choices=['search', 'get_song'], help='Action to perform')
+    parser.add_argument('action', choices=['search', 'get_song', 'setup_auth'], help='Action to perform')
     parser.add_argument('--query', help='Search query')
     parser.add_argument('--video-id', help='Video ID for song info')
     parser.add_argument('--limit', type=int, default=10, help='Number of results to return')
     parser.add_argument('--auth', help='Path to authentication file')
+    parser.add_argument('--headers', help='Raw request headers (newline separated)')
+    parser.add_argument('--output', help='Output path for oauth.json', default='oauth.json')
     
     args = parser.parse_args()
     
+    if args.action == 'setup_auth':
+        headers = args.headers
+        if not headers:
+            headers = sys.stdin.read().strip()
+        if not headers:
+            print(json.dumps({'error': 'Missing headers'}))
+            sys.exit(1)
+        try:
+            ytm_setup(args.output, headers)
+            print(json.dumps({'success': True, 'output': args.output}))
+            sys.exit(0)
+        except Exception as e:
+            print(json.dumps({'error': str(e)}))
+            sys.exit(1)
+
     service = YouTubeMusicService(args.auth)
     
     if args.action == 'search':
