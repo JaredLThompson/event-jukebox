@@ -121,6 +121,16 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+Quick install script (same result):
+```bash
+sudo /home/pi/event-jukebox/setup-nginx.sh --hostname event-jukebox.local
+```
+
+Let's Encrypt (public DNS required):
+```bash
+sudo /home/pi/event-jukebox/setup-nginx.sh --hostname your-domain.example.com --letsencrypt
+```
+
 ### Optional: HTTPS with Let's Encrypt (Nginx)
 If the Pi has a public DNS name and is reachable from the internet, you can use Let's Encrypt for trusted HTTPS.
 
