@@ -788,44 +788,61 @@ class AudioService {
                 reject(new Error('Audio file is empty'));
                 return;
             }
-            
-            // Use mpg123 with seek option to start from specific position
-            const args = ['-q', '--gain', '50'];
-            if (this.outputDevice && this.outputDevice !== 'default') {
-                args.push('-a', this.outputDevice);
-            }
-            if (startPosition > 0) {
-                // Convert to frame position (mpg123 uses frames, roughly 38.28 frames per second for MP3)
-                const framePosition = Math.floor(startPosition * 38.28);
-                args.push('--skip', framePosition.toString());
-                console.log('🎯 Seeking to frame position:', framePosition, '(', startPosition, 'seconds)');
-            }
-            args.push(filepath);
-            
-            console.log('🎵 Starting mpg123 with args:', args.join(' '));
-            this.currentProcess = spawn('mpg123', args);
-            
-            this.currentProcess.on('close', (code) => {
-                console.log('🎵 Audio playback ended with code:', code);
-                this.isPlaying = false;
-                this.currentProcess = null;
-                this.stopProgressTracking();
-                resolve();
-            });
-            
-            this.currentProcess.on('error', (error) => {
-                console.error('❌ Audio playback error:', error.message);
-                this.isPlaying = false;
-                this.currentProcess = null;
-                this.stopProgressTracking();
+
+            this.getDuration(filepath).then(duration => {
+                this.duration = duration;
+                if (duration === 0) {
+                    reject(new Error('Audio file has no duration - may be corrupted'));
+                    return;
+                }
+
+                if (startPosition >= duration - 1) {
+                    startPosition = 0;
+                }
+
+                this.position = startPosition;
+
+                // Use mpg123 with seek option to start from specific position
+                const args = ['-q', '--gain', '50'];
+                if (this.outputDevice && this.outputDevice !== 'default') {
+                    args.push('-a', this.outputDevice);
+                }
+                if (startPosition > 0) {
+                    // Convert to frame position (mpg123 uses frames, roughly 38.28 frames per second for MP3)
+                    const framePosition = Math.floor(startPosition * 38.28);
+                    args.push('--skip', framePosition.toString());
+                    console.log('🎯 Seeking to frame position:', framePosition, '(', startPosition, 'seconds)');
+                }
+                args.push(filepath);
+                
+                console.log('🎵 Starting mpg123 with args:', args.join(' '));
+                this.currentProcess = spawn('mpg123', args);
+                
+                this.currentProcess.on('close', (code) => {
+                    console.log('🎵 Audio playback ended with code:', code);
+                    this.isPlaying = false;
+                    this.currentProcess = null;
+                    this.stopProgressTracking();
+                    resolve();
+                });
+                
+                this.currentProcess.on('error', (error) => {
+                    console.error('❌ Audio playback error:', error.message);
+                    this.isPlaying = false;
+                    this.currentProcess = null;
+                    this.stopProgressTracking();
+                    reject(error);
+                });
+                
+                // Start progress tracking
+                this.isPlaying = true;
+                this.startProgressTracking();
+                
+                console.log('✅ Audio playback started from position:', startPosition + 's', 'PID:', this.currentProcess.pid);
+            }).catch(error => {
+                console.error('❌ Failed to load duration:', error.message);
                 reject(error);
             });
-            
-            // Start progress tracking
-            this.isPlaying = true;
-            this.startProgressTracking();
-            
-            console.log('✅ Audio playback started from position:', startPosition + 's', 'PID:', this.currentProcess.pid);
         });
     }
     

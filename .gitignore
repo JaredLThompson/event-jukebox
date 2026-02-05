@@ -7,6 +7,7 @@ venv/
 .env.local
 .env.production
 oauth.json
+oauth.json.*
 
 # Security tokens (never commit these!)
 github-token*
