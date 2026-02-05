@@ -5,11 +5,16 @@ class SpotifyService {
     constructor() {
         this.spotifyApi = null;
         this.isInitialized = false;
-        this.initializeApi();
+        this.isEnabled = process.env.SPOTIFY_ENABLED === '1';
+        this.initPromise = this.isEnabled ? this.initializeApi() : Promise.resolve();
     }
 
     async initializeApi() {
         try {
+            if (!this.isEnabled) {
+                console.warn('Spotify integration disabled (SPOTIFY_ENABLED=0)');
+                return;
+            }
             if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
                 console.warn('Spotify credentials not found in environment variables');
                 return;
@@ -22,7 +27,11 @@ class SpotifyService {
             );
 
             // Test the connection
-            await this.spotifyApi.search('test', ['track'], 'US', 1);
+            const timeoutMs = parseInt(process.env.SPOTIFY_INIT_TIMEOUT_MS || '5000', 10);
+            await Promise.race([
+                this.spotifyApi.search('test', ['track'], 'US', 1),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Spotify init timeout')), timeoutMs))
+            ]);
             this.isInitialized = true;
             console.log('✅ Spotify API initialized successfully');
         } catch (error) {
@@ -32,6 +41,10 @@ class SpotifyService {
     }
 
     async searchTracks(query, limit = 10) {
+        await this.initPromise;
+        if (!this.isEnabled) {
+            throw new Error('Spotify API disabled');
+        }
         if (!this.isInitialized) {
             throw new Error('Spotify API not initialized. Check your credentials.');
         }
@@ -64,6 +77,10 @@ class SpotifyService {
     }
 
     async getTrack(trackId) {
+        await this.initPromise;
+        if (!this.isEnabled) {
+            throw new Error('Spotify API disabled');
+        }
         if (!this.isInitialized) {
             throw new Error('Spotify API not initialized');
         }
@@ -96,6 +113,10 @@ class SpotifyService {
     }
 
     async getArtist(artistId) {
+        await this.initPromise;
+        if (!this.isEnabled) {
+            throw new Error('Spotify API disabled');
+        }
         if (!this.isInitialized) {
             throw new Error('Spotify API not initialized');
         }

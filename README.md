@@ -93,6 +93,7 @@ Environment variables (optional):
 - `PREBUFFER_DEDUP=0` to disable pre-buffer de-duplication (default enabled)
 - `ALSA_DEVICE=hw:CARD=Set,DEV=0` to override audio output
 - `AMIXER_DEVICE=hw:CARD=Set` to override mixer control device
+- `JUKEBOX_URL=http://<host>:3000` to point the headless audio service at the correct web server (default is `http://localhost:3000`)
 
 ## Documentation
 - `DEPLOYMENT.md` - Full deployment guide

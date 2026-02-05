@@ -537,27 +537,32 @@
             }
             
             async generateQRCodes() {
+                const wifiSsid = window.eventConfig?.wifi?.ssid || 'Event-Jukebox';
+                const wifiPassword = window.eventConfig?.wifi?.password || 'EventMusic2026';
+                const wifiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:${wifiSsid};P:${wifiPassword};H:false;;`;
+
                 try {
                     // Get network info for QR codes
                     const response = await fetch('/api/network-info');
                     const networkInfo = await response.json();
                     
                     // Generate WiFi QR Code
-                    const wifiSsid = window.eventConfig?.wifi?.ssid || 'Wedding-Jukebox';
-                    const wifiPassword = window.eventConfig?.wifi?.password || 'WeddingMusic2026';
-                    const wifiQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:${wifiSsid};P:${wifiPassword};H:false;;`;
                     this.wifiQrCodeEl.src = wifiQrUrl;
                     
                     // Generate Jukebox QR Code
-                    const jukeboxUrl = `http://${networkInfo.ip}:3000/user`;
+                    const networkIP = networkInfo.networkIP || window.location.hostname || 'localhost';
+                    const port = networkInfo.port || window.location.port || 3000;
+                    const protocol = window.location.protocol || 'http:';
+                    const jukeboxUrl = `${protocol}//${networkIP}:${port}/user`;
                     const jukeboxQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(jukeboxUrl)}`;
                     this.jukeboxQrCodeEl.src = jukeboxQrUrl;
                     
                 } catch (error) {
                     console.error('Failed to generate QR codes:', error);
                     // Fallback QR codes
-                    this.wifiQrCodeEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=WIFI:T:WPA;S:${wifiSsid};P:${wifiPassword};H:false;;`;
-                    this.jukeboxQrCodeEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/user';
+                    this.wifiQrCodeEl.src = wifiQrUrl;
+                    const fallbackUrl = `${window.location.protocol}//${window.location.host}/user`;
+                    this.jukeboxQrCodeEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(fallbackUrl)}`;
                 }
             }
             

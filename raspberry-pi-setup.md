@@ -30,6 +30,21 @@ sudo systemctl enable event-jukebox-audio
 sudo systemctl start event-jukebox-audio
 ```
 
+If the web app is not running on `http://localhost:3000`, set `JUKEBOX_URL` so the audio service targets the correct host:
+```bash
+sudo systemctl edit event-jukebox-audio
+```
+Add:
+```
+[Service]
+Environment=JUKEBOX_URL=http://<host-or-ip>:3000
+```
+Then reload:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart event-jukebox-audio
+```
+
 ## Option B: Direct Code Installation
 If you want to run without Docker:
 

@@ -3181,6 +3181,11 @@ io.on('connection', (socket) => {
   socket.on('volumeCommand', (data) => {
     console.log('🔊 Volume command received from web interface, forwarding to audio service');
     io.emit('volumeCommand', data);
+    // Broadcast volume update to all clients so they sync their UI
+    if (data && typeof data.volume === 'number') {
+      const volumePercent = Math.round(data.volume * 100);
+      io.emit('volumeUpdated', { volume: volumePercent });
+    }
   });
 
   socket.on('fadeCommand', (data = {}) => {
@@ -3197,6 +3202,11 @@ io.on('connection', (socket) => {
   socket.on('audioServiceStatus', (data) => {
     // Forward audio service status to all connected clients
     io.emit('audioServiceStatus', data);
+    // Also broadcast volume updates when audio service reports volume changes
+    if (data && typeof data.volume === 'number') {
+      const volumePercent = Math.round(data.volume * 100);
+      io.emit('volumeUpdated', { volume: volumePercent });
+    }
   });
 });
 

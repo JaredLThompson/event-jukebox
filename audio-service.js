@@ -801,6 +801,10 @@ class AudioService {
                 }
 
                 this.position = startPosition;
+                console.log('⏱️ Resume tracking set:', {
+                    position: this.position,
+                    duration: this.duration
+                });
 
                 // Use mpg123 with seek option to start from specific position
                 const args = ['-q', '--gain', '50'];

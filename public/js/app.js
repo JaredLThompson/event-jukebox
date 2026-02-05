@@ -10,7 +10,7 @@ class JukeboxSettings {
             defaultVisualizerType: 'bars',
             autoShowBehavior: 'always',
             youtubeEnabled: true,
-            spotifyEnabled: true,
+            spotifyEnabled: false,
             soundcloudEnabled: false,
             appleMusicEnabled: false,
             showServiceIcons: true,
@@ -74,6 +74,7 @@ class VirtualJukebox {
         this.isPlaying = false;
         this.isFading = false;
         this.volumeToastTimer = null;
+        this.isSyncingVolume = false; // Prevent feedback loops when syncing volume from server
         
         this.initializeElements();
         this.bindEvents();
@@ -175,14 +176,9 @@ class VirtualJukebox {
             }
         }
 
-        const savedVolume = parseInt(jukeboxSettings.get('volumePercent'), 10);
-        if (!Number.isNaN(savedVolume)) {
-            if (this.volumeSlider) {
-                this.volumeSlider.value = savedVolume;
-            }
-            this.updateVolumeValue(savedVolume);
-            this.setVolume(savedVolume);
-        }
+        // Don't apply localStorage volume on load - wait for server sync
+        // Volume will be synced from server via audioServiceStatus or volumeUpdated events
+        // This prevents race conditions when multiple browsers have different localStorage values
     }
 
     initializeElements() {
@@ -562,6 +558,14 @@ class VirtualJukebox {
         // Listen for audio service status updates (progress, etc.)
         this.socket.on('audioServiceStatus', (data) => {
             this.updateAudioServiceStatus(data);
+            // Volume syncing is handled in updateAudioServiceStatus to avoid double-sync
+        });
+        
+        // Listen for volume updates from other clients or server
+        this.socket.on('volumeUpdated', (data) => {
+            if (data && typeof data.volume === 'number' && !this.isSyncingVolume) {
+                this.syncVolumeFromServer(data.volume);
+            }
         });
     }
 
@@ -587,6 +591,25 @@ class VirtualJukebox {
             
             // Load history count
             this.loadHistoryCount();
+            
+            // Request initial volume sync from audio service (if connected)
+            // This handles the case where audio service is already connected
+            // If not connected, we'll sync when audioServiceStatus arrives
+            setTimeout(() => {
+                // If we still don't have volume synced after 2 seconds, use localStorage as fallback
+                const currentVolume = this.volumeSlider ? parseInt(this.volumeSlider.value, 10) : null;
+                if (currentVolume === null || currentVolume === 0) {
+                    const fallbackVolume = parseInt(jukeboxSettings.get('volumePercent'), 10);
+                    if (!Number.isNaN(fallbackVolume) && fallbackVolume > 0) {
+                        console.log('⚠️ Audio service not connected, using localStorage volume as fallback:', fallbackVolume);
+                        this.isSyncingVolume = true;
+                        this.syncVolumeFromServer(fallbackVolume);
+                        setTimeout(() => {
+                            this.isSyncingVolume = false;
+                        }, 500);
+                    }
+                }
+            }, 2000);
         } catch (error) {
             console.error('Failed to load initial data:', error);
             this.showToast('Failed to load jukebox data', 'error');
@@ -2101,15 +2124,25 @@ class VirtualJukebox {
     setVolume(volume) {
         const volumeInt = parseInt(volume, 10);
         const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
+        
+        // Update UI immediately for responsiveness
         this.updateVolumeValue(clamped);
+        if (this.volumeSlider) {
+            this.volumeSlider.value = clamped;
+        }
+        
+        // Save to localStorage for this browser's preference (but server is source of truth)
         jukeboxSettings.set('volumePercent', clamped);
 
         const isHeadlessMode = this.systemMode
             ? this.systemMode === 'headless'
             : (this.currentSong && this.currentSong.source === 'headless-audio');
+        
         if (isHeadlessMode) {
             const normalized = clamped / 100;
             console.log('🔊 Sending volume command to audio service:', normalized);
+            // Set flag to prevent feedback loop when server broadcasts back
+            this.isSyncingVolume = false;
             this.socket.emit('volumeCommand', { volume: normalized });
             this.scheduleVolumeToast(clamped);
             return;
@@ -2122,6 +2155,36 @@ class VirtualJukebox {
 
         this.player.setVolume(clamped);
         this.scheduleVolumeToast(clamped);
+    }
+    
+    /**
+     * Sync volume from server (source of truth) - updates UI without sending command back
+     */
+    syncVolumeFromServer(volumePercent) {
+        // Prevent feedback loops
+        if (this.isSyncingVolume) {
+            return;
+        }
+        
+        const clamped = Math.min(100, Math.max(0, volumePercent));
+        
+        // Update UI
+        this.updateVolumeValue(clamped);
+        if (this.volumeSlider) {
+            this.volumeSlider.value = clamped;
+        }
+        
+        // Update localStorage to match server
+        jukeboxSettings.set('volumePercent', clamped);
+        
+        // Update browser player if in browser mode
+        if (!this.systemMode || this.systemMode !== 'headless') {
+            if (this.player && this.isPlayerReady && this.player.setVolume) {
+                this.player.setVolume(clamped);
+            }
+        }
+        
+        console.log('🔄 Volume synced from server:', clamped + '%');
     }
 
     scheduleVolumeToast(volume) {
@@ -2247,6 +2310,22 @@ class VirtualJukebox {
             }
         } else {
             console.log('⚠️ Play/pause button not found in DOM');
+        }
+        
+        // Sync volume from server if present (server is source of truth)
+        // Only sync if it's different from current slider value to avoid unnecessary updates
+        if (data && typeof data.volume === 'number' && !this.isSyncingVolume) {
+            const volumePercent = Math.round(data.volume * 100);
+            const currentSliderValue = this.volumeSlider ? parseInt(this.volumeSlider.value, 10) : null;
+            // Sync if slider is uninitialized or volume differs by more than 1%
+            if (currentSliderValue === null || Math.abs(currentSliderValue - volumePercent) > 1) {
+                this.isSyncingVolume = true;
+                this.syncVolumeFromServer(volumePercent);
+                // Reset flag after sync completes
+                setTimeout(() => {
+                    this.isSyncingVolume = false;
+                }, 300);
+            }
         }
         
         // Update buffering status
