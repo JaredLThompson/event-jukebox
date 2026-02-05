@@ -138,6 +138,7 @@ const io = socketIo(server, {
     methods: ["GET", "POST"]
   }
 });
+let lastKnownVolumePercent = null;
 
 // Middleware
 app.use(cors());
@@ -3135,6 +3136,10 @@ const emitUserCount = () => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   connectedUsers.add(socket.id);
+
+  if (typeof lastKnownVolumePercent === 'number') {
+    socket.emit('volumeUpdated', { volume: lastKnownVolumePercent, source: 'server-sync' });
+  }
   
   // Send current state to new user
   socket.emit('queueUpdated', {
@@ -3184,7 +3189,8 @@ io.on('connection', (socket) => {
     // Broadcast volume update to all clients so they sync their UI
     if (data && typeof data.volume === 'number') {
       const volumePercent = Math.round(data.volume * 100);
-      io.emit('volumeUpdated', { volume: volumePercent });
+      lastKnownVolumePercent = volumePercent;
+      io.emit('volumeUpdated', { volume: volumePercent, sourceId: socket.id });
     }
   });
 
@@ -3205,7 +3211,8 @@ io.on('connection', (socket) => {
     // Also broadcast volume updates when audio service reports volume changes
     if (data && typeof data.volume === 'number') {
       const volumePercent = Math.round(data.volume * 100);
-      io.emit('volumeUpdated', { volume: volumePercent });
+      lastKnownVolumePercent = volumePercent;
+      io.emit('volumeUpdated', { volume: volumePercent, source: 'audio-service' });
     }
   });
 });

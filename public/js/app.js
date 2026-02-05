@@ -75,6 +75,9 @@ class VirtualJukebox {
         this.isFading = false;
         this.volumeToastTimer = null;
         this.isSyncingVolume = false; // Prevent feedback loops when syncing volume from server
+        this.isUserAdjustingVolume = false;
+        this.volumeSendTimer = null;
+        this.pendingVolumePercent = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -339,7 +342,14 @@ class VirtualJukebox {
         }
         
         this.volumeBtn.addEventListener('click', () => this.toggleVolumeControl());
-        this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
+        this.volumeSlider.addEventListener('input', (e) => {
+            this.isUserAdjustingVolume = true;
+            this.setVolume(e.target.value, { fromUser: true, debounce: true });
+        });
+        this.volumeSlider.addEventListener('change', (e) => {
+            this.isUserAdjustingVolume = false;
+            this.setVolume(e.target.value, { fromUser: true, debounce: false });
+        });
         
         // DJ controls
         this.addMicBreakBtn.addEventListener('click', () => this.addMicBreak());
@@ -563,7 +573,10 @@ class VirtualJukebox {
         
         // Listen for volume updates from other clients or server
         this.socket.on('volumeUpdated', (data) => {
-            if (data && typeof data.volume === 'number' && !this.isSyncingVolume) {
+            if (!data || typeof data.volume !== 'number') return;
+            if (this.isUserAdjustingVolume) return;
+            if (data.sourceId && this.socket && data.sourceId === this.socket.id) return;
+            if (!this.isSyncingVolume) {
                 this.syncVolumeFromServer(data.volume);
             }
         });
@@ -2121,9 +2134,11 @@ class VirtualJukebox {
         }
     }
 
-    setVolume(volume) {
+    setVolume(volume, options = {}) {
         const volumeInt = parseInt(volume, 10);
         const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
+        const fromUser = options.fromUser === true;
+        const debounce = options.debounce === true;
         
         // Update UI immediately for responsiveness
         this.updateVolumeValue(clamped);
@@ -2139,11 +2154,13 @@ class VirtualJukebox {
             : (this.currentSong && this.currentSong.source === 'headless-audio');
         
         if (isHeadlessMode) {
-            const normalized = clamped / 100;
-            console.log('🔊 Sending volume command to audio service:', normalized);
-            // Set flag to prevent feedback loop when server broadcasts back
-            this.isSyncingVolume = false;
-            this.socket.emit('volumeCommand', { volume: normalized });
+            if (fromUser) {
+                if (debounce) {
+                    this.queueVolumeSend(clamped);
+                } else {
+                    this.sendVolumeCommand(clamped);
+                }
+            }
             this.scheduleVolumeToast(clamped);
             return;
         }
@@ -2155,6 +2172,26 @@ class VirtualJukebox {
 
         this.player.setVolume(clamped);
         this.scheduleVolumeToast(clamped);
+    }
+
+    queueVolumeSend(volumePercent) {
+        this.pendingVolumePercent = volumePercent;
+        if (this.volumeSendTimer) {
+            clearTimeout(this.volumeSendTimer);
+        }
+        this.volumeSendTimer = setTimeout(() => {
+            if (this.pendingVolumePercent !== null) {
+                this.sendVolumeCommand(this.pendingVolumePercent);
+                this.pendingVolumePercent = null;
+            }
+        }, 150);
+    }
+
+    sendVolumeCommand(volumePercent) {
+        const normalized = Math.min(1, Math.max(0, volumePercent / 100));
+        console.log('🔊 Sending volume command to audio service:', normalized);
+        this.isSyncingVolume = false;
+        this.socket.emit('volumeCommand', { volume: normalized, sourceId: this.socket?.id });
     }
     
     /**
@@ -2314,7 +2351,7 @@ class VirtualJukebox {
         
         // Sync volume from server if present (server is source of truth)
         // Only sync if it's different from current slider value to avoid unnecessary updates
-        if (data && typeof data.volume === 'number' && !this.isSyncingVolume) {
+        if (data && typeof data.volume === 'number' && !this.isSyncingVolume && !this.isUserAdjustingVolume) {
             const volumePercent = Math.round(data.volume * 100);
             const currentSliderValue = this.volumeSlider ? parseInt(this.volumeSlider.value, 10) : null;
             // Sync if slider is uninitialized or volume differs by more than 1%
