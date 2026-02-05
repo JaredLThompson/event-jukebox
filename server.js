@@ -3225,12 +3225,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('uiVolumeUpdate', (data) => {
-    if (!data || typeof data.volume !== 'number') return;
-    const volumePercent = Math.round(Math.max(0, Math.min(100, data.volume)));
-    lastKnownVolumePercent = volumePercent;
-    io.emit('volumeUpdated', { volume: volumePercent, sourceId: socket.id, source: 'ui' });
-  });
 
   socket.on('fadeCommand', (data = {}) => {
     console.log('🎚️ Fade command received from web interface, forwarding to audio service');

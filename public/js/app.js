@@ -535,7 +535,9 @@ class VirtualJukebox {
 
         this.socket.on('connect', () => {
             this.showToast('Connected to jukebox!', 'success');
-            this.socket.emit('requestVolumeSync');
+            if (this.systemMode === 'headless') {
+                this.socket.emit('requestVolumeSync');
+            }
         });
 
         this.socket.on('disconnect', () => {
@@ -548,6 +550,9 @@ class VirtualJukebox {
                 this.updateModeBadge(data.mode === 'headless');
                 this.systemMode = data.mode;
                 this.ensureYouTubePlayer();
+                if (this.systemMode === 'headless') {
+                    this.socket.emit('requestVolumeSync');
+                }
             }
         });
 
@@ -576,6 +581,7 @@ class VirtualJukebox {
         this.socket.on('volumeUpdated', (data) => {
             if (!data || typeof data.volume !== 'number') return;
             console.log('🔈 Server volume update:', data);
+            if (this.systemMode !== 'headless') return;
             if (this.isUserAdjustingVolume) return;
             if (data.sourceId && this.socket && data.sourceId === this.socket.id) return;
             if (!this.isSyncingVolume) {
@@ -635,6 +641,7 @@ class VirtualJukebox {
     }
 
     async loadServerVolume() {
+        if (this.systemMode !== 'headless') return;
         try {
             const response = await fetch('/api/volume');
             if (!response.ok) return;
@@ -661,6 +668,9 @@ class VirtualJukebox {
             this.updateModeBadge(data.mode === 'headless');
             this.systemMode = data.mode;
             this.ensureYouTubePlayer();
+            if (this.systemMode === 'headless') {
+                this.socket.emit('requestVolumeSync');
+            }
         } catch (error) {
             console.error('Failed to load system mode:', error);
         }
@@ -2194,13 +2204,7 @@ class VirtualJukebox {
             return;
         }
 
-        if (fromUser) {
-            if (debounce) {
-                this.queueUiVolumeSend(clamped);
-            } else {
-                this.sendUiVolumeUpdate(clamped);
-            }
-        }
+        // Browser mode uses localStorage only; no server sync.
 
         if (!this.player || !this.isPlayerReady) {
             this.scheduleVolumeToast(clamped);
@@ -2237,16 +2241,13 @@ class VirtualJukebox {
             clearTimeout(this.volumeSendTimer);
         }
         this.volumeSendTimer = setTimeout(() => {
-            if (this.pendingVolumePercent !== null) {
-                this.sendUiVolumeUpdate(this.pendingVolumePercent);
-                this.pendingVolumePercent = null;
-            }
+            this.pendingVolumePercent = null;
         }, 150);
     }
 
     sendUiVolumeUpdate(volumePercent) {
         const clamped = Math.min(100, Math.max(0, volumePercent));
-        this.socket.emit('uiVolumeUpdate', { volume: clamped, sourceId: this.socket?.id });
+        this.pendingVolumePercent = clamped;
     }
     
     /**
