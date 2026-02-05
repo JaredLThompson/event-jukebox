@@ -1641,7 +1641,7 @@ app.get('/api/hotspot/nm', async (req, res) => {
 
     for (const line of rawConnections) {
       const [name, uuid, type, device, active] = splitNmcliLine(line);
-      if (type !== 'wifi') continue;
+      if (type !== 'wifi' && type !== '802-11-wireless') continue;
       const safeGet = async (field) => {
         try {
           const { stdout: value } = await runNmcli(['-g', field, 'con', 'show', name]);
@@ -1809,6 +1809,66 @@ app.post('/api/hotspot/nm', async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       error: 'Unable to update NetworkManager hotspot.',
+      details: error.stderr || error.message
+    });
+  }
+});
+
+app.post('/api/hotspot/nm/create', async (req, res) => {
+  if (!(await isNetworkManagerActive())) {
+    return res.status(400).json({ error: 'NetworkManager is not active.' });
+  }
+
+  const { name, config, restart = true } = req.body || {};
+  if (!name || typeof name !== 'string') {
+    return res.status(400).json({ error: 'name is required.' });
+  }
+  if (!config || typeof config !== 'object') {
+    return res.status(400).json({ error: 'config object is required.' });
+  }
+
+  const sanitized = (value) => (typeof value === 'string' ? value.trim() : '');
+  const ssid = sanitized(config.ssid);
+  const iface = sanitized(config.iface);
+  const band = sanitized(config.band) || 'bg';
+  const channel = sanitized(config.channel);
+  const psk = sanitized(config.psk);
+  const ipv4Address = sanitized(config.ipv4Address) || '192.168.4.1/24';
+
+  if (!ssid) {
+    return res.status(400).json({ error: 'ssid is required.' });
+  }
+  if (!iface) {
+    return res.status(400).json({ error: 'iface is required.' });
+  }
+
+  try {
+    await runNmcli(['con', 'add', 'type', 'wifi', 'ifname', iface, 'con-name', name, 'ssid', ssid]);
+    await runNmcli(['con', 'modify', name, '802-11-wireless.mode', 'ap']);
+    await runNmcli(['con', 'modify', name, '802-11-wireless.band', band]);
+    if (channel) {
+      await runNmcli(['con', 'modify', name, '802-11-wireless.channel', channel]);
+    }
+    if (psk) {
+      await runNmcli(['con', 'modify', name, '802-11-wireless-security.key-mgmt', 'wpa-psk']);
+      await runNmcli(['con', 'modify', name, '802-11-wireless-security.psk', psk]);
+    }
+    await runNmcli(['con', 'modify', name, 'ipv4.method', 'shared', 'ipv4.addresses', ipv4Address, 'ipv6.method', 'ignore']);
+
+    if (restart) {
+      try {
+        await runNmcli(['con', 'down', name]);
+      } catch (error) {
+        // Ignore if already inactive
+      }
+      await runNmcli(['con', 'up', name]);
+    }
+
+    const { stdout } = await runNmcli(['con', 'show', name]);
+    return res.json({ ok: true, name, details: stdout });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Unable to create NetworkManager hotspot.',
       details: error.stderr || error.message
     });
   }

@@ -69,7 +69,7 @@
             <h1 class="text-4xl font-bold mb-3 bg-gradient-to-r from-cyan-300 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
                 <i class="fas fa-broadcast-tower mr-3"></i>Hotspot Settings
             </h1>
-            <p class="text-gray-300 text-lg">Manage the NetworkManager hotspot profile used by the Pi.</p>
+            <p class="text-gray-300 text-lg">Manage the hotspot profile used by the Pi.</p>
             <div class="mt-4 flex flex-wrap justify-center gap-3">
                 <a href="/settings" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-full transition-colors">
                     <i class="fas fa-arrow-left mr-2"></i>Back to Settings
@@ -84,7 +84,7 @@
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-2xl font-semibold">Hotspot Manager</h2>
-                    <p class="text-gray-300 text-sm">NetworkManager handles the AP when running on modern Pi OS.</p>
+                    <p class="text-gray-300 text-sm">Shows which hotspot manager is active on this device.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                     <span id="managerBadge" class="badge badge-off">unknown</span>
@@ -113,6 +113,7 @@
                     <p id="activeMode" class="text-sm font-semibold">--</p>
                 </div>
             </div>
+            <div id="modeNotice" class="mt-4 text-sm text-amber-200"></div>
         </section>
 
         <section id="rawPanel" class="panel p-6 mb-6 hidden">
@@ -128,7 +129,7 @@
             <textarea id="rawConfig" class="input-dark rounded px-3 py-2 w-full h-64 font-mono text-xs" readonly></textarea>
         </section>
 
-        <section class="panel p-8">
+        <section id="nmSection" class="panel p-8">
             <form id="hotspotForm" class="space-y-6">
                 <div>
                     <h2 class="text-2xl font-semibold mb-2">Hotspot Profile</h2>
@@ -191,8 +192,109 @@
                     <button type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-3 rounded-lg font-semibold">
                         <i class="fas fa-save mr-2"></i>Save Settings
                     </button>
+                    <button id="createBtn" type="button" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg font-semibold">
+                        <i class="fas fa-plus mr-2"></i>Create New Profile
+                    </button>
                 </div>
                 <p id="formStatus" class="text-sm text-gray-300"></p>
+            </form>
+        </section>
+
+        <section id="hostapdSection" class="panel p-8 hidden">
+            <form id="hostapdForm" class="space-y-6">
+                <div>
+                    <h2 class="text-2xl font-semibold mb-2">Hostapd Configuration</h2>
+                    <p class="text-gray-300 text-sm">Edit the legacy hostapd hotspot configuration.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Interface</label>
+                        <input id="ha-interface" class="input-dark rounded px-3 py-2 w-full" placeholder="wlan0" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">SSID</label>
+                        <input id="ha-ssid" class="input-dark rounded px-3 py-2 w-full" placeholder="Event-Jukebox" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Password</label>
+                        <div class="flex gap-2">
+                            <input id="ha-wpa_passphrase" type="password" class="input-dark rounded px-3 py-2 w-full" placeholder="8-63 characters" required>
+                            <button id="ha-togglePassBtn" class="bg-slate-600 hover:bg-slate-500 px-3 rounded" type="button">Show</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Channel</label>
+                        <input id="ha-channel" type="number" min="1" max="165" class="input-dark rounded px-3 py-2 w-full" placeholder="7" required>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Band (hw_mode)</label>
+                        <select id="ha-hw_mode" class="input-dark rounded px-3 py-2 w-full">
+                            <option value="g">2.4 GHz (g)</option>
+                            <option value="a">5 GHz (a)</option>
+                            <option value="b">Legacy (b)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Country Code</label>
+                        <input id="ha-country_code" class="input-dark rounded px-3 py-2 w-full" placeholder="US">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <input id="ha-ignore_broadcast_ssid" type="checkbox" class="h-5 w-5">
+                        <label for="ha-ignore_broadcast_ssid" class="text-sm">Hide SSID broadcast</label>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-700 pt-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg font-semibold">Advanced Settings</h3>
+                        <button id="ha-toggleAdvancedBtn" type="button" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg">Show</button>
+                    </div>
+                    <div id="ha-advancedFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Driver</label>
+                            <input id="ha-driver" class="input-dark rounded px-3 py-2 w-full" placeholder="nl80211">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WPA Mode</label>
+                            <input id="ha-wpa" type="number" min="1" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WPA Key Mgmt</label>
+                            <input id="ha-wpa_key_mgmt" class="input-dark rounded px-3 py-2 w-full" placeholder="WPA-PSK">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">RSN Pairwise</label>
+                            <input id="ha-rsn_pairwise" class="input-dark rounded px-3 py-2 w-full" placeholder="CCMP">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">WMM Enabled</label>
+                            <input id="ha-wmm_enabled" type="number" min="0" max="1" class="input-dark rounded px-3 py-2 w-full" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">MAC ACL</label>
+                            <input id="ha-macaddr_acl" type="number" min="0" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Auth Algs</label>
+                            <input id="ha-auth_algs" type="number" min="0" max="2" class="input-dark rounded px-3 py-2 w-full" placeholder="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <label class="flex items-center gap-3 text-sm">
+                        <input id="ha-restartAfterSave" type="checkbox" class="h-5 w-5" checked>
+                        Restart hostapd after save
+                    </label>
+                    <button type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-3 rounded-lg font-semibold">
+                        <i class="fas fa-save mr-2"></i>Save Settings
+                    </button>
+                </div>
+                <p id="hostapdStatus" class="text-sm text-gray-300"></p>
             </form>
         </section>
     </div>
