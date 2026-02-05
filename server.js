@@ -214,7 +214,8 @@ function isPublicApi(req) {
       '/api/music-services/status',
       '/api/event-config',
       '/api/audio/output',
-      '/api/system-mode'
+      '/api/system-mode',
+      '/api/volume'
     ].includes(path);
   }
   if (req.method === 'POST') {
@@ -3182,6 +3183,12 @@ io.on('connection', (socket) => {
     audioServiceSockets.add(socket.id);
     connectedUsers.delete(socket.id);
     emitUserCount();
+  });
+
+  socket.on('requestVolumeSync', () => {
+    if (typeof lastKnownVolumePercent === 'number') {
+      socket.emit('volumeUpdated', { volume: lastKnownVolumePercent, source: 'server-sync' });
+    }
   });
 
   socket.on('disconnect', () => {

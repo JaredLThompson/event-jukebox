@@ -535,6 +535,7 @@ class VirtualJukebox {
 
         this.socket.on('connect', () => {
             this.showToast('Connected to jukebox!', 'success');
+            this.socket.emit('requestVolumeSync');
         });
 
         this.socket.on('disconnect', () => {
@@ -574,6 +575,7 @@ class VirtualJukebox {
         // Listen for volume updates from other clients or server
         this.socket.on('volumeUpdated', (data) => {
             if (!data || typeof data.volume !== 'number') return;
+            console.log('🔈 Server volume update:', data);
             if (this.isUserAdjustingVolume) return;
             if (data.sourceId && this.socket && data.sourceId === this.socket.id) return;
             if (!this.isSyncingVolume) {
@@ -637,6 +639,7 @@ class VirtualJukebox {
             const response = await fetch('/api/volume');
             if (!response.ok) return;
             const data = await response.json();
+            console.log('🔈 Server volume response:', data);
             if (data && typeof data.volume === 'number') {
                 this.isSyncingVolume = true;
                 this.syncVolumeFromServer(data.volume);
@@ -2164,6 +2167,7 @@ class VirtualJukebox {
         const clamped = Number.isNaN(volumeInt) ? 50 : Math.min(100, Math.max(0, volumeInt));
         const fromUser = options.fromUser === true;
         const debounce = options.debounce === true;
+        console.log(`🎚️ setVolume(${clamped}%) source=${fromUser ? 'user' : 'system'}${debounce ? ' debounced' : ''}`);
         
         // Update UI immediately for responsiveness
         this.updateVolumeValue(clamped);
@@ -2255,6 +2259,7 @@ class VirtualJukebox {
         }
         
         const clamped = Math.min(100, Math.max(0, volumePercent));
+        console.log('🎚️ Syncing volume slider from server:', clamped);
         
         // Update UI
         this.updateVolumeValue(clamped);
