@@ -68,6 +68,7 @@ const getPlaylistText = (key, field, fallback) => {
 class VirtualJukebox {
     constructor() {
         this.socket = io();
+        this.logBuildInfo();
         this.player = null;
         this.isPlayerReady = false;
         this.currentSong = null;
@@ -109,6 +110,19 @@ class VirtualJukebox {
         });
         
         // Server-side audio - no YouTube Player API needed
+    }
+
+    async logBuildInfo() {
+        try {
+            const response = await fetch('/api/build-info');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && data.buildTime) {
+                console.log(`🧱 app.js build: ${data.buildTime} (${data.source || 'build-info'})`);
+            }
+        } catch (error) {
+            console.warn('Failed to load build info:', error.message);
+        }
     }
 
     initializeSettingsUI() {

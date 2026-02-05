@@ -140,6 +140,21 @@ const io = socketIo(server, {
 });
 let lastKnownVolumePercent = null;
 const volumeFilePath = path.join(__dirname, 'data', 'audio-volume.json');
+const buildInfo = (() => {
+  const appJsPath = path.join(__dirname, 'public', 'js', 'app.js');
+  try {
+    const stats = fs.statSync(appJsPath);
+    return {
+      buildTime: stats.mtime.toISOString(),
+      source: 'app.js mtime'
+    };
+  } catch (error) {
+    return {
+      buildTime: new Date().toISOString(),
+      source: 'server start'
+    };
+  }
+})();
 
 const loadSavedVolumePercent = () => {
   if (!fs.existsSync(volumeFilePath)) return null;
@@ -215,7 +230,8 @@ function isPublicApi(req) {
       '/api/event-config',
       '/api/audio/output',
       '/api/system-mode',
-      '/api/volume'
+      '/api/volume',
+      '/api/build-info'
     ].includes(path);
   }
   if (req.method === 'POST') {
@@ -3109,6 +3125,10 @@ app.get('/api/volume', requireAuthApi, (req, res) => {
   res.json({
     volume: typeof lastKnownVolumePercent === 'number' ? lastKnownVolumePercent : null
   });
+});
+
+app.get('/api/build-info', (req, res) => {
+  res.json(buildInfo);
 });
 
 app.get('/api/history/export', (req, res) => {
