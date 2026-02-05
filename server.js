@@ -1615,6 +1615,96 @@ app.get('/api/hostapd', async (req, res) => {
   }
 });
 
+app.get('/api/hotspot/status', async (req, res) => {
+  const nmActive = await isNetworkManagerActive();
+  if (nmActive) {
+    return res.json({ mode: 'networkmanager' });
+  }
+
+  const hostapdExists = fs.existsSync(HOSTAPD_CONF_PATH);
+  if (hostapdExists) {
+    return res.json({ mode: 'hostapd', path: HOSTAPD_CONF_PATH });
+  }
+
+  return res.json({ mode: 'none' });
+});
+
+app.get('/api/hotspot/nm', async (req, res) => {
+  if (!(await isNetworkManagerActive())) {
+    return res.status(400).json({ error: 'NetworkManager is not active.' });
+  }
+
+  try {
+    const { stdout } = await runNmcli(['-t', '-f', 'NAME,UUID,TYPE,DEVICE,ACTIVE', 'con', 'show']);
+    const rawConnections = stdout.trim().split('\n').filter(Boolean);
+    const candidates = [];
+
+    for (const line of rawConnections) {
+      const [name, uuid, type, device, active] = splitNmcliLine(line);
+      if (type !== 'wifi') continue;
+      const safeGet = async (field) => {
+        try {
+          const { stdout: value } = await runNmcli(['-g', field, 'con', 'show', name]);
+          return value.trim();
+        } catch (error) {
+          return '';
+        }
+      };
+
+      const mode = await safeGet('802-11-wireless.mode');
+      if (mode !== 'ap') continue;
+
+      const ssid = await safeGet('802-11-wireless.ssid');
+      const band = await safeGet('802-11-wireless.band');
+      const channel = await safeGet('802-11-wireless.channel');
+      const iface = await safeGet('connection.interface-name');
+      const psk = await safeGet('802-11-wireless-security.psk');
+      const ipv4Method = await safeGet('ipv4.method');
+      const ipv4Addresses = await safeGet('ipv4.addresses');
+
+      candidates.push({
+        name,
+        uuid,
+        device,
+        active: active === 'yes',
+        mode,
+        ssid,
+        band,
+        channel,
+        iface,
+        psk,
+        ipv4Method,
+        ipv4Addresses
+      });
+    }
+
+    const active = candidates.find((item) => item.active) || candidates[0] || null;
+    return res.json({ connections: candidates, active: active ? active.name : '' });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Unable to read NetworkManager hotspot configuration.',
+      details: error.stderr || error.message
+    });
+  }
+});
+
+app.get('/api/hotspot/nm/raw', async (req, res) => {
+  if (!(await isNetworkManagerActive())) {
+    return res.status(400).send('NetworkManager is not active.');
+  }
+  const name = (req.query.name || '').toString();
+  if (!name) {
+    return res.status(400).send('Connection name is required.');
+  }
+  try {
+    const { stdout } = await runNmcli(['con', 'show', name]);
+    res.setHeader('Content-Type', 'text/plain');
+    return res.send(stdout);
+  } catch (error) {
+    return res.status(500).send(error.stderr || error.message || 'Unable to load connection details.');
+  }
+});
+
 app.get('/api/hostapd/raw', (req, res) => {
   try {
     const contents = fs.readFileSync(HOSTAPD_CONF_PATH, 'utf8');
@@ -1654,6 +1744,72 @@ app.post('/api/hostapd', async (req, res) => {
     return res.status(400).json({
       error: 'Unable to update hostapd configuration.',
       details: error.message
+    });
+  }
+});
+
+app.post('/api/hotspot/nm', async (req, res) => {
+  if (!(await isNetworkManagerActive())) {
+    return res.status(400).json({ error: 'NetworkManager is not active.' });
+  }
+
+  const { connectionName, newName, config, restart = true } = req.body || {};
+  if (!connectionName || typeof connectionName !== 'string') {
+    return res.status(400).json({ error: 'connectionName is required.' });
+  }
+  if (!config || typeof config !== 'object') {
+    return res.status(400).json({ error: 'config object is required.' });
+  }
+
+  const updates = [];
+  const sanitized = (value) => (typeof value === 'string' ? value.trim() : '');
+
+  const ssid = sanitized(config.ssid);
+  const iface = sanitized(config.iface);
+  const band = sanitized(config.band);
+  const channel = sanitized(config.channel);
+  const psk = sanitized(config.psk);
+  const ipv4Address = sanitized(config.ipv4Address);
+
+  if (ssid) updates.push(['802-11-wireless.ssid', ssid]);
+  if (iface) updates.push(['connection.interface-name', iface]);
+  if (band) updates.push(['802-11-wireless.band', band]);
+  if (channel) updates.push(['802-11-wireless.channel', channel]);
+  if (psk) {
+    updates.push(['802-11-wireless-security.key-mgmt', 'wpa-psk']);
+    updates.push(['802-11-wireless-security.psk', psk]);
+  }
+  if (ipv4Address) {
+    updates.push(['ipv4.method', 'shared']);
+    updates.push(['ipv4.addresses', ipv4Address]);
+  }
+
+  try {
+    let targetName = connectionName;
+    if (newName && typeof newName === 'string' && newName.trim() && newName.trim() !== connectionName) {
+      targetName = newName.trim();
+      await runNmcli(['con', 'modify', connectionName, 'connection.id', targetName]);
+    }
+
+    for (const [key, value] of updates) {
+      await runNmcli(['con', 'modify', targetName, key, value]);
+    }
+
+    if (restart) {
+      try {
+        await runNmcli(['con', 'down', targetName]);
+      } catch (error) {
+        // Ignore down errors (connection might already be inactive)
+      }
+      await runNmcli(['con', 'up', targetName]);
+    }
+
+    const { stdout } = await runNmcli(['con', 'show', targetName]);
+    return res.json({ ok: true, name: targetName, details: stdout });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Unable to update NetworkManager hotspot.',
+      details: error.stderr || error.message
     });
   }
 });
@@ -1711,6 +1867,15 @@ function runSystemctl(args) {
       resolve({ stdout, stderr });
     });
   });
+}
+
+async function isNetworkManagerActive() {
+  try {
+    const { stdout } = await runSystemctl(['is-active', 'NetworkManager']);
+    return stdout.trim() === 'active';
+  } catch (error) {
+    return false;
+  }
 }
 
 const HOSTAPD_ALLOWED_KEYS = new Set([

@@ -1,12 +1,13 @@
-const form = document.getElementById('hostapdForm');
+const form = document.getElementById('hotspotForm');
 const refreshBtn = document.getElementById('refreshBtn');
 const formStatus = document.getElementById('formStatus');
-const serviceBadge = document.getElementById('serviceBadge');
-const serviceStatus = document.getElementById('serviceStatus');
-const configPath = document.getElementById('configPath');
+const managerBadge = document.getElementById('managerBadge');
+const activeProfile = document.getElementById('activeProfile');
+const activeDevice = document.getElementById('activeDevice');
+const activeMode = document.getElementById('activeMode');
+const connectionSelect = document.getElementById('connectionSelect');
+const connectionName = document.getElementById('connectionName');
 const togglePassBtn = document.getElementById('togglePassBtn');
-const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
-const advancedFields = document.getElementById('advancedFields');
 const viewRawBtn = document.getElementById('viewRawBtn');
 const downloadRawBtn = document.getElementById('downloadRawBtn');
 const rawPanel = document.getElementById('rawPanel');
@@ -16,22 +17,15 @@ const hideRawBtn = document.getElementById('hideRawBtn');
 const fields = {
     interface: document.getElementById('interface'),
     ssid: document.getElementById('ssid'),
-    wpa_passphrase: document.getElementById('wpa_passphrase'),
+    psk: document.getElementById('psk'),
     channel: document.getElementById('channel'),
-    hw_mode: document.getElementById('hw_mode'),
-    country_code: document.getElementById('country_code'),
-    ignore_broadcast_ssid: document.getElementById('ignore_broadcast_ssid'),
-    driver: document.getElementById('driver'),
-    wpa: document.getElementById('wpa'),
-    wpa_key_mgmt: document.getElementById('wpa_key_mgmt'),
-    rsn_pairwise: document.getElementById('rsn_pairwise'),
-    wmm_enabled: document.getElementById('wmm_enabled'),
-    macaddr_acl: document.getElementById('macaddr_acl'),
-    auth_algs: document.getElementById('auth_algs')
+    band: document.getElementById('band'),
+    ipv4Address: document.getElementById('ipv4Address')
 };
 
 const restartAfterSave = document.getElementById('restartAfterSave');
-let currentConfig = {};
+let connections = [];
+let activeName = '';
 
 function setStatus(message, tone = 'info') {
     formStatus.textContent = message;
@@ -45,122 +39,102 @@ function setStatus(message, tone = 'info') {
     }
 }
 
-function setServiceBadge(service) {
-    if (service?.ok && service.active) {
-        serviceBadge.textContent = 'active';
-        serviceBadge.classList.remove('badge-off');
-        serviceBadge.classList.add('badge-on');
-        serviceStatus.textContent = service.status || 'active';
+function setManagerBadge(ok) {
+    if (ok) {
+        managerBadge.textContent = 'active';
+        managerBadge.classList.remove('badge-off');
+        managerBadge.classList.add('badge-on');
         return;
     }
-    serviceBadge.textContent = 'inactive';
-    serviceBadge.classList.remove('badge-on');
-    serviceBadge.classList.add('badge-off');
-    serviceStatus.textContent = service?.status || service?.error || 'unknown';
+    managerBadge.textContent = 'inactive';
+    managerBadge.classList.remove('badge-on');
+    managerBadge.classList.add('badge-off');
 }
 
-function applyDefaults(config) {
-    return {
-        interface: config.interface || 'wlan0',
-        ssid: config.ssid || 'Event-Jukebox',
-        wpa_passphrase: config.wpa_passphrase || '',
-        channel: config.channel || '7',
-        hw_mode: config.hw_mode || 'g',
-        country_code: config.country_code || '',
-        ignore_broadcast_ssid: config.ignore_broadcast_ssid || '0',
-        driver: config.driver || 'nl80211',
-        wpa: config.wpa || '2',
-        wpa_key_mgmt: config.wpa_key_mgmt || 'WPA-PSK',
-        rsn_pairwise: config.rsn_pairwise || 'CCMP',
-        wmm_enabled: config.wmm_enabled || '0',
-        macaddr_acl: config.macaddr_acl || '0',
-        auth_algs: config.auth_algs || '1'
-    };
+function populateSelect(items) {
+    connectionSelect.innerHTML = '';
+    items.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.name;
+        option.textContent = item.name + (item.active ? ' (active)' : '');
+        connectionSelect.appendChild(option);
+    });
 }
 
-function populateForm(config) {
-    currentConfig = config;
-    const normalized = applyDefaults(config);
-
-    fields.interface.value = normalized.interface;
-    fields.ssid.value = normalized.ssid;
-    fields.wpa_passphrase.value = normalized.wpa_passphrase;
-    fields.channel.value = normalized.channel;
-    fields.hw_mode.value = normalized.hw_mode;
-    fields.country_code.value = normalized.country_code;
-    fields.ignore_broadcast_ssid.checked = normalized.ignore_broadcast_ssid === '1';
-    fields.driver.value = normalized.driver;
-    fields.wpa.value = normalized.wpa;
-    fields.wpa_key_mgmt.value = normalized.wpa_key_mgmt;
-    fields.rsn_pairwise.value = normalized.rsn_pairwise;
-    fields.wmm_enabled.value = normalized.wmm_enabled;
-    fields.macaddr_acl.value = normalized.macaddr_acl;
-    fields.auth_algs.value = normalized.auth_algs;
+function populateForm(item) {
+    if (!item) return;
+    connectionName.value = item.name || '';
+    fields.interface.value = item.iface || '';
+    fields.ssid.value = item.ssid || '';
+    fields.psk.value = '';
+    fields.channel.value = item.channel || '';
+    fields.band.value = item.band || 'bg';
+    fields.ipv4Address.value = item.ipv4Addresses || '';
 }
 
-async function loadConfig() {
-    setStatus('Loading hostapd config...');
+async function loadStatus() {
+    setStatus('Loading hotspot settings...');
     try {
-        const response = await fetch('/api/hostapd');
+        const statusResponse = await fetch('/api/hotspot/status');
+        const statusData = await statusResponse.json();
+        if (statusData.mode !== 'networkmanager') {
+            setManagerBadge(false);
+            setStatus('NetworkManager is not active on this host.', 'error');
+            return;
+        }
+        setManagerBadge(true);
+
+        const response = await fetch('/api/hotspot/nm');
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error || 'Unable to load hostapd config');
+            throw new Error(data.error || 'Unable to load hotspot profiles');
         }
-        configPath.textContent = data.path || '--';
-        populateForm(data.config || {});
-        setServiceBadge(data.service);
+        connections = data.connections || [];
+        activeName = data.active || '';
+        populateSelect(connections);
+
+        const active = connections.find((item) => item.name === activeName) || connections[0];
+        if (active) {
+            connectionSelect.value = active.name;
+            populateForm(active);
+            activeProfile.textContent = active.name || '--';
+            activeDevice.textContent = active.device || active.iface || '--';
+            activeMode.textContent = active.mode || 'ap';
+        } else {
+            activeProfile.textContent = '--';
+            activeDevice.textContent = '--';
+            activeMode.textContent = '--';
+        }
+
         setStatus('Ready.');
     } catch (error) {
+        setManagerBadge(false);
         setStatus(error.message, 'error');
-        setServiceBadge(null);
-        configPath.textContent = '--';
     }
-}
-
-async function loadRawConfig() {
-    const response = await fetch('/api/hostapd/raw');
-    const text = await response.text();
-    if (!response.ok) {
-        throw new Error(text || 'Unable to load raw config');
-    }
-    return text;
 }
 
 function buildPayload() {
-    const config = {
-        interface: fields.interface.value.trim(),
-        ssid: fields.ssid.value.trim(),
-        wpa_passphrase: fields.wpa_passphrase.value,
-        channel: fields.channel.value.trim(),
-        hw_mode: fields.hw_mode.value,
-        ignore_broadcast_ssid: fields.ignore_broadcast_ssid.checked ? '1' : '0'
-    };
-
-    const optional = {
-        country_code: fields.country_code.value.trim().toUpperCase() || currentConfig.country_code || '',
-        driver: fields.driver.value.trim() || currentConfig.driver || '',
-        wpa: fields.wpa.value.trim() || currentConfig.wpa || '',
-        wpa_key_mgmt: fields.wpa_key_mgmt.value.trim() || currentConfig.wpa_key_mgmt || '',
-        rsn_pairwise: fields.rsn_pairwise.value.trim() || currentConfig.rsn_pairwise || '',
-        wmm_enabled: fields.wmm_enabled.value.trim() || currentConfig.wmm_enabled || '',
-        macaddr_acl: fields.macaddr_acl.value.trim() || currentConfig.macaddr_acl || '',
-        auth_algs: fields.auth_algs.value.trim() || currentConfig.auth_algs || ''
-    };
-
-    Object.entries(optional).forEach(([key, value]) => {
-        if (value) {
-            config[key] = value;
+    const selectedName = connectionSelect.value;
+    return {
+        connectionName: selectedName,
+        newName: connectionName.value.trim(),
+        restart: restartAfterSave.checked,
+        config: {
+            ssid: fields.ssid.value.trim(),
+            iface: fields.interface.value.trim(),
+            band: fields.band.value,
+            channel: fields.channel.value.trim(),
+            psk: fields.psk.value.trim(),
+            ipv4Address: fields.ipv4Address.value.trim()
         }
-    });
-
-    return { config, restart: restartAfterSave.checked };
+    };
 }
 
 form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    setStatus('Saving hostapd config...');
+    setStatus('Saving hotspot settings...');
     try {
-        const response = await fetch('/api/hostapd', {
+        const response = await fetch('/api/hotspot/nm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildPayload())
@@ -169,44 +143,46 @@ form.addEventListener('submit', async (event) => {
         if (!response.ok) {
             throw new Error(data.details || data.error || 'Save failed');
         }
-        populateForm(data.config || currentConfig);
-        if (data.restart?.ok) {
-            setServiceBadge(data.restart);
-            setStatus('Saved and restarted hostapd.', 'success');
-        } else if (restartAfterSave.checked) {
-            setStatus(`Saved, but restart failed: ${data.restart?.error || 'unknown error'}`, 'error');
-        } else {
-            setStatus('Saved without restart.', 'success');
-        }
+        setStatus('Saved hotspot settings.', 'success');
+        await loadStatus();
     } catch (error) {
         setStatus(error.message, 'error');
     }
 });
 
+connectionSelect.addEventListener('change', () => {
+    const selected = connections.find((item) => item.name === connectionSelect.value);
+    populateForm(selected);
+});
+
 refreshBtn.addEventListener('click', (event) => {
     event.preventDefault();
-    loadConfig();
+    loadStatus();
 });
 
 togglePassBtn.addEventListener('click', () => {
-    const isPassword = fields.wpa_passphrase.type === 'password';
-    fields.wpa_passphrase.type = isPassword ? 'text' : 'password';
+    const isPassword = fields.psk.type === 'password';
+    fields.psk.type = isPassword ? 'text' : 'password';
     togglePassBtn.textContent = isPassword ? 'Hide' : 'Show';
 });
 
-toggleAdvancedBtn.addEventListener('click', () => {
-    const isHidden = advancedFields.classList.contains('hidden');
-    advancedFields.classList.toggle('hidden', !isHidden);
-    toggleAdvancedBtn.textContent = isHidden ? 'Hide' : 'Show';
-});
+async function loadRawConfig() {
+    const name = connectionSelect.value;
+    const response = await fetch(`/api/hotspot/nm/raw?name=${encodeURIComponent(name)}`);
+    const text = await response.text();
+    if (!response.ok) {
+        throw new Error(text || 'Unable to load connection details');
+    }
+    return text;
+}
 
 viewRawBtn.addEventListener('click', async () => {
     try {
-        setStatus('Loading raw config...');
+        setStatus('Loading connection details...');
         const text = await loadRawConfig();
         rawConfig.value = text;
         rawPanel.classList.remove('hidden');
-        setStatus('Raw config loaded.');
+        setStatus('Connection details loaded.');
     } catch (error) {
         setStatus(error.message, 'error');
     }
@@ -224,7 +200,7 @@ downloadRawBtn.addEventListener('click', async () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'hostapd.conf';
+        link.download = `${connectionSelect.value || 'hotspot'}.nmcli.txt`;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -235,4 +211,4 @@ downloadRawBtn.addEventListener('click', async () => {
     }
 });
 
-loadConfig();
+loadStatus();
