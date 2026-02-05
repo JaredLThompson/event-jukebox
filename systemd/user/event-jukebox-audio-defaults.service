@@ -1,0 +1,12 @@
+[Unit]
+Description=Event Jukebox Audio Defaults (PipeWire)
+After=pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/event-jukebox/scripts/set-audio-defaults.sh @DEFAULT_SINK@ 0.7
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

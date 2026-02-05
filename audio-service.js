@@ -16,7 +16,13 @@ class AudioService {
         this.currentProcess = null;
         this.isPlaying = false;
         this.currentSong = null;
-        this.volume = 0.7;
+        this.dataDir = path.join(__dirname, 'data');
+        if (!fs.existsSync(this.dataDir)) {
+            fs.mkdirSync(this.dataDir, { recursive: true });
+        }
+        this.volumeFile = path.join(this.dataDir, 'audio-volume.json');
+        const savedVolume = this.loadSavedVolume();
+        this.volume = savedVolume ?? 0.7;
         this.outputDevice = process.env.ALSA_DEVICE || null;
         this.position = 0;
         this.duration = 0;
@@ -39,6 +45,13 @@ class AudioService {
         this.cacheManifest = this.loadCacheManifest();
         this.prebufferDedupEnabled = process.env.PREBUFFER_DEDUP !== '0';
         this.prebufferInFlight = new Map();
+
+        if (savedVolume !== null && savedVolume !== undefined) {
+            console.log('🔊 Loaded saved volume:', Math.round(this.volume * 100) + '%');
+        }
+
+        // Apply saved volume on startup (best-effort)
+        this.applySystemVolume(Math.round(this.volume * 100));
         
         console.log('🎵 Audio Service initialized');
         console.log('📁 Cache directory:', this.cacheDir);
@@ -46,6 +59,32 @@ class AudioService {
             console.log('🔈 Audio output device set to:', this.outputDevice);
         }
         console.log('🧰 Pre-buffer deduplication:', this.prebufferDedupEnabled ? 'enabled' : 'disabled');
+    }
+
+    loadSavedVolume() {
+        if (!fs.existsSync(this.volumeFile)) return null;
+        try {
+            const raw = fs.readFileSync(this.volumeFile, 'utf8');
+            const parsed = JSON.parse(raw);
+            const volume = typeof parsed.volume === 'number' ? parsed.volume : null;
+            if (volume === null || Number.isNaN(volume)) return null;
+            return Math.max(0, Math.min(1, volume));
+        } catch (error) {
+            console.log('⚠️ Failed to load saved volume:', error.message);
+            return null;
+        }
+    }
+
+    saveVolume() {
+        try {
+            const payload = {
+                volume: this.volume,
+                updatedAt: new Date().toISOString()
+            };
+            fs.writeFileSync(this.volumeFile, JSON.stringify(payload, null, 2));
+        } catch (error) {
+            console.log('⚠️ Failed to save volume:', error.message);
+        }
     }
 
     loadCacheManifest() {
@@ -799,6 +838,7 @@ class AudioService {
         
         // Use amixer to set system volume (try common controls or override via env)
         this.applySystemVolume(Math.round(this.volume * 100));
+        this.saveVolume();
     }
 
     applySystemVolume(percent) {
@@ -846,10 +886,12 @@ class AudioService {
         if (!device || device === 'default') {
             this.outputDevice = null;
             console.log('🔈 Audio output device reset to default');
+            this.applySystemVolume(Math.round(this.volume * 100));
             return;
         }
         this.outputDevice = device;
         console.log('🔈 Audio output device set to:', device);
+        this.applySystemVolume(Math.round(this.volume * 100));
     }
 
     /**

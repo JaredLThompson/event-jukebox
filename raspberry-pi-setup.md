@@ -53,6 +53,61 @@ sudo systemctl set-default graphical.target
 sudo reboot
 ```
 
+## Optional: Persist PipeWire Headphone Volume (Debian 13 / PipeWire)
+If the Pi boots with PipeWire and audio volume is muted/low, install a user-level systemd unit to set defaults on boot.
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp /home/pi/event-jukebox/systemd/user/event-jukebox-audio-defaults.service ~/.config/systemd/user/
+sudo loginctl enable-linger pi
+systemctl --user daemon-reload
+systemctl --user enable event-jukebox-audio-defaults
+systemctl --user start event-jukebox-audio-defaults
+```
+
+## Optional: Nginx Reverse Proxy (Port 80)
+Expose the app on port 80 and forward to the Node app on port 3000.
+
+```bash
+sudo apt install -y nginx
+sudo cp /home/pi/event-jukebox/nginx/event-jukebox.conf /etc/nginx/sites-available/event-jukebox
+sudo ln -sf /etc/nginx/sites-available/event-jukebox /etc/nginx/sites-enabled/event-jukebox
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## Optional: HTTPS with a Self-Signed Cert (Nginx)
+If you want HTTPS on the Pi (useful for captive portals or secure devices), generate a self-signed cert and use the SSL config.
+
+```bash
+sudo apt install -y nginx openssl
+sudo mkdir -p /etc/ssl/event-jukebox
+sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \\
+  -keyout /etc/ssl/event-jukebox/event-jukebox.key \\
+  -out /etc/ssl/event-jukebox/event-jukebox.crt \\
+  -subj "/CN=event-jukebox.local"
+
+sudo cp /home/pi/event-jukebox/nginx/event-jukebox-ssl.conf /etc/nginx/sites-available/event-jukebox
+sudo ln -sf /etc/nginx/sites-available/event-jukebox /etc/nginx/sites-enabled/event-jukebox
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## Optional: HTTPS with Let's Encrypt (Nginx)
+If the Pi has a public DNS name and is reachable from the internet, you can use Let's Encrypt for trusted HTTPS.
+
+```bash
+sudo apt install -y nginx certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.example.com
+```
+
+Renewal is installed automatically. You can test renewal with:
+```bash
+sudo certbot renew --dry-run
+```
+
 ## Audio Output Selection
 Audio output is chosen from Settings and persisted on the Pi.
 
@@ -64,6 +119,11 @@ aplay -l
 Examples:
 - `hw:CARD=Set,DEV=0` (USB audio)
 - `hw:CARD=vc4hdmi0,DEV=0` (HDMI 0)
+
+If you adjust ALSA mixer levels (via `alsamixer`), persist them across reboots:
+```bash
+sudo alsactl store
+```
 
 ## Service Management
 
