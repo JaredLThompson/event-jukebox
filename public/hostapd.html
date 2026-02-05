@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wedding Jukebox - Hotspot Settings</title>
+    <title>Event Jukebox - Hotspot Settings</title>
 
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -116,6 +116,32 @@
             <div id="modeNotice" class="mt-4 text-sm text-amber-200"></div>
         </section>
 
+        <section class="panel p-6 mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-semibold">Auth Fix Instructions</h2>
+                    <p class="text-gray-300 text-sm">If hotspot changes fail with permission errors, run this once on the Pi.</p>
+                </div>
+                <button id="authFixToggleBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm">
+                    Show
+                </button>
+            </div>
+            <div id="authFixPanel" class="hidden mt-4">
+                <div class="card p-4 mb-3 text-sm text-gray-300">
+                    Detected user: <span id="authFixUser" class="font-semibold text-white">--</span>
+                </div>
+                <div class="card p-4">
+                    <p class="text-xs text-gray-400 mb-2">Run this command in a terminal on the Pi:</p>
+                    <textarea id="authFixCommand" class="input-dark rounded px-3 py-2 w-full h-44 font-mono text-xs" readonly></textarea>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button id="authFixCopyBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs">
+                            Copy Command
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="rawPanel" class="panel p-6 mb-6 hidden">
             <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div>
@@ -143,7 +169,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-2">Connection Name</label>
-                        <input id="connectionName" class="input-dark rounded px-3 py-2 w-full" placeholder="Wedding-Jukebox" required>
+                        <input id="connectionName" class="input-dark rounded px-3 py-2 w-full" placeholder="Event-Jukebox" required>
                     </div>
                 </div>
 

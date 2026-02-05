@@ -91,7 +91,8 @@ polkit.addRule(function(action, subject) {
   if (subject.user === "$APP_USER") {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
         action.id === "org.freedesktop.NetworkManager.network-control" ||
-        action.id === "org.freedesktop.NetworkManager.settings.modify.system") {
+        action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
+        action.id === "org.freedesktop.NetworkManager.wifi.share") {
       return polkit.Result.YES;
     }
   }

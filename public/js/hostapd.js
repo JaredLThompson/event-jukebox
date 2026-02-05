@@ -9,6 +9,11 @@ const downloadRawBtn = document.getElementById('downloadRawBtn');
 const rawPanel = document.getElementById('rawPanel');
 const rawConfig = document.getElementById('rawConfig');
 const hideRawBtn = document.getElementById('hideRawBtn');
+const authFixToggleBtn = document.getElementById('authFixToggleBtn');
+const authFixPanel = document.getElementById('authFixPanel');
+const authFixUser = document.getElementById('authFixUser');
+const authFixCommand = document.getElementById('authFixCommand');
+const authFixCopyBtn = document.getElementById('authFixCopyBtn');
 
 const nmSection = document.getElementById('nmSection');
 const hostapdSection = document.getElementById('hostapdSection');
@@ -58,6 +63,7 @@ let nmConnections = [];
 let nmActiveName = '';
 let mode = 'networkmanager';
 let hostapdPath = '';
+let authFixCommandText = '';
 
 function setBadgeActive(active) {
     if (active) {
@@ -81,6 +87,49 @@ function setStatus(el, message, tone = 'info') {
     } else {
         el.classList.add('text-gray-300');
     }
+}
+
+function buildAuthFixCommand(user) {
+    return [
+        `sudo tee /etc/polkit-1/rules.d/49-event-jukebox-wifi.rules > /dev/null <<'EOF'`,
+        'polkit.addRule(function(action, subject) {',
+        `  if (subject.user === \"${user}\") {`,
+        '    if (action.id === \"org.freedesktop.NetworkManager.wifi.scan\" ||',
+        '        action.id === \"org.freedesktop.NetworkManager.network-control\" ||',
+        '        action.id === \"org.freedesktop.NetworkManager.settings.modify.system\" ||',
+        '        action.id === \"org.freedesktop.NetworkManager.wifi.share\") {',
+        '      return polkit.Result.YES;',
+        '    }',
+        '  }',
+        '});',
+        'EOF',
+        'sudo systemctl restart polkit'
+    ].join('\n');
+}
+
+async function loadAuthFixUser() {
+    if (!authFixUser || !authFixCommand) return;
+    try {
+        const response = await fetch('/api/whoami');
+        const data = await response.json();
+        const user = response.ok && data.user ? data.user : 'pi';
+        authFixUser.textContent = user;
+        authFixCommandText = buildAuthFixCommand(user);
+        authFixCommand.value = authFixCommandText;
+    } catch (error) {
+        const user = 'pi';
+        authFixUser.textContent = user;
+        authFixCommandText = buildAuthFixCommand(user);
+        authFixCommand.value = authFixCommandText;
+    }
+}
+
+function formatNmError(message) {
+    if (!message) return 'Request failed.';
+    if (message.includes('Not authorized to share connections via wifi')) {
+        return `${message} Add a polkit rule for this user (see /etc/polkit-1/rules.d/49-event-jukebox-wifi.rules).`;
+    }
+    return message;
 }
 
 function showMode(nextMode) {
@@ -302,7 +351,7 @@ nmForm.addEventListener('submit', async (event) => {
         setStatus(nmStatus, 'Saved hotspot settings.', 'success');
         await loadNmStatus();
     } catch (error) {
-        setStatus(nmStatus, error.message, 'error');
+        setStatus(nmStatus, formatNmError(error.message), 'error');
     }
 });
 
@@ -324,7 +373,7 @@ createBtn.addEventListener('click', async () => {
         const selected = nmConnections.find((item) => item.name === data.name);
         populateNmForm(selected);
     } catch (error) {
-        setStatus(nmStatus, error.message, 'error');
+        setStatus(nmStatus, formatNmError(error.message), 'error');
     }
 });
 
@@ -378,6 +427,34 @@ viewRawBtn.addEventListener('click', async () => {
 hideRawBtn.addEventListener('click', () => {
     rawPanel.classList.add('hidden');
 });
+
+if (authFixToggleBtn && authFixPanel) {
+    authFixToggleBtn.addEventListener('click', () => {
+        const isHidden = authFixPanel.classList.contains('hidden');
+        authFixPanel.classList.toggle('hidden', !isHidden);
+        authFixToggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+    });
+}
+
+if (authFixCopyBtn) {
+    authFixCopyBtn.addEventListener('click', async () => {
+        if (!authFixCommandText) return;
+        try {
+            await navigator.clipboard.writeText(authFixCommandText);
+            authFixCopyBtn.textContent = 'Copied!';
+            setTimeout(() => {
+                authFixCopyBtn.textContent = 'Copy Command';
+            }, 1500);
+        } catch (error) {
+            authFixCopyBtn.textContent = 'Copy Failed';
+            setTimeout(() => {
+                authFixCopyBtn.textContent = 'Copy Command';
+            }, 1500);
+        }
+    });
+}
+
+loadAuthFixUser();
 
 downloadRawBtn.addEventListener('click', async () => {
     try {

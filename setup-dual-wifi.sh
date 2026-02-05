@@ -220,13 +220,13 @@ echo "============================="
 HOTSPOT_SSID="${HOTSPOT_SSID_FLAG}"
 HOTSPOT_PASSWORD="${HOTSPOT_PASSWORD_FLAG}"
 if [[ -z "$HOTSPOT_SSID" ]]; then
-    read -p "Enter hotspot name [Wedding-Jukebox]: " HOTSPOT_SSID
-    HOTSPOT_SSID=${HOTSPOT_SSID:-Wedding-Jukebox}
+    read -p "Enter hotspot name [Event-Jukebox]: " HOTSPOT_SSID
+    HOTSPOT_SSID=${HOTSPOT_SSID:-Event-Jukebox}
 fi
 
 if [[ -z "$HOTSPOT_PASSWORD" ]]; then
-    read -s -p "Enter hotspot password [WeddingMusic2026]: " HOTSPOT_PASSWORD
-    HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-WeddingMusic2026}
+    read -s -p "Enter hotspot password [EventMusic2026]: " HOTSPOT_PASSWORD
+    HOTSPOT_PASSWORD=${HOTSPOT_PASSWORD:-EventMusic2026}
     echo ""
 fi
 
@@ -244,7 +244,8 @@ polkit.addRule(function(action, subject) {
   if (subject.user === "$APP_USER") {
     if (action.id === "org.freedesktop.NetworkManager.wifi.scan" ||
         action.id === "org.freedesktop.NetworkManager.network-control" ||
-        action.id === "org.freedesktop.NetworkManager.settings.modify.system") {
+        action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
+        action.id === "org.freedesktop.NetworkManager.wifi.share") {
       return polkit.Result.YES;
     }
   }
@@ -263,7 +264,7 @@ EOF
     echo "🧹 Cleaning existing connections..."
     # Remove any existing hotspot connection to avoid IP conflicts
     nmcli -t -f NAME,TYPE con show | awk -F: '$2=="wifi" && $1=="Hotspot"{print $1}' | xargs -r -I{} run_cmd nmcli con delete "{}"
-    HOTSPOT_CONN_NAME="Wedding-Jukebox-Hotspot"
+    HOTSPOT_CONN_NAME="Event-Jukebox-Hotspot"
     mapfile -t HOTSPOT_UUIDS < <(nmcli -t -f UUID,NAME,TYPE con show | awk -F: -v name="$HOTSPOT_CONN_NAME" '$3=="wifi" && $2==name {print $1}')
     if [[ ${#HOTSPOT_UUIDS[@]} -gt 1 ]]; then
         echo "⚠️  Multiple hotspot profiles found. Removing duplicates..."

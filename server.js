@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn, execFile } = require('child_process');
 const multer = require('multer');
 const https = require('https');
@@ -1557,6 +1558,23 @@ app.post('/api/audio/output', (req, res) => {
 
 app.get('/api/system-mode', (req, res) => {
   res.json({ mode: systemMode || 'headless' });
+});
+
+app.get('/api/whoami', (req, res) => {
+  try {
+    const userFromEnv = process.env.SUDO_USER || process.env.USER || process.env.LOGNAME;
+    const systemUser = (() => {
+      try {
+        return os.userInfo().username;
+      } catch (error) {
+        return '';
+      }
+    })();
+    const user = userFromEnv || systemUser || 'pi';
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: 'Unable to detect user' });
+  }
 });
 
 app.post('/api/system-mode', (req, res) => {
