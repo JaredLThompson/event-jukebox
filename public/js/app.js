@@ -604,6 +604,9 @@ class VirtualJukebox {
             
             // Load history count
             this.loadHistoryCount();
+
+            // Sync volume from server if available
+            this.loadServerVolume();
             
             // Request initial volume sync from audio service (if connected)
             // This handles the case where audio service is already connected
@@ -626,6 +629,23 @@ class VirtualJukebox {
         } catch (error) {
             console.error('Failed to load initial data:', error);
             this.showToast('Failed to load jukebox data', 'error');
+        }
+    }
+
+    async loadServerVolume() {
+        try {
+            const response = await fetch('/api/volume');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && typeof data.volume === 'number') {
+                this.isSyncingVolume = true;
+                this.syncVolumeFromServer(data.volume);
+                setTimeout(() => {
+                    this.isSyncingVolume = false;
+                }, 300);
+            }
+        } catch (error) {
+            console.warn('Failed to load server volume:', error.message);
         }
     }
 
@@ -2027,7 +2047,12 @@ class VirtualJukebox {
 
     onPlayerReady(event) {
         this.isPlayerReady = true;
-        this.setVolume(50); // Set default volume
+        const currentSlider = this.volumeSlider ? parseInt(this.volumeSlider.value, 10) : null;
+        const savedVolume = parseInt(jukeboxSettings.get('volumePercent'), 10);
+        const initialVolume = !Number.isNaN(currentSlider)
+            ? currentSlider
+            : (Number.isNaN(savedVolume) ? 50 : savedVolume);
+        this.setVolume(initialVolume, { fromUser: false, debounce: false });
         console.log('YouTube player ready');
         this.showToast('YouTube player ready', 'info');
         
@@ -2165,6 +2190,14 @@ class VirtualJukebox {
             return;
         }
 
+        if (fromUser) {
+            if (debounce) {
+                this.queueUiVolumeSend(clamped);
+            } else {
+                this.sendUiVolumeUpdate(clamped);
+            }
+        }
+
         if (!this.player || !this.isPlayerReady) {
             this.scheduleVolumeToast(clamped);
             return;
@@ -2192,6 +2225,24 @@ class VirtualJukebox {
         console.log('🔊 Sending volume command to audio service:', normalized);
         this.isSyncingVolume = false;
         this.socket.emit('volumeCommand', { volume: normalized, sourceId: this.socket?.id });
+    }
+
+    queueUiVolumeSend(volumePercent) {
+        this.pendingVolumePercent = volumePercent;
+        if (this.volumeSendTimer) {
+            clearTimeout(this.volumeSendTimer);
+        }
+        this.volumeSendTimer = setTimeout(() => {
+            if (this.pendingVolumePercent !== null) {
+                this.sendUiVolumeUpdate(this.pendingVolumePercent);
+                this.pendingVolumePercent = null;
+            }
+        }, 150);
+    }
+
+    sendUiVolumeUpdate(volumePercent) {
+        const clamped = Math.min(100, Math.max(0, volumePercent));
+        this.socket.emit('uiVolumeUpdate', { volume: clamped, sourceId: this.socket?.id });
     }
     
     /**

@@ -139,6 +139,24 @@ const io = socketIo(server, {
   }
 });
 let lastKnownVolumePercent = null;
+const volumeFilePath = path.join(__dirname, 'data', 'audio-volume.json');
+
+const loadSavedVolumePercent = () => {
+  if (!fs.existsSync(volumeFilePath)) return null;
+  try {
+    const raw = fs.readFileSync(volumeFilePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const volume = typeof parsed.volume === 'number' ? parsed.volume : null;
+    if (volume === null || Number.isNaN(volume)) return null;
+    const clamped = Math.max(0, Math.min(1, volume));
+    return Math.round(clamped * 100);
+  } catch (error) {
+    console.log('⚠️ Failed to load saved volume:', error.message);
+    return null;
+  }
+};
+
+lastKnownVolumePercent = loadSavedVolumePercent();
 
 // Middleware
 app.use(cors());
@@ -3086,6 +3104,12 @@ app.get('/api/history', (req, res) => {
   });
 });
 
+app.get('/api/volume', requireAuthApi, (req, res) => {
+  res.json({
+    volume: typeof lastKnownVolumePercent === 'number' ? lastKnownVolumePercent : null
+  });
+});
+
 app.get('/api/history/export', (req, res) => {
   const exportData = {
     weddingDate: new Date().toISOString().split('T')[0],
@@ -3192,6 +3216,13 @@ io.on('connection', (socket) => {
       lastKnownVolumePercent = volumePercent;
       io.emit('volumeUpdated', { volume: volumePercent, sourceId: socket.id });
     }
+  });
+
+  socket.on('uiVolumeUpdate', (data) => {
+    if (!data || typeof data.volume !== 'number') return;
+    const volumePercent = Math.round(Math.max(0, Math.min(100, data.volume)));
+    lastKnownVolumePercent = volumePercent;
+    io.emit('volumeUpdated', { volume: volumePercent, sourceId: socket.id, source: 'ui' });
   });
 
   socket.on('fadeCommand', (data = {}) => {
