@@ -83,6 +83,19 @@
                         <button id="duplicatePlaylistBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm font-semibold">Duplicate Current</button>
                     </div>
 
+                    <div class="flex flex-col gap-3 mb-4">
+                        <label class="text-sm font-semibold">Import Exportify CSV</label>
+                        <input id="spotifyCsvInput" type="file" accept=".csv,text/csv" class="w-full text-xs text-slate-300">
+                        <label class="flex items-center gap-2 text-xs text-slate-300">
+                            <input id="spotifyCsvAppend" type="checkbox" class="h-4 w-4">
+                            Append to current playlist
+                        </label>
+                        <button id="importSpotifyCsvBtn" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded text-sm font-semibold">
+                            Import CSV
+                        </button>
+                        <div class="text-xs text-slate-400">Uses Track Name + Artist Name(s) to build search entries.</div>
+                    </div>
+
                     <div class="mb-4">
                         <label class="text-sm font-semibold">Preview</label>
                         <div class="mt-2 bg-slate-800 border border-slate-700 rounded-lg p-3">

@@ -19,6 +19,9 @@ const newPlaylistName = document.getElementById('newPlaylistName');
 const createPlaylistBtn = document.getElementById('createPlaylistBtn');
 const duplicatePlaylistName = document.getElementById('duplicatePlaylistName');
 const duplicatePlaylistBtn = document.getElementById('duplicatePlaylistBtn');
+const spotifyCsvInput = document.getElementById('spotifyCsvInput');
+const spotifyCsvAppend = document.getElementById('spotifyCsvAppend');
+const importSpotifyCsvBtn = document.getElementById('importSpotifyCsvBtn');
 const viewJsonBtn = document.getElementById('viewJsonBtn');
 const jsonModal = document.getElementById('jsonModal');
 const jsonOutput = document.getElementById('jsonOutput');
@@ -72,6 +75,76 @@ const sortKeysDeep = (value) => {
       }, {});
   }
   return value;
+};
+
+const parseCsv = (text) => {
+  const rows = [];
+  let row = [];
+  let value = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        value += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      row.push(value);
+      value = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') {
+        i += 1;
+      }
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = '';
+      continue;
+    }
+    value += char;
+  }
+  if (value.length || row.length) {
+    row.push(value);
+    rows.push(row);
+  }
+  return rows;
+};
+
+const buildSpotifyImportItems = (csvText) => {
+  const rows = parseCsv(csvText);
+  if (!rows.length) return [];
+  const header = rows[0].map((col) => col.trim());
+  const trackIdx = header.findIndex((col) => col.toLowerCase() === 'track name');
+  const artistIdx = header.findIndex((col) => col.toLowerCase() === 'artist name(s)');
+  const albumIdx = header.findIndex((col) => col.toLowerCase() === 'album name');
+  if (trackIdx === -1 || artistIdx === -1) {
+    throw new Error('CSV must include Track Name and Artist Name(s) columns.');
+  }
+  return rows.slice(1)
+    .map((row) => {
+      const title = (row[trackIdx] || '').trim();
+      const artist = (row[artistIdx] || '').trim();
+      const album = (row[albumIdx] || '').trim();
+      if (!title) return null;
+      const search = `${title} ${artist}`.trim();
+      return {
+        search,
+        type: 'spotify-import',
+        source: 'spotify',
+        title,
+        artist,
+        album
+      };
+    })
+    .filter(Boolean);
 };
 
 async function loadPlaylistFiles() {
@@ -386,6 +459,35 @@ duplicatePlaylistBtn.addEventListener('click', async () => {
   showToast('Playlist duplicated', 'success');
   clearDirty();
 });
+
+if (importSpotifyCsvBtn) {
+  importSpotifyCsvBtn.addEventListener('click', async () => {
+    const file = spotifyCsvInput?.files?.[0];
+    if (!file) {
+      showToast('Select a CSV file first', 'error');
+      return;
+    }
+    try {
+      const text = await file.text();
+      const imported = buildSpotifyImportItems(text);
+      if (!imported.length) {
+        showToast('No tracks found in CSV', 'error');
+        return;
+      }
+      if (spotifyCsvAppend && spotifyCsvAppend.checked) {
+        currentPlaylist = currentPlaylist.concat(imported);
+      } else {
+        currentPlaylist = imported;
+      }
+      renderPlaylist();
+      markDirty();
+      showToast(`Imported ${imported.length} tracks`, 'success');
+    } catch (error) {
+      console.error('Failed to import CSV:', error);
+      showToast(error.message || 'CSV import failed', 'error');
+    }
+  });
+}
 
 if (viewJsonBtn) {
   viewJsonBtn.addEventListener('click', () => {

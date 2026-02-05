@@ -9,6 +9,9 @@ venv/
 oauth.json
 oauth.json.*
 
+temp
+temp/*
+
 # Security tokens (never commit these!)
 github-token*
 *.token
