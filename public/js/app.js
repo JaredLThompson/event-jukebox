@@ -2141,6 +2141,26 @@ class VirtualJukebox {
 
         // Check if we're using the audio service (headless mode)
         if (isHeadlessMode) {
+            if (!this.currentSong && !this.isPlaying) {
+                console.log('🚀 No song playing in headless mode, advancing queue via server...');
+                fetch('/api/queue/next', { method: 'POST' })
+                    .then(async (response) => {
+                        if (response.ok) {
+                            this.showToast('Starting queue...', 'success');
+                            setTimeout(() => this.updatePlaylistStatus(), 500);
+                        } else {
+                            const body = await response.text().catch(() => '');
+                            console.log('⚠️ Failed to advance queue:', response.status, body);
+                            this.showToast('Failed to start queue', 'error');
+                        }
+                    })
+                    .catch((error) => {
+                        console.log('❌ Error advancing queue:', error.message);
+                        this.showToast('Failed to start queue', 'error');
+                    });
+                return;
+            }
+
             // Test socket connection first
             console.log('🏓 Testing socket connection before pause...');
             this.socket.emit('ping');
