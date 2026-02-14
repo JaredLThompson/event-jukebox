@@ -7,6 +7,15 @@ class SpotifyService {
         this.isInitialized = false;
         this.isEnabled = process.env.SPOTIFY_ENABLED === '1';
         this.initPromise = this.isEnabled ? this.initializeApi() : Promise.resolve();
+
+        const hasCreds = Boolean(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+        if (!this.isEnabled) {
+            console.log('ℹ️  Spotify integration disabled (SPOTIFY_ENABLED=0)');
+        } else if (hasCreds) {
+            console.log('✅ Spotify credentials detected in environment');
+        } else {
+            console.warn('⚠️  Spotify credentials missing in environment');
+        }
     }
 
     async initializeApi() {
