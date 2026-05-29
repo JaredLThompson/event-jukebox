@@ -1466,6 +1466,10 @@ app.post('/api/oauth', (req, res) => {
     if (!cookie || !authUser) {
       return res.status(400).json({ error: 'Missing cookie or X-Goog-AuthUser header in cURL' });
     }
+    if (!headers['x-goog-authuser']) {
+      headers['x-goog-authuser'] = authUser;
+      headerBlock = buildHeaderBlockFromHeaders(headers);
+    }
 
     if (fs.existsSync(OAUTH_FILE)) {
       const ts = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
