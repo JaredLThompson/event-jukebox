@@ -723,7 +723,10 @@
                             });
                             if (!response.ok) {
                                 const err = await response.json().catch(() => ({}));
-                                throw new Error(err.error || 'Failed to save oauth.json');
+                                const message = err.details
+                                    ? `${err.error || 'Failed to save oauth.json'}: ${err.details}`
+                                    : (err.error || 'Failed to save oauth.json');
+                                throw new Error(message);
                             }
                             this.showToast('oauth.json saved', 'success');
                         } catch (error) {

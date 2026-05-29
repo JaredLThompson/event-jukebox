@@ -20,20 +20,7 @@ const HOSTAPD_CONF_PATH = process.env.HOSTAPD_CONF || '/etc/hostapd/hostapd.conf
 const HOSTAPD_SERVICE = process.env.HOSTAPD_SERVICE || 'hostapd';
 
 function parseCurlHeaders(curlText) {
-  const headers = {};
-  if (!curlText || typeof curlText !== 'string') return headers;
-  const headerRegex = /(?:-H|--header)\s+(['"])(.*?)\1/g;
-  let match;
-  while ((match = headerRegex.exec(curlText)) !== null) {
-    const raw = match[2];
-    const idx = raw.indexOf(':');
-    if (idx === -1) continue;
-    const key = raw.slice(0, idx).trim();
-    const value = raw.slice(idx + 1).trim();
-    if (!key) continue;
-    headers[key.toLowerCase()] = value;
-  }
-  return headers;
+  return parseHeaderBlock(extractHeaderLinesFromCurl(curlText));
 }
 
 function parseHeaderBlock(headerBlock) {
@@ -60,12 +47,34 @@ function buildHeaderBlockFromHeaders(headers) {
 
 function extractHeaderLinesFromCurl(curlText) {
   if (!curlText || typeof curlText !== 'string') return '';
+  const normalized = curlText.replace(/\\\r?\n/g, ' ');
+  const linesFromArgs = [];
+  const headerArgRegex = /(?:^|\s)(?:-H|--header)(?:=|\s+)\$?(["'])([\s\S]*?)\1/g;
+  let match;
+  while ((match = headerArgRegex.exec(normalized)) !== null) {
+    const quote = match[1];
+    const raw = match[2];
+    const headerLine = raw
+      .replace(new RegExp(`\\\\${quote}`, 'g'), quote)
+      .replace(/\\\\/g, '\\')
+      .trim();
+    if (headerLine.includes(':')) {
+      linesFromArgs.push(headerLine);
+    }
+  }
+  if (linesFromArgs.length) {
+    return linesFromArgs.join('\n').trim();
+  }
+
   const lines = [];
   for (const rawLine of curlText.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
     if (line.startsWith('-H ') || line.startsWith('--header ')) {
       let headerLine = line.replace(/^(-H|--header)\s+/, '');
+      if (headerLine.startsWith("$'") && headerLine.endsWith("'")) {
+        headerLine = headerLine.slice(2, -1);
+      }
       if ((headerLine.startsWith("'") && headerLine.endsWith("'")) || (headerLine.startsWith('"') && headerLine.endsWith('"'))) {
         headerLine = headerLine.slice(1, -1);
       }
