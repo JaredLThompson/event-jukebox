@@ -117,6 +117,15 @@ function extractAuthUserFromCurl(curlText) {
   }
 }
 
+function extractCurlUrl(curlText) {
+  if (!curlText || typeof curlText !== 'string') return '';
+  const normalized = curlText.trim();
+  const quoted = /^curl\s+(?:-[^\s]+\s+)*\$?(["'])([\s\S]*?)\1/.exec(normalized);
+  if (quoted && quoted[2]) return quoted[2];
+  const unquoted = /^curl\s+([^\s]+)/.exec(normalized);
+  return unquoted && unquoted[1] ? unquoted[1] : '';
+}
+
 function normalizeHeaderBlock(input) {
   if (!input || typeof input !== 'string') return '';
   const trimmed = input.trim();
@@ -1465,6 +1474,13 @@ app.post('/api/oauth', (req, res) => {
     const authUser = headers['x-goog-authuser'] || extractAuthUserFromCurl(curl);
     if (!cookie || !authUser) {
       return res.status(400).json({ error: 'Missing cookie or X-Goog-AuthUser header in cURL' });
+    }
+    const copiedUrl = extractCurlUrl(curl);
+    if (copiedUrl && !copiedUrl.includes('music.youtube.com/youtubei/v1/')) {
+      return res.status(400).json({
+        error: 'Use a YouTube Music API request',
+        details: 'Copy as cURL from a music.youtube.com/youtubei/v1 request such as browse, next, player, or search. Log/telemetry requests can create oauth.json but do not authenticate YouTube Music search reliably.'
+      });
     }
     if (!headers['x-goog-authuser']) {
       headers['x-goog-authuser'] = authUser;
