@@ -20,7 +20,12 @@ const HOSTAPD_CONF_PATH = process.env.HOSTAPD_CONF || '/etc/hostapd/hostapd.conf
 const HOSTAPD_SERVICE = process.env.HOSTAPD_SERVICE || 'hostapd';
 
 function parseCurlHeaders(curlText) {
-  return parseHeaderBlock(extractHeaderLinesFromCurl(curlText));
+  const headers = parseHeaderBlock(extractHeaderLinesFromCurl(curlText));
+  const cookie = extractCookieFromCurl(curlText);
+  if (cookie && !headers.cookie) {
+    headers.cookie = cookie;
+  }
+  return headers;
 }
 
 function parseHeaderBlock(headerBlock) {
@@ -85,6 +90,31 @@ function extractHeaderLinesFromCurl(curlText) {
     }
   }
   return lines.join('\n').trim();
+}
+
+function extractCookieFromCurl(curlText) {
+  if (!curlText || typeof curlText !== 'string') return '';
+  const normalized = curlText.replace(/\\\r?\n/g, ' ');
+  const quotedCookieRegex = /(?:^|\s)(?:-b|--cookie)(?:=|\s+)\$?(["'])([\s\S]*?)\1/g;
+  const quoted = quotedCookieRegex.exec(normalized);
+  if (quoted && quoted[2]) {
+    return quoted[2].trim();
+  }
+
+  const unquotedCookieRegex = /(?:^|\s)(?:-b|--cookie)(?:=|\s+)([^\s]+)/;
+  const unquoted = unquotedCookieRegex.exec(normalized);
+  return unquoted && unquoted[1] ? unquoted[1].trim() : '';
+}
+
+function extractAuthUserFromCurl(curlText) {
+  if (!curlText || typeof curlText !== 'string') return '';
+  const match = /[?&]authuser=([^&'"\s\\]+)/i.exec(curlText);
+  if (!match || !match[1]) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch (error) {
+    return match[1];
+  }
 }
 
 function normalizeHeaderBlock(input) {
@@ -1432,7 +1462,7 @@ app.post('/api/oauth', (req, res) => {
       ? headersFromCurl
       : parseHeaderBlock(headerBlock);
     const cookie = headers['cookie'];
-    const authUser = headers['x-goog-authuser'];
+    const authUser = headers['x-goog-authuser'] || extractAuthUserFromCurl(curl);
     if (!cookie || !authUser) {
       return res.status(400).json({ error: 'Missing cookie or X-Goog-AuthUser header in cURL' });
     }
