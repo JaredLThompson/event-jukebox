@@ -48,6 +48,7 @@ class AudioService {
         this.prebufferDedupEnabled = process.env.PREBUFFER_DEDUP !== '0';
         this.prebufferInFlight = new Map();
         this.youtubeDownloadInFlight = new Map();
+        this.prebufferFailures = new Map();
 
         if (savedVolume !== null && savedVolume !== undefined) {
             console.log('🔊 Loaded saved volume:', Math.round(this.volume * 100) + '%');
@@ -398,59 +399,42 @@ class AudioService {
         });
     }
     
-    /**
-     * Extract audio from YouTube video using yt-dlp
-     */
-    async extractYouTubeAudio(youtubeId) {
+    getYtdlpPath() {
+        const ytdlpCandidates = [
+            process.env.YTDLP_PATH,
+            '/usr/local/bin/yt-dlp',
+            '/usr/bin/yt-dlp'
+        ].filter(Boolean);
+        return ytdlpCandidates.find((candidate) => fs.existsSync(candidate)) || 'yt-dlp';
+    }
+
+    getYtdlpFormatAttempts() {
+        if (process.env.YTDLP_FORMAT) {
+            return [process.env.YTDLP_FORMAT];
+        }
+        return [
+            'bestaudio[ext=m4a]/bestaudio/best',
+            'bestaudio/best',
+            'best'
+        ];
+    }
+
+    runYtdlpAttempt(ytdlpPath, youtubeId, filepath, format, cookieArgs) {
         return new Promise((resolve, reject) => {
             const filename = `${youtubeId}.mp3`;
-            const filepath = path.join(this.cacheDir, filename);
-            
-            // Check if already cached
-            if (fs.existsSync(filepath)) {
-                // Verify cached file is not empty
-                const stats = fs.statSync(filepath);
-                if (stats.size > 1024) { // At least 1KB
-                    console.log('📁 Using cached YouTube audio:', filename);
-                    resolve(filepath);
-                    return;
-                } else {
-                    console.log('🗑️ Removing empty cached file:', filename);
-                    fs.unlinkSync(filepath);
-                }
-            }
-            
-            console.log('🎬 Extracting YouTube audio:', youtubeId);
-            this.bufferingProgress = `Downloading audio from YouTube...`;
-
-            if (this.youtubeDownloadInFlight.has(youtubeId)) {
-                console.log('⏳ YouTube audio download already in progress for:', youtubeId);
-                this.youtubeDownloadInFlight.get(youtubeId).then(resolve).catch(reject);
-                return;
-            }
-            
-            // Use yt-dlp to extract audio with additional options to bypass restrictions
-            // Prefer PATH lookup, but allow override via YTDLP_PATH and common absolute paths.
-            const ytdlpCandidates = [
-                process.env.YTDLP_PATH,
-                '/usr/local/bin/yt-dlp',
-                '/usr/bin/yt-dlp'
-            ].filter(Boolean);
-            const ytdlpPath = ytdlpCandidates.find((candidate) => fs.existsSync(candidate)) || 'yt-dlp';
-            const cookieArgs = this.getYtdlpCookieArgs();
-            if (cookieArgs.length) {
-                console.log('🍪 Using oauth cookies for yt-dlp');
-            }
+            const extractorArgs = process.env.YTDLP_EXTRACTOR_ARGS || 'youtube:player_client=default,ios,web';
+            console.log('🎚️ yt-dlp format attempt:', format);
             const ytdlp = spawn(ytdlpPath, [
                 '--ignore-config',
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '0',
-                '--format', process.env.YTDLP_FORMAT || 'bestaudio[ext=m4a]/bestaudio/best',
+                '--format', format,
                 '--no-update',
                 '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 '--referer', 'https://www.youtube.com/',
                 '--add-header', 'Accept-Language:en-US,en;q=0.9',
+                '--extractor-args', extractorArgs,
                 '--extractor-retries', '5',
                 '--fragment-retries', '5',
                 '--retry-sleep', '2',
@@ -470,22 +454,9 @@ class AudioService {
                     console.log('⏰ YouTube download taking too long, killing process...');
                     ytdlp.kill('SIGTERM');
                     settled = true;
-                    this.youtubeDownloadInFlight.delete(youtubeId);
                     reject(new Error('YouTube download timeout'));
                 }
             }, 60000); // 60 second timeout
-            this.youtubeDownloadInFlight.set(youtubeId, {
-                then: (onResolve, onReject) => new Promise((innerResolve, innerReject) => {
-                    ytdlp.once('close', (code) => {
-                        if (code === 0 && fs.existsSync(filepath)) {
-                            innerResolve(filepath);
-                        } else {
-                            innerReject(new Error(`Failed to extract YouTube audio: ${errorOutput || 'Unknown error'}`));
-                        }
-                    });
-                    ytdlp.once('error', innerReject);
-                }).then(onResolve, onReject)
-            });
             
             ytdlp.stderr.on('data', (data) => {
                 errorOutput += data.toString();
@@ -499,7 +470,6 @@ class AudioService {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
-                this.youtubeDownloadInFlight.delete(youtubeId);
                 if (code === 0 && fs.existsSync(filepath)) {
                     // Verify the downloaded file is not empty
                     const stats = fs.statSync(filepath);
@@ -523,7 +493,6 @@ class AudioService {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
-                this.youtubeDownloadInFlight.delete(youtubeId);
                 if (error && error.code === 'ENOENT') {
                     console.error('❌ yt-dlp not found. Install it or set YTDLP_PATH.');
                 }
@@ -531,6 +500,60 @@ class AudioService {
                 reject(error);
             });
         });
+    }
+
+    /**
+     * Extract audio from YouTube video using yt-dlp
+     */
+    async extractYouTubeAudio(youtubeId) {
+        const filename = `${youtubeId}.mp3`;
+        const filepath = path.join(this.cacheDir, filename);
+
+        // Check if already cached
+        if (fs.existsSync(filepath)) {
+            // Verify cached file is not empty
+            const stats = fs.statSync(filepath);
+            if (stats.size > 1024) { // At least 1KB
+                console.log('📁 Using cached YouTube audio:', filename);
+                return filepath;
+            }
+            console.log('🗑️ Removing empty cached file:', filename);
+            fs.unlinkSync(filepath);
+        }
+
+        console.log('🎬 Extracting YouTube audio:', youtubeId);
+        this.bufferingProgress = `Downloading audio from YouTube...`;
+
+        if (this.youtubeDownloadInFlight.has(youtubeId)) {
+            console.log('⏳ YouTube audio download already in progress for:', youtubeId);
+            return this.youtubeDownloadInFlight.get(youtubeId);
+        }
+
+        const downloadPromise = (async () => {
+            const ytdlpPath = this.getYtdlpPath();
+            const cookieArgs = this.getYtdlpCookieArgs();
+            if (cookieArgs.length) {
+                console.log('🍪 Using oauth cookies for yt-dlp');
+            }
+
+            let lastError = null;
+            for (const format of this.getYtdlpFormatAttempts()) {
+                try {
+                    return await this.runYtdlpAttempt(ytdlpPath, youtubeId, filepath, format, cookieArgs);
+                } catch (error) {
+                    lastError = error;
+                    console.log('⚠️ yt-dlp format attempt failed:', error.message);
+                }
+            }
+
+            throw lastError || new Error('Failed to extract YouTube audio');
+        })();
+
+        this.youtubeDownloadInFlight.set(youtubeId, downloadPromise);
+        downloadPromise.finally(() => {
+            this.youtubeDownloadInFlight.delete(youtubeId);
+        });
+        return downloadPromise;
     }
     
     /**
