@@ -47,6 +47,7 @@ class AudioService {
         this.cacheManifest = this.loadCacheManifest();
         this.prebufferDedupEnabled = process.env.PREBUFFER_DEDUP !== '0';
         this.prebufferInFlight = new Map();
+        this.youtubeDownloadInFlight = new Map();
 
         if (savedVolume !== null && savedVolume !== undefined) {
             console.log('🔊 Loaded saved volume:', Math.round(this.volume * 100) + '%');
@@ -421,6 +422,12 @@ class AudioService {
             
             console.log('🎬 Extracting YouTube audio:', youtubeId);
             this.bufferingProgress = `Downloading audio from YouTube...`;
+
+            if (this.youtubeDownloadInFlight.has(youtubeId)) {
+                console.log('⏳ YouTube audio download already in progress for:', youtubeId);
+                this.youtubeDownloadInFlight.get(youtubeId).then(resolve).catch(reject);
+                return;
+            }
             
             // Use yt-dlp to extract audio with additional options to bypass restrictions
             // Prefer PATH lookup, but allow override via YTDLP_PATH and common absolute paths.
@@ -435,9 +442,11 @@ class AudioService {
                 console.log('🍪 Using oauth cookies for yt-dlp');
             }
             const ytdlp = spawn(ytdlpPath, [
+                '--ignore-config',
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '0',
+                '--format', process.env.YTDLP_FORMAT || 'bestaudio[ext=m4a]/bestaudio/best',
                 '--no-update',
                 '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 '--referer', 'https://www.youtube.com/',
@@ -455,6 +464,28 @@ class AudioService {
             ]);
             
             let errorOutput = '';
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (!settled && ytdlp && !ytdlp.killed) {
+                    console.log('⏰ YouTube download taking too long, killing process...');
+                    ytdlp.kill('SIGTERM');
+                    settled = true;
+                    this.youtubeDownloadInFlight.delete(youtubeId);
+                    reject(new Error('YouTube download timeout'));
+                }
+            }, 60000); // 60 second timeout
+            this.youtubeDownloadInFlight.set(youtubeId, {
+                then: (onResolve, onReject) => new Promise((innerResolve, innerReject) => {
+                    ytdlp.once('close', (code) => {
+                        if (code === 0 && fs.existsSync(filepath)) {
+                            innerResolve(filepath);
+                        } else {
+                            innerReject(new Error(`Failed to extract YouTube audio: ${errorOutput || 'Unknown error'}`));
+                        }
+                    });
+                    ytdlp.once('error', innerReject);
+                }).then(onResolve, onReject)
+            });
             
             ytdlp.stderr.on('data', (data) => {
                 errorOutput += data.toString();
@@ -465,6 +496,10 @@ class AudioService {
             });
             
             ytdlp.on('close', (code) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                this.youtubeDownloadInFlight.delete(youtubeId);
                 if (code === 0 && fs.existsSync(filepath)) {
                     // Verify the downloaded file is not empty
                     const stats = fs.statSync(filepath);
@@ -485,21 +520,16 @@ class AudioService {
             });
             
             ytdlp.on('error', (error) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                this.youtubeDownloadInFlight.delete(youtubeId);
                 if (error && error.code === 'ENOENT') {
                     console.error('❌ yt-dlp not found. Install it or set YTDLP_PATH.');
                 }
                 console.error('❌ yt-dlp process error:', error);
                 reject(error);
             });
-            
-            // Add timeout for very slow downloads
-            setTimeout(() => {
-                if (ytdlp && !ytdlp.killed) {
-                    console.log('⏰ YouTube download taking too long, killing process...');
-                    ytdlp.kill('SIGTERM');
-                    reject(new Error('YouTube download timeout'));
-                }
-            }, 60000); // 60 second timeout
         });
     }
     
